@@ -342,8 +342,8 @@
       או <strong>לקבל</strong> משהו שאתה צריך?
     </p>
     <div class="type-toggle">
-      <button class="type-btn" id="btn-give" onclick="selectPostType('give')"> אני נותן</button>
-      <button class="type-btn" id="btn-take" onclick="selectPostType('take')"> אני מקבל</button>
+      <button class="type-btn" id="btn-give" onclick="selectPostType('give')">🎁 אני נותן</button>
+      <button class="type-btn" id="btn-take" onclick="selectPostType('take')">🙏 אני מקבל</button>
     </div>
     <button class="btn-primary" style="margin-top:24px;" onclick="postStepNext()">המשך ←</button>
   </div>
@@ -834,6 +834,21 @@ function centerOnUser() {
 }
 
 // ── Panels ─────────────────────────────────────────────
+function openPostPanel() {
+  currentPostStep = 1;
+  selectedPostType = null;
+  if (document.getElementById('btn-give')) document.getElementById('btn-give').className = 'type-btn';
+  if (document.getElementById('btn-take')) document.getElementById('btn-take').className = 'type-btn';
+  document.getElementById('post-title').value = '';
+  document.getElementById('post-category').value = '';
+  document.getElementById('post-desc').value = '';
+  document.getElementById('photo-input').value = '';
+  document.getElementById('photo-preview').style.display = 'none';
+  document.getElementById('photo-upload-area').style.display = 'block';
+  showPostStep(1);
+  openPanel('post-panel');
+}
+
 function openPanel(id) { document.getElementById(id).classList.add('open'); }
 function closePanel(id) { document.getElementById(id).classList.remove('open'); }
 function openMenu() { document.getElementById('side-menu').classList.add('open'); document.getElementById('menu-overlay').classList.add('open'); }
