@@ -834,6 +834,62 @@ function centerOnUser() {
 }
 
 // ── Panels ─────────────────────────────────────────────
+// ── Post steps ─────────────────────────────────────────────────
+let selectedPostType = null;
+let currentPostStep = 1;
+
+function selectPostType(type) {
+  selectedPostType = type;
+  document.getElementById('btn-give').className = 'type-btn' + (type === 'give' ? ' give-active' : '');
+  document.getElementById('btn-take').className = 'type-btn' + (type === 'take' ? ' take-active' : '');
+}
+
+function updateProgressBar(step) {
+  for (let i = 1; i <= 3; i++) {
+    const el = document.getElementById('ps' + i);
+    if (!el) continue;
+    if (i < step) el.className = 'progress-step done';
+    else if (i === step) el.className = 'progress-step active';
+    else el.className = 'progress-step';
+  }
+  const labels = ['שלב 1: תן או קח', 'שלב 2: פרטי הפריט', 'שלב 3: תמונה'];
+  const lbl = document.getElementById('post-step-label');
+  if (lbl) lbl.textContent = labels[step - 1];
+}
+
+function showPostStep(step) {
+  for (let i = 1; i <= 3; i++) {
+    const el = document.getElementById('post-step-' + i);
+    if (el) el.style.display = i === step ? 'block' : 'none';
+  }
+  currentPostStep = step;
+  updateProgressBar(step);
+}
+
+function postStepNext() {
+  if (currentPostStep === 1) {
+    if (!selectedPostType) { showToast('נא לבחור תן או קח'); return; }
+    showPostStep(2);
+  } else if (currentPostStep === 2) {
+    const title = document.getElementById('post-title').value.trim();
+    const category = document.getElementById('post-category').value;
+    if (!title || !category) { showToast('נא למלא כותרת וקטגוריה'); return; }
+    const hint = document.getElementById('photo-hint');
+    if (hint) hint.textContent = selectedPostType === 'give'
+      ? 'תמונה של הפריט מגדילה משמעותית את הסיכוי למצוא מישהו שירצה אותו. מומלץ מאוד להוסיף!'
+      : 'תמונה של מה שאתה מחפש עוזרת לאחרים להבין בדיוק מה אתה צריך.';
+    showPostStep(3);
+  }
+}
+
+function postStepBack() {
+  if (currentPostStep === 1) {
+    closePanel('post-panel');
+  } else {
+    showPostStep(currentPostStep - 1);
+  }
+}
+
 function openPostPanel() {
   currentPostStep = 1;
   selectedPostType = null;
