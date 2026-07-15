@@ -25,7 +25,7 @@
 
     /* ── Header ── */
     #header {
-      background: #F44336;
+      background: var(--dark);
       color: white;
       padding: 12px 16px;
       display: flex;
@@ -164,6 +164,11 @@
     .requester-name { font-size:15px; font-weight:700; color:var(--dark); }
     .requester-meta { font-size:12px; color:var(--gray); }
 
+    /* ── Leaflet zoom position ── */
+    .leaflet-top.leaflet-left {
+      top: 60px !important;
+    }
+
     /* ── Progress bar ── */
     #post-progress {
       display:flex; align-items:center; gap:8px;
@@ -300,10 +305,10 @@
 </div>
 
 <div id="header">
-  <div id="header-title">iNeed</div>
   <div id="header-actions">
     <button class="header-btn" onclick="openMenu()">☰</button>
   </div>
+  <div id="header-title">iNeed</div>
 </div>
 
 <div id="map"></div>
@@ -342,8 +347,8 @@
       או <strong>לקבל</strong> משהו שאתה צריך?
     </p>
     <div class="type-toggle">
-      <button class="type-btn" id="btn-give" onclick="selectPostType('give')">אני נותן</button>
-      <button class="type-btn" id="btn-take" onclick="selectPostType('take')">אני מקבל</button>
+      <button class="type-btn" id="btn-give" onclick="selectPostType('give')">🎁 אני נותן</button>
+      <button class="type-btn" id="btn-take" onclick="selectPostType('take')">🙏 אני מקבל</button>
     </div>
     <button class="btn-primary" style="margin-top:24px;" onclick="postStepNext()">המשך ←</button>
   </div>
@@ -381,16 +386,10 @@
     <p id="photo-hint" style="font-size:14px; color:#444; margin-bottom:16px; line-height:1.7;"></p>
     <div class="form-group">
       <div id="photo-upload-area" onclick="document.getElementById('photo-input').click()">
-        לחץ להוספת תמונה
+        📷 לחץ להוספת תמונה
       </div>
       <input type="file" id="photo-input" accept="image/*" style="display:none" onchange="previewPhoto(this)"/>
       <img id="photo-preview"/>
-      <button id="remove-photo-btn" onclick="removePhoto()" style="
-        display:none; margin-top:8px; width:100%; background:none;
-        border:1px solid #ddd; color:var(--gray); padding:8px;
-        border-radius:8px; cursor:pointer; font-size:13px;
-        font-family:'Heebo',sans-serif;
-      ">✕ הסר תמונה</button>
     </div>
     <button class="btn-primary" onclick="submitItem()">פרסם פריט ✓</button>
     <button class="btn-secondary" onclick="submitItem()">דלג ופרסם ללא תמונה</button>
@@ -415,6 +414,53 @@
     <span class="panel-title" id="requesters-title">מי רוצה את הפריט?</span>
   </div>
   <div class="panel-body" id="requesters-body"></div>
+</div>
+
+<!-- Edit item panel -->
+<div id="edit-panel" class="panel">
+  <div class="panel-header">
+    <button class="panel-back" onclick="closePanel('edit-panel')">←</button>
+    <span class="panel-title">ערוך פריט</span>
+  </div>
+  <div class="panel-body">
+    <input type="hidden" id="edit-item-id"/>
+    <div class="form-group">
+      <label class="form-label">כותרת *</label>
+      <input type="text" class="form-input" id="edit-title" maxlength="80"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">קטגוריה *</label>
+      <select class="form-select" id="edit-category">
+        <option value="">בחר קטגוריה</option>
+        <option>ריהוט</option>
+        <option>אלקטרוניקה</option>
+        <option>ביגוד והנעלה</option>
+        <option>ספרים ולימוד</option>
+        <option>מטבח וכלי בית</option>
+        <option>צעצועים וילדים</option>
+        <option>ספורט ופנאי</option>
+        <option>גינה וכלי עבודה</option>
+        <option>אחר</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">תיאור</label>
+      <textarea class="form-textarea" id="edit-desc"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">תמונה</label>
+      <div id="edit-current-photo" style="margin-bottom:8px;"></div>
+      <div id="edit-photo-upload-area" onclick="document.getElementById('edit-photo-input').click()" style="border:2px dashed #ddd;border-radius:12px;padding:16px;text-align:center;cursor:pointer;color:var(--gray);font-size:14px;">
+        לחץ להחלפת תמונה
+      </div>
+      <input type="file" id="edit-photo-input" accept="image/*" style="display:none" onchange="previewEditPhoto(this)"/>
+      <img id="edit-photo-preview" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover;display:none;margin-top:8px;"/>
+      <button id="edit-remove-photo-btn" onclick="removeEditPhoto()" style="display:none;margin-top:8px;width:100%;background:none;border:1px solid #ddd;color:var(--gray);padding:8px;border-radius:8px;cursor:pointer;font-size:13px;font-family:Heebo,sans-serif;">
+        הסר תמונה
+      </button>
+    </div>
+    <button class="btn-primary" onclick="saveEditItem()">שמור שינויים</button>
+  </div>
 </div>
 
 <!-- Settings panel -->
@@ -568,20 +614,17 @@ function buildItemPopup(item) {
     <div class="item-popup">
       ${item.image_url ? `<img src="${item.image_url}" class="item-popup-img"/>` : ''}
       <div class="item-popup-title">${item.title}</div>
-      <div class="item-popup-cat">${item.category}</div>
+      <div class="item-popup-cat">קטגוריה: ${item.category}</div>
       ${item.description ? `<div class="item-popup-desc">${item.description}</div>` : ''}
-      <div class="item-popup-by">מאת: ${item.nickname} · ${item.request_count} מתעניינים</div>
+      <div class="item-popup-by">מאת: ${item.nickname}</div>
+      <div class="item-popup-by">מתעניינים: ${item.request_count}</div>
       ${!isMyItem ? `
         <button class="item-popup-btn ${requested ? 'requested' : ''}"
           onclick="${requested ? `cancelInterest(${item.id})` : `expressInterest(${item.id})`}">
-          ${requested ? 'מעוניין — לחץ לביטול' : 'אני רוצה את זה!'}
+          ${requested ? '✓ מעוניין — לחץ לביטול' : 'אני רוצה את זה!'}
         </button>
-        <button class="item-popup-report" onclick="reportImage(${item.id})">דווח על תמונה</button>
-      ` : `
-        <button class="item-popup-btn" onclick="map.closePopup(); viewRequesters(${item.id}, '${item.title.replace(/'/g,"\'")}')">
-          מי רוצה את זה? (${item.request_count})
-        </button>
-      `}
+        <button class="item-popup-report" onclick="reportImage(${item.id})">🚩 דווח על תמונה</button>
+      ` : `<div style="font-size:12px;color:var(--gray);text-align:center;padding:8px;">זה הפריט שלך</div>`}
     </div>`;
 }
 
@@ -599,16 +642,9 @@ async function expressInterest(itemId) {
     const myRequests = JSON.parse(localStorage.getItem('my_requests') || '{}');
     myRequests[itemId] = true;
     localStorage.setItem('my_requests', JSON.stringify(myRequests));
-    showToast('הבעת עניין! בעל הפריט יעודכן');
+    showToast('✓ הבעת עניין! בעל הפריט יעודכן');
     map.closePopup();
     loadItems();
-
-    // If the giver is using the app on the same device (or we implement push later)
-    // For now notification info is returned from server for future push implementation
-    if (data.notification) {
-      console.log('Notification to send:', data.notification);
-      // TODO: send push notification to giver via FCM when implemented
-    }
   }
 }
 
@@ -623,46 +659,14 @@ async function cancelInterest(itemId) {
 }
 
 // ── Report image ───────────────────────────────────────
-function reportImage(itemId) {
-  const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;direction:rtl;';
-  overlay.innerHTML = `
-    <div style="background:white;border-radius:16px;padding:24px 20px;max-width:320px;width:92%;direction:rtl;">
-      <h3 style="font-size:16px;color:#1a1a2e;margin-bottom:16px;">מדוע אתה מדווח על תמונה זו?</h3>
-      <div id="report-reasons" style="display:flex;flex-direction:column;gap:8px;">
-        ${['תוכן לא הולם','תמונה מטעה - לא קשורה לפריט','תוכן פוגעני או אלים','הפרת זכויות יוצרים','ספאם או פרסומת','אחר'].map(r =>
-          `<button onclick="submitImageReport(${itemId},'${r}',this)" style="text-align:right;background:#f5f5f5;border:1.5px solid #eee;padding:12px 14px;border-radius:8px;font-size:14px;cursor:pointer;font-family:Heebo,sans-serif;color:#333;">${r}</button>`
-        ).join('')}
-        <textarea id="report-other-text" placeholder="פרט את הסיבה..." style="display:none;width:100%;padding:10px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;font-family:Heebo,sans-serif;direction:rtl;min-height:80px;margin-top:4px;"></textarea>
-      </div>
-      <button onclick="this.closest('div[style*=fixed]').remove()" style="margin-top:14px;width:100%;background:none;border:none;color:#aaa;font-size:13px;cursor:pointer;">ביטול</button>
-    </div>
-  `;
-  // Handle "other" reason
-  const buttons = overlay.querySelectorAll('#report-reasons button');
-  buttons[buttons.length-1].onclick = function() {
-    overlay.querySelector('#report-other-text').style.display = 'block';
-    this.onclick = () => {
-      const txt = overlay.querySelector('#report-other-text').value.trim() || 'אחר';
-      submitImageReport(itemId, txt, this, overlay);
-    };
-    this.textContent = 'שלח דיווח';
-    this.style.background = '#F44336';
-    this.style.color = 'white';
-  };
-  document.body.appendChild(overlay);
-}
-
-async function submitImageReport(itemId, reason, btn, overlayEl) {
-  const overlay = overlayEl || btn.closest('div[style*="position:fixed"]');
+async function reportImage(itemId) {
   await fetch(`${API_BASE}/report-image`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ item_id: itemId, reporter_device_id: deviceId, reason })
+    body: JSON.stringify({ item_id: itemId, reporter_device_id: deviceId, reason: 'user report' })
   });
-  if (overlay) overlay.remove();
-  map.closePopup();
   showToast('הדיווח נשלח. תודה!');
+  map.closePopup();
 }
 
 // ── Post item ──────────────────────────────────────────
@@ -675,17 +679,8 @@ function previewPhoto(input) {
     preview.src = e.target.result;
     preview.style.display = 'block';
     document.getElementById('photo-upload-area').style.display = 'none';
-    document.getElementById('remove-photo-btn').style.display = 'block';
   };
   reader.readAsDataURL(file);
-}
-
-function removePhoto() {
-  document.getElementById('photo-input').value = '';
-  document.getElementById('photo-preview').style.display = 'none';
-  document.getElementById('photo-preview').src = '';
-  document.getElementById('photo-upload-area').style.display = 'block';
-  document.getElementById('remove-photo-btn').style.display = 'none';
 }
 
 async function submitItem() {
@@ -728,7 +723,6 @@ async function submitItem() {
     document.getElementById('photo-input').value = '';
     document.getElementById('photo-preview').style.display = 'none';
     document.getElementById('photo-upload-area').style.display = 'block';
-    const rmBtn = document.getElementById('remove-photo-btn'); if(rmBtn) rmBtn.style.display = 'none';
     selectedPostType = null;
     document.getElementById('btn-give').className = 'type-btn';
     document.getElementById('btn-take').className = 'type-btn';
@@ -760,7 +754,9 @@ async function openMyItems() {
       <div class="item-card-meta">${item.category} · ${item.request_count} מתעניינים · ${item.status === 'available' ? '🟢 זמין' : '🔴 נלקח'}</div>
       <div class="item-card-actions">
         <button class="item-card-btn" style="background:#f0f0f0;color:var(--dark);"
-          onclick="viewRequesters(${item.id}, '${item.title}')">👥 מי רוצה?</button>
+          onclick="viewRequesters(${item.id}, '${item.title}')">מי רוצה?</button>
+        <button class="item-card-btn" style="background:#2980b9;color:white;"
+          onclick="openEditItem(${JSON.stringify(item).replace(/"/g, '&quot;')})">ערוך</button>
         <button class="item-card-btn" style="background:${item.status==='available'?'var(--green)':'var(--gray)'};color:white;"
           onclick="toggleItemStatus(${item.id}, '${item.status}')">
           ${item.status === 'available' ? 'סמן כנלקח' : 'החזר לזמין'}
@@ -906,6 +902,101 @@ function openPostPanel() {
   document.getElementById('photo-upload-area').style.display = 'block';
   showPostStep(1);
   openPanel('post-panel');
+}
+
+// ── Edit item ──────────────────────────────────────────────
+let editPhotoChanged = false;
+let editPhotoRemoved = false;
+
+function openEditItem(item) {
+  document.getElementById('edit-item-id').value = item.id;
+  document.getElementById('edit-title').value = item.title;
+  document.getElementById('edit-category').value = item.category;
+  document.getElementById('edit-desc').value = item.description || '';
+  editPhotoChanged = false;
+  editPhotoRemoved = false;
+
+  // Show current photo
+  const currentPhoto = document.getElementById('edit-current-photo');
+  if (item.image_url) {
+    currentPhoto.innerHTML = `<img src="${item.image_url}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:4px;"/><p style="font-size:12px;color:var(--gray);">תמונה נוכחית</p>`;
+  } else {
+    currentPhoto.innerHTML = '';
+  }
+
+  document.getElementById('edit-photo-preview').style.display = 'none';
+  document.getElementById('edit-photo-upload-area').style.display = 'block';
+  document.getElementById('edit-remove-photo-btn').style.display = 'none';
+
+  closePanel('my-items-panel');
+  openPanel('edit-panel');
+}
+
+function previewEditPhoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('edit-photo-preview').src = e.target.result;
+    document.getElementById('edit-photo-preview').style.display = 'block';
+    document.getElementById('edit-photo-upload-area').style.display = 'none';
+    document.getElementById('edit-remove-photo-btn').style.display = 'block';
+    editPhotoChanged = true;
+    editPhotoRemoved = false;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeEditPhoto() {
+  document.getElementById('edit-photo-input').value = '';
+  document.getElementById('edit-photo-preview').style.display = 'none';
+  document.getElementById('edit-photo-upload-area').style.display = 'block';
+  document.getElementById('edit-remove-photo-btn').style.display = 'none';
+  document.getElementById('edit-current-photo').innerHTML = '';
+  editPhotoRemoved = true;
+  editPhotoChanged = false;
+}
+
+async function saveEditItem() {
+  const itemId = document.getElementById('edit-item-id').value;
+  const title = document.getElementById('edit-title').value.trim();
+  const category = document.getElementById('edit-category').value;
+  const desc = document.getElementById('edit-desc').value.trim();
+  const photoInput = document.getElementById('edit-photo-input');
+
+  if (!title || !category) { showToast('נא למלא כותרת וקטגוריה'); return; }
+
+  const form = new FormData();
+  form.append('device_id', deviceId);
+  form.append('title', title);
+  form.append('category', category);
+  form.append('description', desc);
+  form.append('remove_image', editPhotoRemoved ? 'true' : 'false');
+  if (editPhotoChanged && photoInput.files[0]) {
+    form.append('image', photoInput.files[0]);
+  }
+
+  const btn = document.querySelector('#edit-panel .btn-primary');
+  btn.textContent = 'שומר...';
+  btn.disabled = true;
+
+  const res = await fetch(`${API_BASE}/item/${itemId}`, {
+    method: 'PATCH',
+    body: form
+  });
+  const data = await res.json();
+
+  btn.textContent = 'שמור שינויים';
+  btn.disabled = false;
+
+  if (data.ok) {
+    showToast('הפריט עודכן בהצלחה');
+    closePanel('edit-panel');
+    loadItems();
+    openMyItems();
+  } else {
+    showToast('שגיאה — נסה שוב');
+  }
 }
 
 function openPanel(id) { document.getElementById(id).classList.add('open'); }

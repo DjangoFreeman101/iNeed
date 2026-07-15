@@ -282,6 +282,46 @@ def get_item_requests(item_id: int, device_id: str):
     conn.close()
     return requests
 
+@app.patch("/item/{item_id}")
+async def edit_item(
+    item_id: int,
+    device_id: str = Form(...),
+    title: str = Form(...),
+    description: str = Form(""),
+    category: str = Form(...),
+    remove_image: str = Form("false"),
+    image: Optional[UploadFile] = File(None)
+):
+    conn = get_db()
+    cur = conn.cursor()
+
+    image_url = None
+    if image and image.filename:
+        data = await image.read()
+        result = cloudinary.uploader.upload(data, folder="ineed")
+        image_url = result.get("secure_url")
+
+    if image_url:
+        cur.execute("""
+            UPDATE items SET title=%s, description=%s, category=%s, image_url=%s
+            WHERE id=%s AND device_id=%s
+        """, (title, description, category, image_url, item_id, device_id))
+    elif remove_image == 'true':
+        cur.execute("""
+            UPDATE items SET title=%s, description=%s, category=%s, image_url=NULL
+            WHERE id=%s AND device_id=%s
+        """, (title, description, category, item_id, device_id))
+    else:
+        cur.execute("""
+            UPDATE items SET title=%s, description=%s, category=%s
+            WHERE id=%s AND device_id=%s
+        """, (title, description, category, item_id, device_id))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"ok": True}
+
 @app.patch("/item/{item_id}/status")
 def update_item_status(item_id: int, update: ItemStatusUpdate):
     conn = get_db()
