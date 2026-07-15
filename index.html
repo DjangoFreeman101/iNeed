@@ -162,6 +162,22 @@
     .requester-name { font-size:15px; font-weight:700; color:var(--dark); }
     .requester-meta { font-size:12px; color:var(--gray); }
 
+    /* ── Progress bar ── */
+    #post-progress {
+      display:flex; align-items:center; gap:8px;
+      padding:0 16px 12px; border-bottom:1px solid #f0f0f0;
+    }
+    .progress-step {
+      flex:1; height:4px; border-radius:2px; background:#eee;
+      transition:background 0.3s;
+    }
+    .progress-step.active { background:var(--dark); }
+    .progress-step.done { background:#27ae60; }
+    #post-step-label {
+      font-size:12px; color:var(--gray); text-align:center;
+      padding:8px 16px 0; font-weight:600;
+    }
+
     /* ── Toast ── */
     #toast {
       position:fixed; bottom:90px; left:50%; transform:translateX(-50%);
@@ -208,7 +224,7 @@
     #setup-screen .btn-primary { background:var(--accent); margin-top:16px; }
 
     /* ── Item popup (map) ── */
-    .item-popup { min-width:220px; direction:rtl; }
+    .item-popup { min-width:220px; direction:rtl; text-align:right; }
     .item-popup-img { width:100%; height:140px; object-fit:cover; border-radius:8px; margin-bottom:10px; }
     .item-popup-title { font-size:15px; font-weight:700; color:var(--dark); margin-bottom:4px; }
     .item-popup-cat { font-size:12px; color:var(--gray); margin-bottom:8px; }
@@ -304,23 +320,37 @@
   <div class="menu-item" onclick="openMyItems()">📦 הפריטים שלי</div>
 </div>
 
-<!-- Post item panel -->
+<!-- Post item panel (multi-step) -->
 <div id="post-panel" class="panel">
   <div class="panel-header">
-    <button class="panel-back" onclick="closePanel('post-panel')">←</button>
-    <span class="panel-title">פרסם פריט</span>
+    <button class="panel-back" id="post-back-btn" onclick="postStepBack()">←</button>
+    <span class="panel-title" id="post-panel-title">פרסם פריט</span>
   </div>
-  <div class="panel-body">
-    <div class="form-group">
-      <label class="form-label">אני רוצה *</label>
-      <div class="type-toggle">
-        <button class="type-btn" id="btn-give" onclick="selectPostType('give')">אני נותן</button>
-        <button class="type-btn" id="btn-take" onclick="selectPostType('take')">אני מקבל</button>
-      </div>
+  <div id="post-progress">
+    <div class="progress-step" id="ps1"></div>
+    <div class="progress-step" id="ps2"></div>
+    <div class="progress-step" id="ps3"></div>
+  </div>
+  <div id="post-step-label"></div>
+
+  <!-- Step 1: Give or Take -->
+  <div id="post-step-1" class="panel-body">
+    <p style="font-size:15px; color:#444; margin-bottom:20px; line-height:1.6;">
+      האם אתה רוצה <strong>לתת</strong> פריט שאין לך שימוש בו,<br/>
+      או <strong>לקבל</strong> משהו שאתה צריך?
+    </p>
+    <div class="type-toggle">
+      <button class="type-btn" id="btn-give" onclick="selectPostType('give')"> אני נותן</button>
+      <button class="type-btn" id="btn-take" onclick="selectPostType('take')"> אני מקבל</button>
     </div>
+    <button class="btn-primary" style="margin-top:24px;" onclick="postStepNext()">המשך ←</button>
+  </div>
+
+  <!-- Step 2: Details -->
+  <div id="post-step-2" class="panel-body" style="display:none;">
     <div class="form-group">
       <label class="form-label">כותרת *</label>
-      <input type="text" class="form-input" id="post-title" placeholder="מה אתה נותן?" maxlength="80"/>
+      <input type="text" class="form-input" id="post-title" placeholder="מה אתה נותן / מחפש?" maxlength="80"/>
     </div>
     <div class="form-group">
       <label class="form-label">קטגוריה *</label>
@@ -339,17 +369,23 @@
     </div>
     <div class="form-group">
       <label class="form-label">תיאור</label>
-      <textarea class="form-textarea" id="post-desc" placeholder="תאר את הפריט — מצב, גודל, סיבת המסירה..."></textarea>
+      <textarea class="form-textarea" id="post-desc" placeholder="פרט על הפריט..."></textarea>
     </div>
+    <button class="btn-primary" onclick="postStepNext()">המשך ←</button>
+  </div>
+
+  <!-- Step 3: Photo -->
+  <div id="post-step-3" class="panel-body" style="display:none;">
+    <p id="photo-hint" style="font-size:14px; color:#444; margin-bottom:16px; line-height:1.7;"></p>
     <div class="form-group">
-      <label class="form-label">תמונה (מומלץ — מגדיל סיכויי מציאת מקבל)</label>
       <div id="photo-upload-area" onclick="document.getElementById('photo-input').click()">
         📷 לחץ להוספת תמונה
       </div>
       <input type="file" id="photo-input" accept="image/*" style="display:none" onchange="previewPhoto(this)"/>
       <img id="photo-preview"/>
     </div>
-    <button class="btn-primary" onclick="submitItem()">פרסם פריט</button>
+    <button class="btn-primary" onclick="submitItem()">פרסם פריט ✓</button>
+    <button class="btn-secondary" onclick="submitItem()">דלג ופרסם ללא תמונה</button>
   </div>
 </div>
 
@@ -798,7 +834,6 @@ function centerOnUser() {
 // ── Panels ─────────────────────────────────────────────
 function openPanel(id) { document.getElementById(id).classList.add('open'); }
 function closePanel(id) { document.getElementById(id).classList.remove('open'); }
-function openPostPanel() { openPanel('post-panel'); }
 function openMenu() { document.getElementById('side-menu').classList.add('open'); document.getElementById('menu-overlay').classList.add('open'); }
 function closeMenu() { document.getElementById('side-menu').classList.remove('open'); document.getElementById('menu-overlay').classList.remove('open'); }
 
