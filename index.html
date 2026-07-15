@@ -1,10 +1,821 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="he" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <title>Title</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>iNeed</title>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;700;900&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Heebo',sans-serif; background:#f5f5f5; direction:rtl; }
+
+    /* ── Colors ── */
+    :root {
+      --dark: #1a1a2e;
+      --accent: #e74c3c;
+      --green: #27ae60;
+      --gray: #888;
+      --light: #f5f5f5;
+    }
+
+    /* ── Header ── */
+    #header {
+      background: var(--dark);
+      color: white;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 500;
+      height: 50px;
+    }
+    #header-title { font-size:20px; font-weight:900; letter-spacing:-0.5px; }
+    #header-actions { display:flex; gap:10px; align-items:center; }
+    .header-btn {
+      background:none; border:none; color:white;
+      font-size:20px; cursor:pointer; padding:4px;
+    }
+
+    /* ── Map ── */
+    #map { height:100vh; width:100%; padding-top:50px; }
+
+    /* ── Bottom buttons ── */
+    #post-btn {
+      position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+      background:var(--accent); color:white; border:none;
+      padding:14px 28px; border-radius:30px;
+      font-size:15px; font-weight:700; cursor:pointer;
+      z-index:1000; box-shadow:0 4px 16px rgba(231,76,60,0.4);
+      font-family:'Heebo',sans-serif;
+    }
+
+    #center-btn, #my-items-btn {
+      position:fixed; bottom:24px;
+      background:white; border:none; border-radius:50%;
+      width:46px; height:46px; font-size:20px; cursor:pointer;
+      z-index:1000; box-shadow:0 3px 10px rgba(0,0,0,0.2);
+      display:flex; align-items:center; justify-content:center;
+    }
+    #center-btn { right:16px; }
+    #my-items-btn { right:70px; font-size:16px; }
+
+    /* ── Panels (slide-up) ── */
+    .panel {
+      position:fixed; top:0; left:0; right:0; bottom:0;
+      background:white; z-index:3000;
+      display:none; flex-direction:column;
+      overflow-y:auto;
+    }
+    .panel.open { display:flex; }
+    .panel-header {
+      background:var(--dark); color:white;
+      padding:14px 16px; display:flex;
+      align-items:center; gap:12px;
+      position:sticky; top:0; z-index:1;
+    }
+    .panel-back { background:none; border:none; color:white; font-size:18px; cursor:pointer; }
+    .panel-title { font-size:17px; font-weight:700; }
+    .panel-body { padding:20px 16px; flex:1; }
+
+    /* ── Forms ── */
+    .form-group { margin-bottom:16px; }
+    .form-label { font-size:13px; color:var(--gray); margin-bottom:6px; display:block; font-weight:600; }
+    .form-input, .form-select, .form-textarea {
+      width:100%; padding:12px 14px; border:1.5px solid #ddd;
+      border-radius:10px; font-size:15px; font-family:'Heebo',sans-serif;
+      direction:rtl; background:white;
+    }
+    .form-textarea { min-height:100px; resize:vertical; }
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      border-color:var(--dark); outline:none;
+    }
+
+    /* ── Buttons ── */
+    .btn-primary {
+      width:100%; background:var(--dark); color:white; border:none;
+      padding:14px; border-radius:12px; font-size:16px;
+      font-weight:700; cursor:pointer; font-family:'Heebo',sans-serif;
+      margin-top:8px;
+    }
+    .btn-secondary {
+      width:100%; background:white; color:var(--dark);
+      border:2px solid var(--dark); padding:12px; border-radius:12px;
+      font-size:15px; font-weight:600; cursor:pointer;
+      font-family:'Heebo',sans-serif; margin-top:8px;
+    }
+    .btn-danger {
+      width:100%; background:var(--accent); color:white; border:none;
+      padding:12px; border-radius:12px; font-size:15px;
+      font-weight:600; cursor:pointer; font-family:'Heebo',sans-serif;
+      margin-top:8px;
+    }
+
+    /* ── Photo upload ── */
+    #photo-upload-area {
+      border:2px dashed #ddd; border-radius:12px;
+      padding:24px; text-align:center; cursor:pointer;
+      color:var(--gray); font-size:14px;
+      transition:border-color 0.2s;
+    }
+    #photo-upload-area:hover { border-color:var(--dark); }
+    #photo-preview { width:100%; border-radius:10px; max-height:200px; object-fit:cover; display:none; margin-top:10px; }
+
+    /* ── Item card (my items) ── */
+    .item-card {
+      background:white; border-radius:12px;
+      padding:14px; margin-bottom:12px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.06);
+    }
+    .item-card-title { font-size:16px; font-weight:700; color:var(--dark); margin-bottom:4px; }
+    .item-card-meta { font-size:12px; color:var(--gray); margin-bottom:8px; }
+    .item-card-actions { display:flex; gap:8px; }
+    .item-card-btn {
+      flex:1; padding:8px; border-radius:8px;
+      font-size:13px; font-weight:600; cursor:pointer;
+      border:none; font-family:'Heebo',sans-serif;
+    }
+
+    /* ── Requester card ── */
+    .requester-card {
+      background:#f9f9f9; border-radius:10px;
+      padding:12px; margin-bottom:8px;
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .requester-name { font-size:15px; font-weight:700; color:var(--dark); }
+    .requester-meta { font-size:12px; color:var(--gray); }
+
+    /* ── Toast ── */
+    #toast {
+      position:fixed; bottom:90px; left:50%; transform:translateX(-50%);
+      background:rgba(0,0,0,0.8); color:white;
+      padding:10px 20px; border-radius:20px; font-size:13px;
+      z-index:9999; opacity:0; transition:opacity 0.3s;
+      pointer-events:none; white-space:nowrap;
+    }
+    #toast.show { opacity:1; }
+
+    /* ── Loading ── */
+    #loading {
+      position:fixed; top:0; left:0; right:0; bottom:0;
+      background:var(--dark); z-index:99998;
+      display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+    }
+    #loading-logo { font-size:52px; font-weight:900; color:white; letter-spacing:-1px; }
+    #loading-sub { font-size:16px; color:var(--accent); margin-top:8px; margin-bottom:40px; }
+    #loading-spinner {
+      width:40px; height:40px;
+      border:3px solid rgba(255,255,255,0.2);
+      border-top-color:var(--accent);
+      border-radius:50%;
+      animation:spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* ── Setup screen ── */
+    #setup-screen {
+      position:fixed; top:0; left:0; right:0; bottom:0;
+      background:var(--dark); z-index:99997;
+      display:none; flex-direction:column;
+      align-items:center; justify-content:center;
+      padding:30px 24px;
+    }
+    #setup-screen h1 { color:white; font-size:36px; font-weight:900; margin-bottom:8px; }
+    #setup-screen p { color:rgba(255,255,255,0.6); font-size:14px; margin-bottom:30px; text-align:center; }
+    #setup-screen .form-input, #setup-screen .form-select {
+      background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.2);
+      color:white; margin-bottom:12px;
+    }
+    #setup-screen .form-label { color:rgba(255,255,255,0.7); }
+    #setup-screen .btn-primary { background:var(--accent); margin-top:16px; }
+
+    /* ── Item popup (map) ── */
+    .item-popup { min-width:220px; direction:rtl; }
+    .item-popup-img { width:100%; height:140px; object-fit:cover; border-radius:8px; margin-bottom:10px; }
+    .item-popup-title { font-size:15px; font-weight:700; color:var(--dark); margin-bottom:4px; }
+    .item-popup-cat { font-size:12px; color:var(--gray); margin-bottom:8px; }
+    .item-popup-desc { font-size:13px; color:#444; margin-bottom:10px; line-height:1.5; }
+    .item-popup-by { font-size:12px; color:var(--gray); margin-bottom:10px; }
+    .item-popup-btn {
+      width:100%; background:var(--dark); color:white; border:none;
+      padding:10px; border-radius:8px; font-size:14px; font-weight:700;
+      cursor:pointer; font-family:'Heebo',sans-serif;
+    }
+    .item-popup-btn.requested { background:var(--green); }
+    .item-popup-report {
+      width:100%; background:none; color:var(--gray); border:none;
+      padding:6px; font-size:12px; cursor:pointer; margin-top:4px;
+      font-family:'Heebo',sans-serif;
+    }
+
+    /* ── Side menu ── */
+    #side-menu {
+      position:fixed; top:0; right:0; bottom:0; width:260px;
+      background:white; z-index:3000;
+      transform:translateX(100%); transition:transform 0.3s ease;
+      display:flex; flex-direction:column;
+      box-shadow:-4px 0 20px rgba(0,0,0,0.2);
+    }
+    #side-menu.open { transform:translateX(0); }
+    #menu-overlay {
+      position:fixed; top:0; left:0; right:0; bottom:0;
+      background:rgba(0,0,0,0.4); z-index:2999; display:none;
+    }
+    #menu-overlay.open { display:block; }
+    #menu-header { background:var(--dark); color:white; padding:20px 16px; font-size:18px; font-weight:700; }
+    .menu-item {
+      padding:16px; font-size:15px; color:var(--dark);
+      border-bottom:1px solid #f0f0f0; cursor:pointer;
+    }
+    .menu-item:hover { background:#f9f9f9; }
+
+    /* ── Radius slider ── */
+    input[type=range] { width:100%; accent-color:var(--dark); }
+    #radius-display { font-size:22px; font-weight:700; color:var(--dark); text-align:center; margin:8px 0; }
+  </style>
 </head>
 <body>
 
+<div id="loading">
+  <div id="loading-logo">iNeed</div>
+  <div id="loading-sub">תן. קח. שתף.</div>
+  <div id="loading-spinner"></div>
+</div>
+
+<div id="setup-screen">
+  <h1>iNeed</h1>
+  <p>לפני שנתחיל — ספר לנו קצת עליך</p>
+  <div style="width:100%; max-width:340px;">
+    <div class="form-group">
+      <label class="form-label">כינוי (שם תצוגה)</label>
+      <input type="text" class="form-input" id="setup-nickname" placeholder="למשל: יוגב מראשון לציון" maxlength="30"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">רדיוס חיפוש</label>
+      <div id="radius-display">5 ק"מ</div>
+      <input type="range" id="setup-radius" min="1" max="20" value="5"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">אימייל (אופציונלי — לעדכונים)</label>
+      <input type="email" class="form-input" id="setup-email" placeholder="your@email.com" style="direction:ltr;"/>
+    </div>
+    <button class="btn-primary" onclick="completeSetup()">בואו נתחיל ←</button>
+  </div>
+</div>
+
+<div id="header">
+  <div id="header-title">iNeed</div>
+  <div id="header-actions">
+    <button class="header-btn" onclick="openMenu()">☰</button>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<button id="post-btn" onclick="openPostPanel()">+ פרסם פריט</button>
+<button id="my-items-btn" onclick="openMyItems()">📦</button>
+<button id="center-btn" onclick="centerOnUser()">📍</button>
+
+<div id="toast"></div>
+
+<!-- Menu -->
+<div id="menu-overlay" onclick="closeMenu()"></div>
+<div id="side-menu">
+  <div id="menu-header">iNeed</div>
+  <div class="menu-item" onclick="openSettings()">⚙️ הגדרות</div>
+  <div class="menu-item" onclick="openMyItems()">📦 הפריטים שלי</div>
+</div>
+
+<!-- Post item panel -->
+<div id="post-panel" class="panel">
+  <div class="panel-header">
+    <button class="panel-back" onclick="closePanel('post-panel')">←</button>
+    <span class="panel-title">פרסם פריט</span>
+  </div>
+  <div class="panel-body">
+    <div class="form-group">
+      <label class="form-label">כותרת *</label>
+      <input type="text" class="form-input" id="post-title" placeholder="מה אתה נותן?" maxlength="80"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">קטגוריה *</label>
+      <select class="form-select" id="post-category">
+        <option value="">בחר קטגוריה</option>
+        <option>ריהוט</option>
+        <option>אלקטרוניקה</option>
+        <option>ביגוד והנעלה</option>
+        <option>ספרים ולימוד</option>
+        <option>מטבח וכלי בית</option>
+        <option>צעצועים וילדים</option>
+        <option>ספורט ופנאי</option>
+        <option>גינה וכלי עבודה</option>
+        <option>אחר</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">תיאור</label>
+      <textarea class="form-textarea" id="post-desc" placeholder="תאר את הפריט — מצב, גודל, סיבת המסירה..."></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">תמונה (מומלץ — מגדיל סיכויי מציאת מקבל)</label>
+      <div id="photo-upload-area" onclick="document.getElementById('photo-input').click()">
+        📷 לחץ להוספת תמונה
+      </div>
+      <input type="file" id="photo-input" accept="image/*" style="display:none" onchange="previewPhoto(this)"/>
+      <img id="photo-preview"/>
+    </div>
+    <button class="btn-primary" onclick="submitItem()">פרסם פריט</button>
+  </div>
+</div>
+
+<!-- My items panel -->
+<div id="my-items-panel" class="panel">
+  <div class="panel-header">
+    <button class="panel-back" onclick="closePanel('my-items-panel')">←</button>
+    <span class="panel-title">הפריטים שלי</span>
+  </div>
+  <div class="panel-body" id="my-items-body">
+    <p style="color:var(--gray); text-align:center;">טוען...</p>
+  </div>
+</div>
+
+<!-- Requesters panel -->
+<div id="requesters-panel" class="panel">
+  <div class="panel-header">
+    <button class="panel-back" onclick="closePanel('requesters-panel')">←</button>
+    <span class="panel-title" id="requesters-title">מי רוצה את הפריט?</span>
+  </div>
+  <div class="panel-body" id="requesters-body"></div>
+</div>
+
+<!-- Settings panel -->
+<div id="settings-panel" class="panel">
+  <div class="panel-header">
+    <button class="panel-back" onclick="closePanel('settings-panel')">←</button>
+    <span class="panel-title">הגדרות</span>
+  </div>
+  <div class="panel-body">
+    <div class="form-group">
+      <label class="form-label">כינוי</label>
+      <input type="text" class="form-input" id="settings-nickname"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">רדיוס חיפוש</label>
+      <div id="settings-radius-display">5 ק"מ</div>
+      <input type="range" id="settings-radius" min="1" max="20" value="5"
+        oninput="document.getElementById('settings-radius-display').textContent=this.value+' ק&quot;מ'"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">אימייל</label>
+      <input type="email" class="form-input" id="settings-email" style="direction:ltr;"/>
+    </div>
+    <button class="btn-primary" onclick="saveSettings()">שמור הגדרות</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+const API_BASE = 'https://ineed-0otk.onrender.com';
+
+// ── Device ID ──────────────────────────────────────────
+let deviceId = localStorage.getItem('ineed_device_id');
+if (!deviceId) {
+  deviceId = 'user_' + Math.random().toString(36).substr(2, 12);
+  localStorage.setItem('ineed_device_id', deviceId);
+}
+
+async function initDeviceId() {
+  if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.Device) {
+    try {
+      const info = await window.Capacitor.Plugins.Device.getId();
+      if (info && info.identifier) {
+        deviceId = 'device_' + info.identifier;
+        localStorage.setItem('ineed_device_id', deviceId);
+      }
+    } catch(e) {}
+  }
+}
+initDeviceId();
+
+// ── User state ─────────────────────────────────────────
+let currentUser = null;
+let userLat = null, userLon = null;
+
+// ── Map ────────────────────────────────────────────────
+const map = L.map('map').setView([31.9730, 34.7895], 14);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap'
+}).addTo(map);
+
+const clusterGroup = L.markerClusterGroup({ maxClusterRadius: 60, disableClusteringAtZoom: 16 });
+map.addLayer(clusterGroup);
+
+let itemMarkers = {};
+let itemsData = [];
+
+// ── Categories colors ──────────────────────────────────
+const catColors = {
+  'ריהוט': '#8e44ad',
+  'אלקטרוניקה': '#2980b9',
+  'ביגוד והנעלה': '#e74c3c',
+  'ספרים ולימוד': '#f39c12',
+  'מטבח וכלי בית': '#16a085',
+  'צעצועים וילדים': '#e91e63',
+  'ספורט ופנאי': '#27ae60',
+  'גינה וכלי עבודה': '#795548',
+  'אחר': '#607d8b',
+};
+
+function makeItemIcon(category) {
+  const color = catColors[category] || '#607d8b';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
+    <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22S28 24.5 28 14C28 6.27 21.73 0 14 0z" fill="${color}"/>
+    <circle cx="14" cy="14" r="7" fill="white"/>
+  </svg>`;
+  return L.divIcon({ html: svg, iconSize:[28,36], iconAnchor:[14,36], popupAnchor:[0,-36], className:'' });
+}
+
+// ── Load items ─────────────────────────────────────────
+const MIN_ZOOM = 12;
+
+async function loadItems() {
+  if (map.getZoom() < MIN_ZOOM) {
+    clusterGroup.clearLayers();
+    Object.keys(itemMarkers).forEach(id => delete itemMarkers[id]);
+    return;
+  }
+  const b = map.getBounds();
+  const params = new URLSearchParams({
+    lat_min: b.getSouth().toFixed(5),
+    lat_max: b.getNorth().toFixed(5),
+    lon_min: b.getWest().toFixed(5),
+    lon_max: b.getEast().toFixed(5),
+    device_id: deviceId
+  });
+  const res = await fetch(`${API_BASE}/items?${params}`);
+  const items = await res.json();
+
+  // Hide loading after first load
+  const loadingEl = document.getElementById('loading');
+  if (loadingEl) loadingEl.remove();
+
+  // Merge into itemsData
+  items.forEach(item => {
+    const idx = itemsData.findIndex(x => x.id === item.id);
+    if (idx >= 0) itemsData[idx] = item;
+    else itemsData.push(item);
+  });
+
+  // Remove out-of-view markers
+  const bounds = map.getBounds();
+  Object.keys(itemMarkers).forEach(id => {
+    const m = itemMarkers[id];
+    if (!bounds.contains(m.getLatLng())) {
+      clusterGroup.removeLayer(m);
+      delete itemMarkers[id];
+    }
+  });
+
+  // Add/update markers
+  items.forEach(item => {
+    const popupHTML = buildItemPopup(item);
+    if (itemMarkers[item.id]) {
+      itemMarkers[item.id].setPopupContent(popupHTML);
+    } else {
+      const m = L.marker([item.lat, item.lon], { icon: makeItemIcon(item.category) })
+        .bindPopup(popupHTML, { maxWidth: 260 });
+      itemMarkers[item.id] = m;
+      clusterGroup.addLayer(m);
+    }
+  });
+}
+
+function buildItemPopup(item) {
+  const myRequests = JSON.parse(localStorage.getItem('my_requests') || '{}');
+  const requested = myRequests[item.id];
+  const isMyItem = item.device_id === deviceId;
+  return `
+    <div class="item-popup">
+      ${item.image_url ? `<img src="${item.image_url}" class="item-popup-img"/>` : ''}
+      <div class="item-popup-title">${item.title}</div>
+      <div class="item-popup-cat">${item.category}</div>
+      ${item.description ? `<div class="item-popup-desc">${item.description}</div>` : ''}
+      <div class="item-popup-by">מאת: ${item.nickname} · ${item.request_count} מתעניינים</div>
+      ${!isMyItem ? `
+        <button class="item-popup-btn ${requested ? 'requested' : ''}"
+          onclick="${requested ? `cancelInterest(${item.id})` : `expressInterest(${item.id})`}">
+          ${requested ? '✓ מעוניין — לחץ לביטול' : 'אני רוצה את זה!'}
+        </button>
+        <button class="item-popup-report" onclick="reportImage(${item.id})">🚩 דווח על תמונה</button>
+      ` : `<div style="font-size:12px;color:var(--gray);text-align:center;padding:8px;">זה הפריט שלך</div>`}
+    </div>`;
+}
+
+map.on('moveend', loadItems);
+
+// ── Interest ───────────────────────────────────────────
+async function expressInterest(itemId) {
+  const res = await fetch(`${API_BASE}/request`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ item_id: itemId, device_id: deviceId })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    const myRequests = JSON.parse(localStorage.getItem('my_requests') || '{}');
+    myRequests[itemId] = true;
+    localStorage.setItem('my_requests', JSON.stringify(myRequests));
+    showToast('✓ הבעת עניין! בעל הפריט יעודכן');
+    map.closePopup();
+    loadItems();
+  }
+}
+
+async function cancelInterest(itemId) {
+  await fetch(`${API_BASE}/request/${itemId}?device_id=${encodeURIComponent(deviceId)}`, { method: 'DELETE' });
+  const myRequests = JSON.parse(localStorage.getItem('my_requests') || '{}');
+  delete myRequests[itemId];
+  localStorage.setItem('my_requests', JSON.stringify(myRequests));
+  showToast('בוטל');
+  map.closePopup();
+  loadItems();
+}
+
+// ── Report image ───────────────────────────────────────
+async function reportImage(itemId) {
+  await fetch(`${API_BASE}/report-image`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ item_id: itemId, reporter_device_id: deviceId, reason: 'user report' })
+  });
+  showToast('הדיווח נשלח. תודה!');
+  map.closePopup();
+}
+
+// ── Post item ──────────────────────────────────────────
+function previewPhoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const preview = document.getElementById('photo-preview');
+    preview.src = e.target.result;
+    preview.style.display = 'block';
+    document.getElementById('photo-upload-area').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function submitItem() {
+  const title = document.getElementById('post-title').value.trim();
+  const category = document.getElementById('post-category').value;
+  const desc = document.getElementById('post-desc').value.trim();
+  const photoInput = document.getElementById('photo-input');
+
+  if (!title || !category) { showToast('נא למלא כותרת וקטגוריה'); return; }
+  if (!userLat) { showToast('לא ניתן לפרסם ללא מיקום'); return; }
+
+  const form = new FormData();
+  form.append('device_id', deviceId);
+  form.append('title', title);
+  form.append('description', desc);
+  form.append('category', category);
+  form.append('lat', userLat);
+  form.append('lon', userLon);
+  if (photoInput.files[0]) form.append('image', photoInput.files[0]);
+
+  const btn = document.querySelector('#post-panel .btn-primary');
+  btn.textContent = 'מפרסם...';
+  btn.disabled = true;
+
+  const res = await fetch(`${API_BASE}/item`, { method: 'POST', body: form });
+  const data = await res.json();
+
+  btn.textContent = 'פרסם פריט';
+  btn.disabled = false;
+
+  if (data.ok) {
+    showToast('הפריט פורסם בהצלחה!');
+    closePanel('post-panel');
+    // Reset form
+    document.getElementById('post-title').value = '';
+    document.getElementById('post-category').value = '';
+    document.getElementById('post-desc').value = '';
+    document.getElementById('photo-input').value = '';
+    document.getElementById('photo-preview').style.display = 'none';
+    document.getElementById('photo-upload-area').style.display = 'block';
+    loadItems();
+  } else {
+    showToast('שגיאה — נסה שוב');
+  }
+}
+
+// ── My items ───────────────────────────────────────────
+async function openMyItems() {
+  closeMenu();
+  openPanel('my-items-panel');
+  const body = document.getElementById('my-items-body');
+  body.innerHTML = '<p style="color:var(--gray);text-align:center;">טוען...</p>';
+
+  const res = await fetch(`${API_BASE}/my-items/${deviceId}`);
+  const items = await res.json();
+
+  if (items.length === 0) {
+    body.innerHTML = '<p style="color:var(--gray);text-align:center;margin-top:40px;">אין לך פריטים עדיין.<br>לחץ על "+ פרסם פריט" להתחלה!</p>';
+    return;
+  }
+
+  body.innerHTML = items.map(item => `
+    <div class="item-card">
+      ${item.image_url ? `<img src="${item.image_url}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;"/>` : ''}
+      <div class="item-card-title">${item.title}</div>
+      <div class="item-card-meta">${item.category} · ${item.request_count} מתעניינים · ${item.status === 'available' ? '🟢 זמין' : '🔴 נלקח'}</div>
+      <div class="item-card-actions">
+        <button class="item-card-btn" style="background:#f0f0f0;color:var(--dark);"
+          onclick="viewRequesters(${item.id}, '${item.title}')">👥 מי רוצה?</button>
+        <button class="item-card-btn" style="background:${item.status==='available'?'var(--green)':'var(--gray)'};color:white;"
+          onclick="toggleItemStatus(${item.id}, '${item.status}')">
+          ${item.status === 'available' ? 'סמן כנלקח' : 'החזר לזמין'}
+        </button>
+        <button class="item-card-btn" style="background:var(--accent);color:white;"
+          onclick="deleteItem(${item.id})">מחק</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function viewRequesters(itemId, itemTitle) {
+  openPanel('requesters-panel');
+  document.getElementById('requesters-title').textContent = `מי רוצה: ${itemTitle}`;
+  const body = document.getElementById('requesters-body');
+  body.innerHTML = '<p style="color:var(--gray);text-align:center;">טוען...</p>';
+
+  const res = await fetch(`${API_BASE}/item/${itemId}/requests?device_id=${encodeURIComponent(deviceId)}`);
+  const requesters = await res.json();
+
+  if (requesters.length === 0) {
+    body.innerHTML = '<p style="color:var(--gray);text-align:center;margin-top:40px;">אין מתעניינים עדיין.</p>';
+    return;
+  }
+
+  body.innerHTML = requesters.map(r => `
+    <div class="requester-card">
+      <div>
+        <div class="requester-name">${r.nickname}</div>
+        <div class="requester-meta">${new Date(r.created_at * 1000).toLocaleDateString('he-IL')}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function toggleItemStatus(itemId, currentStatus) {
+  const newStatus = currentStatus === 'available' ? 'taken' : 'available';
+  await fetch(`${API_BASE}/item/${itemId}/status`, {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ device_id: deviceId, status: newStatus })
+  });
+  showToast(newStatus === 'taken' ? 'סומן כנלקח' : 'הוחזר לזמין');
+  openMyItems();
+  loadItems();
+}
+
+async function deleteItem(itemId) {
+  if (!confirm('למחוק את הפריט?')) return;
+  await fetch(`${API_BASE}/item/${itemId}?device_id=${encodeURIComponent(deviceId)}`, { method: 'DELETE' });
+  showToast('הפריט נמחק');
+  openMyItems();
+  loadItems();
+}
+
+// ── Settings ───────────────────────────────────────────
+function openSettings() {
+  closeMenu();
+  if (currentUser) {
+    document.getElementById('settings-nickname').value = currentUser.nickname || '';
+    document.getElementById('settings-radius').value = currentUser.radius_km || 5;
+    document.getElementById('settings-radius-display').textContent = (currentUser.radius_km || 5) + ' ק"מ';
+    document.getElementById('settings-email').value = currentUser.email || '';
+  }
+  openPanel('settings-panel');
+}
+
+async function saveSettings() {
+  const nickname = document.getElementById('settings-nickname').value.trim();
+  const radius = parseInt(document.getElementById('settings-radius').value);
+  const email = document.getElementById('settings-email').value.trim();
+
+  if (!nickname) { showToast('נא להזין כינוי'); return; }
+
+  await fetch(`${API_BASE}/user/setup`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ device_id: deviceId, nickname, radius_km: radius, email: email || null })
+  });
+
+  currentUser = { ...currentUser, nickname, radius_km: radius, email };
+  localStorage.setItem('ineed_user', JSON.stringify(currentUser));
+  showToast('הגדרות נשמרו');
+  closePanel('settings-panel');
+}
+
+// ── Setup ──────────────────────────────────────────────
+document.getElementById('setup-radius').addEventListener('input', function() {
+  document.getElementById('radius-display').textContent = this.value + ' ק"מ';
+});
+
+async function completeSetup() {
+  const nickname = document.getElementById('setup-nickname').value.trim();
+  const radius = parseInt(document.getElementById('setup-radius').value);
+  const email = document.getElementById('setup-email').value.trim();
+
+  if (!nickname) { showToast('נא להזין כינוי'); return; }
+
+  const res = await fetch(`${API_BASE}/user/setup`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ device_id: deviceId, nickname, radius_km: radius, email: email || null })
+  });
+
+  const data = await res.json();
+  if (data.ok) {
+    currentUser = { device_id: deviceId, nickname, radius_km: radius, email };
+    localStorage.setItem('ineed_user', JSON.stringify(currentUser));
+    document.getElementById('setup-screen').style.display = 'none';
+    startApp();
+  }
+}
+
+// ── Location ───────────────────────────────────────────
+let centeredOnUser = false;
+function startLocation() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.watchPosition(pos => {
+    userLat = pos.coords.latitude;
+    userLon = pos.coords.longitude;
+    if (!centeredOnUser) {
+      centeredOnUser = true;
+      map.setView([userLat, userLon], 14);
+    }
+  }, null, { enableHighAccuracy: true, maximumAge: 5000 });
+}
+
+function centerOnUser() {
+  if (userLat) map.flyTo([userLat, userLon], 15);
+}
+
+// ── Panels ─────────────────────────────────────────────
+function openPanel(id) { document.getElementById(id).classList.add('open'); }
+function closePanel(id) { document.getElementById(id).classList.remove('open'); }
+function openPostPanel() { openPanel('post-panel'); }
+function openMenu() { document.getElementById('side-menu').classList.add('open'); document.getElementById('menu-overlay').classList.add('open'); }
+function closeMenu() { document.getElementById('side-menu').classList.remove('open'); document.getElementById('menu-overlay').classList.remove('open'); }
+
+// ── Toast ──────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── App init ───────────────────────────────────────────
+function startApp() {
+  startLocation();
+  loadItems();
+  map.on('moveend', loadItems);
+  setInterval(loadItems, 30000);
+}
+
+async function init() {
+  // Check if user exists locally
+  const saved = localStorage.getItem('ineed_user');
+  if (saved) {
+    currentUser = JSON.parse(saved);
+    // Verify still exists on server
+    try {
+      const res = await fetch(`${API_BASE}/user/${deviceId}`);
+      if (res.ok) {
+        currentUser = await res.json();
+        localStorage.setItem('ineed_user', JSON.stringify(currentUser));
+        document.getElementById('loading').remove();
+        startApp();
+        return;
+      }
+    } catch(e) {}
+  }
+  // New user — show setup
+  document.getElementById('loading').remove();
+  document.getElementById('setup-screen').style.display = 'flex';
+}
+
+init();
+</script>
 </body>
 </html>
