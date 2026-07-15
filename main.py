@@ -145,7 +145,7 @@ def setup_user(user: UserSetup):
             radius_km = EXCLUDED.radius_km,
             email = COALESCE(EXCLUDED.email, users.email),
             last_seen = EXCLUDED.last_seen
-    """, (user.device_id, user.nickname, user.role, user.radius_km, user.email, now, now))
+    """, (user.device_id, user.nickname, user.radius_km, user.email, now, now))
     conn.commit()
     cur.close()
     conn.close()
