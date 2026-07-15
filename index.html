@@ -25,7 +25,7 @@
 
     /* ── Header ── */
     #header {
-      background: var(--dark);
+      background: #F44336;
       color: white;
       padding: 12px 16px;
       display: flex;
@@ -342,8 +342,8 @@
       או <strong>לקבל</strong> משהו שאתה צריך?
     </p>
     <div class="type-toggle">
-      <button class="type-btn" id="btn-give" onclick="selectPostType('give')">🎁 אני נותן</button>
-      <button class="type-btn" id="btn-take" onclick="selectPostType('take')">🙏 אני מקבל</button>
+      <button class="type-btn" id="btn-give" onclick="selectPostType('give')">אני נותן</button>
+      <button class="type-btn" id="btn-take" onclick="selectPostType('take')">אני מקבל</button>
     </div>
     <button class="btn-primary" style="margin-top:24px;" onclick="postStepNext()">המשך ←</button>
   </div>
@@ -381,10 +381,16 @@
     <p id="photo-hint" style="font-size:14px; color:#444; margin-bottom:16px; line-height:1.7;"></p>
     <div class="form-group">
       <div id="photo-upload-area" onclick="document.getElementById('photo-input').click()">
-        📷 לחץ להוספת תמונה
+        לחץ להוספת תמונה
       </div>
       <input type="file" id="photo-input" accept="image/*" style="display:none" onchange="previewPhoto(this)"/>
       <img id="photo-preview"/>
+      <button id="remove-photo-btn" onclick="removePhoto()" style="
+        display:none; margin-top:8px; width:100%; background:none;
+        border:1px solid #ddd; color:var(--gray); padding:8px;
+        border-radius:8px; cursor:pointer; font-size:13px;
+        font-family:'Heebo',sans-serif;
+      ">✕ הסר תמונה</button>
     </div>
     <button class="btn-primary" onclick="submitItem()">פרסם פריט ✓</button>
     <button class="btn-secondary" onclick="submitItem()">דלג ופרסם ללא תמונה</button>
@@ -568,10 +574,14 @@ function buildItemPopup(item) {
       ${!isMyItem ? `
         <button class="item-popup-btn ${requested ? 'requested' : ''}"
           onclick="${requested ? `cancelInterest(${item.id})` : `expressInterest(${item.id})`}">
-          ${requested ? '✓ מעוניין — לחץ לביטול' : 'אני רוצה את זה!'}
+          ${requested ? 'מעוניין — לחץ לביטול' : 'אני רוצה את זה!'}
         </button>
-        <button class="item-popup-report" onclick="reportImage(${item.id})">🚩 דווח על תמונה</button>
-      ` : `<div style="font-size:12px;color:var(--gray);text-align:center;padding:8px;">זה הפריט שלך</div>`}
+        <button class="item-popup-report" onclick="reportImage(${item.id})">דווח על תמונה</button>
+      ` : `
+        <button class="item-popup-btn" onclick="map.closePopup(); viewRequesters(${item.id}, '${item.title.replace(/'/g,"\'")}')">
+          מי רוצה את זה? (${item.request_count})
+        </button>
+      `}
     </div>`;
 }
 
@@ -589,9 +599,16 @@ async function expressInterest(itemId) {
     const myRequests = JSON.parse(localStorage.getItem('my_requests') || '{}');
     myRequests[itemId] = true;
     localStorage.setItem('my_requests', JSON.stringify(myRequests));
-    showToast('✓ הבעת עניין! בעל הפריט יעודכן');
+    showToast('הבעת עניין! בעל הפריט יעודכן');
     map.closePopup();
     loadItems();
+
+    // If the giver is using the app on the same device (or we implement push later)
+    // For now notification info is returned from server for future push implementation
+    if (data.notification) {
+      console.log('Notification to send:', data.notification);
+      // TODO: send push notification to giver via FCM when implemented
+    }
   }
 }
 
@@ -606,14 +623,46 @@ async function cancelInterest(itemId) {
 }
 
 // ── Report image ───────────────────────────────────────
-async function reportImage(itemId) {
+function reportImage(itemId) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;direction:rtl;';
+  overlay.innerHTML = `
+    <div style="background:white;border-radius:16px;padding:24px 20px;max-width:320px;width:92%;direction:rtl;">
+      <h3 style="font-size:16px;color:#1a1a2e;margin-bottom:16px;">מדוע אתה מדווח על תמונה זו?</h3>
+      <div id="report-reasons" style="display:flex;flex-direction:column;gap:8px;">
+        ${['תוכן לא הולם','תמונה מטעה - לא קשורה לפריט','תוכן פוגעני או אלים','הפרת זכויות יוצרים','ספאם או פרסומת','אחר'].map(r =>
+          `<button onclick="submitImageReport(${itemId},'${r}',this)" style="text-align:right;background:#f5f5f5;border:1.5px solid #eee;padding:12px 14px;border-radius:8px;font-size:14px;cursor:pointer;font-family:Heebo,sans-serif;color:#333;">${r}</button>`
+        ).join('')}
+        <textarea id="report-other-text" placeholder="פרט את הסיבה..." style="display:none;width:100%;padding:10px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;font-family:Heebo,sans-serif;direction:rtl;min-height:80px;margin-top:4px;"></textarea>
+      </div>
+      <button onclick="this.closest('div[style*=fixed]').remove()" style="margin-top:14px;width:100%;background:none;border:none;color:#aaa;font-size:13px;cursor:pointer;">ביטול</button>
+    </div>
+  `;
+  // Handle "other" reason
+  const buttons = overlay.querySelectorAll('#report-reasons button');
+  buttons[buttons.length-1].onclick = function() {
+    overlay.querySelector('#report-other-text').style.display = 'block';
+    this.onclick = () => {
+      const txt = overlay.querySelector('#report-other-text').value.trim() || 'אחר';
+      submitImageReport(itemId, txt, this, overlay);
+    };
+    this.textContent = 'שלח דיווח';
+    this.style.background = '#F44336';
+    this.style.color = 'white';
+  };
+  document.body.appendChild(overlay);
+}
+
+async function submitImageReport(itemId, reason, btn, overlayEl) {
+  const overlay = overlayEl || btn.closest('div[style*="position:fixed"]');
   await fetch(`${API_BASE}/report-image`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ item_id: itemId, reporter_device_id: deviceId, reason: 'user report' })
+    body: JSON.stringify({ item_id: itemId, reporter_device_id: deviceId, reason })
   });
-  showToast('הדיווח נשלח. תודה!');
+  if (overlay) overlay.remove();
   map.closePopup();
+  showToast('הדיווח נשלח. תודה!');
 }
 
 // ── Post item ──────────────────────────────────────────
@@ -626,8 +675,17 @@ function previewPhoto(input) {
     preview.src = e.target.result;
     preview.style.display = 'block';
     document.getElementById('photo-upload-area').style.display = 'none';
+    document.getElementById('remove-photo-btn').style.display = 'block';
   };
   reader.readAsDataURL(file);
+}
+
+function removePhoto() {
+  document.getElementById('photo-input').value = '';
+  document.getElementById('photo-preview').style.display = 'none';
+  document.getElementById('photo-preview').src = '';
+  document.getElementById('photo-upload-area').style.display = 'block';
+  document.getElementById('remove-photo-btn').style.display = 'none';
 }
 
 async function submitItem() {
@@ -670,6 +728,7 @@ async function submitItem() {
     document.getElementById('photo-input').value = '';
     document.getElementById('photo-preview').style.display = 'none';
     document.getElementById('photo-upload-area').style.display = 'block';
+    const rmBtn = document.getElementById('remove-photo-btn'); if(rmBtn) rmBtn.style.display = 'none';
     selectedPostType = null;
     document.getElementById('btn-give').className = 'type-btn';
     document.getElementById('btn-take').className = 'type-btn';
@@ -834,62 +893,6 @@ function centerOnUser() {
 }
 
 // ── Panels ─────────────────────────────────────────────
-// ── Post steps ─────────────────────────────────────────────────
-let selectedPostType = null;
-let currentPostStep = 1;
-
-function selectPostType(type) {
-  selectedPostType = type;
-  document.getElementById('btn-give').className = 'type-btn' + (type === 'give' ? ' give-active' : '');
-  document.getElementById('btn-take').className = 'type-btn' + (type === 'take' ? ' take-active' : '');
-}
-
-function updateProgressBar(step) {
-  for (let i = 1; i <= 3; i++) {
-    const el = document.getElementById('ps' + i);
-    if (!el) continue;
-    if (i < step) el.className = 'progress-step done';
-    else if (i === step) el.className = 'progress-step active';
-    else el.className = 'progress-step';
-  }
-  const labels = ['שלב 1: תן או קח', 'שלב 2: פרטי הפריט', 'שלב 3: תמונה'];
-  const lbl = document.getElementById('post-step-label');
-  if (lbl) lbl.textContent = labels[step - 1];
-}
-
-function showPostStep(step) {
-  for (let i = 1; i <= 3; i++) {
-    const el = document.getElementById('post-step-' + i);
-    if (el) el.style.display = i === step ? 'block' : 'none';
-  }
-  currentPostStep = step;
-  updateProgressBar(step);
-}
-
-function postStepNext() {
-  if (currentPostStep === 1) {
-    if (!selectedPostType) { showToast('נא לבחור תן או קח'); return; }
-    showPostStep(2);
-  } else if (currentPostStep === 2) {
-    const title = document.getElementById('post-title').value.trim();
-    const category = document.getElementById('post-category').value;
-    if (!title || !category) { showToast('נא למלא כותרת וקטגוריה'); return; }
-    const hint = document.getElementById('photo-hint');
-    if (hint) hint.textContent = selectedPostType === 'give'
-      ? 'תמונה של הפריט מגדילה משמעותית את הסיכוי למצוא מישהו שירצה אותו. מומלץ מאוד להוסיף!'
-      : 'תמונה של מה שאתה מחפש עוזרת לאחרים להבין בדיוק מה אתה צריך.';
-    showPostStep(3);
-  }
-}
-
-function postStepBack() {
-  if (currentPostStep === 1) {
-    closePanel('post-panel');
-  } else {
-    showPostStep(currentPostStep - 1);
-  }
-}
-
 function openPostPanel() {
   currentPostStep = 1;
   selectedPostType = null;

@@ -305,6 +305,25 @@ def delete_item(item_id: int, device_id: str):
     conn.close()
     return {"ok": True}
 
+# ── Push notification tokens ────────────────────────────────
+
+class PushToken(BaseModel):
+    device_id: str
+    token: str
+
+@app.post("/push-token")
+def save_push_token(pt: PushToken):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS push_token TEXT
+    """)
+    cur.execute("UPDATE users SET push_token = %s WHERE device_id = %s", (pt.token, pt.device_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"ok": True}
+
 # ── Image Reports ───────────────────────────────────────────
 
 class ImageReport(BaseModel):
@@ -330,7 +349,7 @@ def report_image(report: ImageReport):
 @app.post("/request")
 def request_item(req: ItemRequest):
     conn = get_db()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
         cur.execute("""
             INSERT INTO requests (item_id, device_id, created_at)
@@ -339,10 +358,29 @@ def request_item(req: ItemRequest):
         conn.commit()
     except psycopg2.errors.UniqueViolation:
         conn.rollback()
+        cur.close()
+        conn.close()
         return {"ok": False, "detail": "Already requested"}
+
+    # Get item info + requester nickname for notification
+    cur.execute("""
+        SELECT i.title, i.device_id as giver_device_id, u.nickname as requester_name
+        FROM items i
+        JOIN users u ON u.device_id = %s
+        WHERE i.id = %s
+    """, (req.device_id, req.item_id))
+    row = cur.fetchone()
     cur.close()
     conn.close()
-    return {"ok": True}
+
+    notification_data = None
+    if row:
+        notification_data = {
+            "giver_device_id": row["giver_device_id"],
+            "item_title": row["title"],
+            "requester_name": row["requester_name"]
+        }
+    return {"ok": True, "notification": notification_data}
 
 @app.delete("/request/{item_id}")
 def cancel_request(item_id: int, device_id: str):
