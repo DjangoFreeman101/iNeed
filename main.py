@@ -422,6 +422,19 @@ def request_item(req: ItemRequest):
         }
     return {"ok": True, "notification": notification_data}
 
+@app.get("/my-requests/{device_id}")
+def get_my_requests(device_id: str):
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        "SELECT item_id FROM requests WHERE device_id = %s",
+        (device_id,)
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [row["item_id"] for row in rows]
+
 @app.delete("/request/{item_id}")
 def cancel_request(item_id: int, device_id: str):
     conn = get_db()
