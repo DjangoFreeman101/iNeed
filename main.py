@@ -46,6 +46,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS items (
             id SERIAL PRIMARY KEY,
             device_id TEXT NOT NULL REFERENCES users(device_id),
+            post_type TEXT NOT NULL DEFAULT 'give',  -- 'give' or 'take'
             title TEXT NOT NULL,
             description TEXT,
             category TEXT NOT NULL,
@@ -56,6 +57,11 @@ def init_db():
             created_at DOUBLE PRECISION NOT NULL,
             reminded_at DOUBLE PRECISION
         )
+    """)
+    
+    # Add post_type column if it doesnt exist (for existing tables)
+    cur.execute("""
+        ALTER TABLE items ADD COLUMN IF NOT EXISTS post_type TEXT NOT NULL DEFAULT 'give'
     """)
 
     # Requests table (someone wants an item)
@@ -184,6 +190,7 @@ def update_settings(settings: UserSettings):
 @app.post("/item")
 async def post_item(
     device_id: str = Form(...),
+    post_type: str = Form("give"),
     title: str = Form(...),
     description: str = Form(""),
     category: str = Form(...),
@@ -200,10 +207,10 @@ async def post_item(
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        INSERT INTO items (device_id, title, description, category, image_url, lat, lon, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO items (device_id, post_type, title, description, category, image_url, lat, lon, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
-    """, (device_id, title, description, category, image_url, lat, lon, time.time()))
+    """, (device_id, post_type, title, description, category, image_url, lat, lon, time.time()))
     item_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
