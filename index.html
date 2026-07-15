@@ -826,7 +826,27 @@ async function completeSetup() {
 
 // ── Location ───────────────────────────────────────────
 let centeredOnUser = false;
-function startLocation() {
+async function startLocation() {
+  // On native Android, request permission explicitly first
+  if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+    // Wait for Geolocation plugin
+    let attempts = 0;
+    while (attempts < 30) {
+      if (window.Capacitor.Plugins && window.Capacitor.Plugins.Geolocation) break;
+      await new Promise(r => setTimeout(r, 200));
+      attempts++;
+    }
+    if (window.Capacitor.Plugins.Geolocation) {
+      try {
+        const perm = await window.Capacitor.Plugins.Geolocation.requestPermissions();
+        console.log('Location permission:', JSON.stringify(perm));
+      } catch(e) {
+        console.log('Location permission error:', e);
+      }
+    }
+  }
+
+  // Now start watching position
   if (!navigator.geolocation) return;
   navigator.geolocation.watchPosition(pos => {
     userLat = pos.coords.latitude;
@@ -835,7 +855,10 @@ function startLocation() {
       centeredOnUser = true;
       map.setView([userLat, userLon], 14);
     }
-  }, null, { enableHighAccuracy: true, maximumAge: 5000 });
+  }, (err) => {
+    console.log('Location error:', err);
+    showToast('לא ניתן לקבל מיקום — אנא אפשר גישה למיקום בהגדרות');
+  }, { enableHighAccuracy: true, maximumAge: 5000 });
 }
 
 function centerOnUser() {
