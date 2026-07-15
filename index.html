@@ -47,22 +47,35 @@
     /* ── Bottom buttons ── */
     #post-btn {
       position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
-      background:var(--accent); color:white; border:none;
-      padding:14px 28px; border-radius:30px;
-      font-size:15px; font-weight:700; cursor:pointer;
-      z-index:1000; box-shadow:0 4px 16px rgba(231,76,60,0.4);
+      background:#2980b9; color:white; border:none;
+      width:56px; height:56px; border-radius:50%;
+      font-size:28px; font-weight:700; cursor:pointer;
+      z-index:1000; box-shadow:0 4px 16px rgba(41,128,185,0.4);
       font-family:'Heebo',sans-serif;
+      display:flex; align-items:center; justify-content:center;
+      line-height:1;
     }
 
     #center-btn, #my-items-btn {
-      position:fixed; bottom:24px;
+      position:fixed; right:16px;
       background:white; border:none; border-radius:50%;
       width:46px; height:46px; font-size:20px; cursor:pointer;
       z-index:1000; box-shadow:0 3px 10px rgba(0,0,0,0.2);
       display:flex; align-items:center; justify-content:center;
     }
-    #center-btn { right:16px; }
-    #my-items-btn { right:70px; font-size:16px; }
+    #center-btn { bottom:24px; }
+    #my-items-btn { bottom:78px; font-size:16px; }
+    
+    /* Give/Take toggle */
+    .type-toggle { display:flex; gap:10px; margin-bottom:16px; }
+    .type-btn {
+      flex:1; padding:12px; border-radius:10px; border:2px solid #ddd;
+      font-size:15px; font-weight:700; cursor:pointer;
+      font-family:'Heebo',sans-serif; background:white; color:#888;
+      transition: all 0.2s;
+    }
+    .type-btn.give-active { background:#e74c3c; border-color:#e74c3c; color:white; }
+    .type-btn.take-active { background:#27ae60; border-color:#27ae60; color:white; }
 
     /* ── Panels (slide-up) ── */
     .panel {
@@ -277,9 +290,9 @@
 
 <div id="map"></div>
 
-<button id="post-btn" onclick="openPostPanel()">+ פרסם פריט</button>
-<button id="my-items-btn" onclick="openMyItems()">📦</button>
-<button id="center-btn" onclick="centerOnUser()">📍</button>
+<button id="post-btn" onclick="openPostPanel()">+</button>
+<button id="my-items-btn" onclick="openMyItems()"><img src="data:image/png;base64,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" width="22" height="22"/></button>
+<button id="center-btn" onclick="centerOnUser()"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAACXBIWXMAAAsTAAALEwEAmpwYAAADo0lEQVR4nO2ZyU5UQRSGvwWtGBFMBER2RsJGRQRb2TiAD2AgLB2ewhgXGIaNMSaogAYeQN04MITwECIGFMXWByCIKMMGGtuU+W9SQZu+dYemSfyTm0Duqapz+kz/qQvxI6Nn1yPz35ACw64zZA9wGegCRoBZYNEyxPz9ARiWTAuQoIDQCAwBPy2l/T4/gEGgYScNaADGtyj2EXgAXNX7I9a7ahl9DXgIzG1ZOwbU59OAfUAvkJYCK1LseIAcOQE8AlYlswHcB4qJGbXAtA5N69eviCDZK2VQWrJTQA0x4RzwTQfNKUyirlpJICX5Bf0fuRErOmAUKCU+lFm5txylMbWWJ54CRcSPBPDM8syxKBJ72vJEPoywjRm3ciZUAei1ciLOcNouzFLS4V7QTRpURdIOiR0HzkoHU5rrgmzgudWU2J1Gv3Qx1McJjVazy9Un8oHDapq/XLv/kAwxHbtQ0CedHruwWI8AZqMd+OjUPao2q3reAt0hPHxKOn33Wz1bLAIYBO1qZNkYr/mR2gLundIeF/wId4UIq3bFsVn/CrgI7NdzCXitd5tAa4jw6vAjPCJhQ7ddw8nzxM1t5G5Zs0i54xk3tPalH+FZCbv2jh7LE35/LON9F5zRuhk/wt54aoYiF7zTOhNOudAsWVMAXFCtdYb7/QW/Y2kueOy4xIfsAYvd5kLGr35RGbLsYEipVcEiMyRbaBk3umBK60x18lviJwOG1kKcyd6tdabE5sKoZDsdz0i6JPtwwPJbYTECU2Kz4bZkloBDAcvvCz/CnRI2lwGuaFOz85hqs3KmROHkecLIXAnBgjtwKI2fCIZWNbtsSbkU0AiDL9rjPD5HTE8Rc+8UBOVqdpMqy6aivZG3XcPJQ710WnQZuQdDhFdc6JdOA65jbkb023ConUYVsCZCaui8E8YKyCtPHEr7P2NyQ4N/5Dd+DmhSlVsPkbN/LpQzGmjM1Uy+cRD4Kh3uhr2g81jteJ4/zCSACZ1tKt7esBvWiNtkdI2ZD2MSwHOdOQ8cjfKSbNnyTFnM4TRhsePILweTlmdSMi7qzwpNVk7Mx3nDWWPR9bQuAyojMKRKJXbTyonIwikbilXNNqymaXrNyQCG1Ktjr0lmXdUpdGK7oM5is97zWUZdV1hs/RiaFBXvswhgRh3bjA+B+0QUOK2wWHIYSzMWARwIQjviRJFuUO7oSui99aXLG09nNBR1iIrn88NRaLhUrYLGf0MKDXkx5Dd0IIXtaDD14wAAAABJRU5ErkJggg==" width="24" height="24"/></button>
 
 <div id="toast"></div>
 
@@ -298,6 +311,13 @@
     <span class="panel-title">פרסם פריט</span>
   </div>
   <div class="panel-body">
+    <div class="form-group">
+      <label class="form-label">אני רוצה *</label>
+      <div class="type-toggle">
+        <button class="type-btn" id="btn-give" onclick="selectPostType('give')">אני נותן</button>
+        <button class="type-btn" id="btn-take" onclick="selectPostType('take')">אני מקבל</button>
+      </div>
+    </div>
     <div class="form-group">
       <label class="form-label">כותרת *</label>
       <input type="text" class="form-input" id="post-title" placeholder="מה אתה נותן?" maxlength="80"/>
@@ -578,11 +598,13 @@ async function submitItem() {
   const desc = document.getElementById('post-desc').value.trim();
   const photoInput = document.getElementById('photo-input');
 
+  if (!selectedPostType) { showToast('נא לבחור אני נותן או אני מקבל'); return; }
   if (!title || !category) { showToast('נא למלא כותרת וקטגוריה'); return; }
   if (!userLat) { showToast('לא ניתן לפרסם ללא מיקום'); return; }
 
   const form = new FormData();
   form.append('device_id', deviceId);
+  form.append('post_type', selectedPostType);
   form.append('title', title);
   form.append('description', desc);
   form.append('category', category);
@@ -610,6 +632,9 @@ async function submitItem() {
     document.getElementById('photo-input').value = '';
     document.getElementById('photo-preview').style.display = 'none';
     document.getElementById('photo-upload-area').style.display = 'block';
+    selectedPostType = null;
+    document.getElementById('btn-give').className = 'type-btn';
+    document.getElementById('btn-take').className = 'type-btn';
     loadItems();
   } else {
     showToast('שגיאה — נסה שוב');
