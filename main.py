@@ -339,7 +339,17 @@ def update_item_status(item_id: int, update: ItemStatusUpdate):
 def delete_item(item_id: int, device_id: str):
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("DELETE FROM items WHERE id = %s AND device_id = %s", (item_id, device_id))
+    # Verify ownership before deleting anything
+    cur.execute("SELECT device_id FROM items WHERE id = %s", (item_id,))
+    row = cur.fetchone()
+    if not row or row[0] != device_id:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=403, detail="Not your item")
+    # Remove dependent rows first so the foreign key constraints don't block deletion
+    cur.execute("DELETE FROM requests WHERE item_id = %s", (item_id,))
+    cur.execute("DELETE FROM image_reports WHERE item_id = %s", (item_id,))
+    cur.execute("DELETE FROM items WHERE id = %s", (item_id,))
     conn.commit()
     cur.close()
     conn.close()
