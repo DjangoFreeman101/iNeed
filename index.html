@@ -710,6 +710,7 @@ async function submitItem() {
 
 // ── My items ───────────────────────────────────────────
 async function openMyItems() {
+  alert('openMyItems called');
   // Close any open panels first
   document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
   closeMenu();
