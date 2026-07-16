@@ -279,6 +279,18 @@
   <div id="loading-sub">תן. קח. שתף.</div>
   <div id="loading-spinner"></div>
 </div>
+<script>
+  // Emergency fallback - if app doesn't load in 4 seconds, remove loading screen
+  window._loadingTimer = setTimeout(function() {
+    var el = document.getElementById('loading');
+    if (el) el.remove();
+    var setup = document.getElementById('setup-screen');
+    // If no user saved, show setup
+    if (!localStorage.getItem('ineed_user') && setup) {
+      setup.style.display = 'flex';
+    }
+  }, 4000);
+</script>
 
 <div id="setup-screen">
   <h1>iNeed</h1>
@@ -351,8 +363,8 @@
       או <strong>לקבל</strong> משהו שאתה צריך?
     </p>
     <div class="type-toggle">
-      <button class="type-btn" id="btn-give" onclick="selectPostType('give')">למסור</button>
-      <button class="type-btn" id="btn-take" onclick="selectPostType('take')">לקחת</button>
+      <button class="type-btn" id="btn-give" onclick="selectPostType('give')">אני נותן</button>
+      <button class="type-btn" id="btn-take" onclick="selectPostType('take')">אני מקבל</button>
     </div>
     
   </div>
@@ -997,13 +1009,13 @@ async function init() {
   document.getElementById('setup-screen').style.display = 'flex';
 }
 
-// Safety fallback - remove loading after 5 seconds no matter what
-setTimeout(() => {
+init().catch(e => {
+  console.error('Init error:', e);
   const loadingEl = document.getElementById('loading');
   if (loadingEl) loadingEl.remove();
-}, 5000);
-
-init();
+  const setup = document.getElementById('setup-screen');
+  if (!localStorage.getItem('ineed_user') && setup) setup.style.display = 'flex';
+});
 </script>
 </body>
 </html>
