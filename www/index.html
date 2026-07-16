@@ -233,7 +233,8 @@
     .item-popup-title { font-size:15px; font-weight:700; color:var(--dark); margin-bottom:4px; }
     .item-popup-cat { font-size:12px; color:var(--gray); margin-bottom:8px; }
     .item-popup-desc { font-size:13px; color:#444; margin-bottom:10px; line-height:1.5; }
-    .item-popup-by { font-size:12px; color:var(--gray); margin-bottom:10px; }
+    .item-popup-by { font-size:12px; color:var(--gray); margin-bottom:2px; }
+    .item-popup-interest { font-size:12px; color:var(--gray); margin-bottom:10px; }
     .item-popup-btn {
       width:100%; background:var(--dark); color:white; border:none;
       padding:10px; border-radius:8px; font-size:14px; font-weight:700;
@@ -244,6 +245,11 @@
       width:100%; background:none; color:var(--gray); border:none;
       padding:6px; font-size:12px; cursor:pointer; margin-top:4px;
       font-family:'Heebo',sans-serif;
+    }
+    .item-popup-info {
+      width:100%; background:#f0f0f0; color:var(--dark); border:none;
+      padding:8px; border-radius:8px; font-size:13px; font-weight:600;
+      cursor:pointer; margin-top:6px; font-family:'Heebo',sans-serif;
     }
 
     /* ── Side menu ── */
@@ -270,6 +276,20 @@
     /* ── Radius slider ── */
     input[type=range] { width:100%; accent-color:var(--dark); }
     #radius-display { font-size:22px; font-weight:700; color:var(--dark); text-align:center; margin:8px 0; }
+    /* ── Upload overlay ── */
+    #upload-overlay {
+      display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
+      z-index:6000; flex-direction:column; align-items:center; justify-content:center;
+      color:white;
+    }
+    #upload-overlay.show { display:flex; }
+    #upload-spinner {
+      width:48px; height:48px; border-radius:50%;
+      border:5px solid rgba(255,255,255,0.3); border-top-color:white;
+      animation:upload-spin 0.8s linear infinite;
+    }
+    #upload-overlay-text { margin-top:16px; font-size:16px; font-weight:700; }
+    @keyframes upload-spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -303,7 +323,7 @@
     <div class="form-group">
       <label class="form-label">רדיוס חיפוש</label>
       <div id="radius-display">5 ק"מ</div>
-      <input type="range" id="setup-radius" min="1" max="20" value="5"/>
+      <input type="range" id="setup-radius" min="1" max="80" value="5"/>
     </div>
     <div class="form-group">
       <label class="form-label">אימייל (אופציונלי — לעדכונים)</label>
@@ -331,6 +351,11 @@
 
 <div id="toast"></div>
 
+<div id="upload-overlay">
+  <div id="upload-spinner"></div>
+  <div id="upload-overlay-text">מעלה...</div>
+</div>
+
 <!-- Menu -->
 <div id="menu-overlay" onclick="closeMenu()"></div>
 <div id="side-menu">
@@ -353,10 +378,6 @@
 
   <!-- Step 1: Give or Take -->
   <div id="post-step-1" class="panel-body">
-    <p style="font-size:15px; color:#444; margin-bottom:20px; line-height:1.6;">
-      האם אתה רוצה <strong>לתת</strong> פריט שאין לך שימוש בו,<br/>
-      או <strong>לקבל</strong> משהו שאתה צריך?
-    </p>
     <div class="type-toggle">
       <button class="type-btn" id="btn-give" onclick="selectPostType('give')">למסור</button>
       <button class="type-btn" id="btn-take" onclick="selectPostType('take')">לקחת</button>
@@ -441,6 +462,15 @@
   <div class="panel-body" id="requesters-body"></div>
 </div>
 
+<!-- Item info panel -->
+<div id="item-info-panel" class="panel">
+  <div class="panel-header">
+    <button class="panel-back" onclick="closePanel('item-info-panel')">←</button>
+    <span class="panel-title">פרטי הפריט</span>
+  </div>
+  <div class="panel-body" id="item-info-body"></div>
+</div>
+
 <!-- Settings panel -->
 <div id="settings-panel" class="panel">
   <div class="panel-header">
@@ -455,7 +485,7 @@
     <div class="form-group">
       <label class="form-label">רדיוס חיפוש</label>
       <div id="settings-radius-display">5 ק"מ</div>
-      <input type="range" id="settings-radius" min="1" max="20" value="5"
+      <input type="range" id="settings-radius" min="1" max="80" value="5"
         oninput="document.getElementById('settings-radius-display').textContent=this.value+' ק&quot;מ'"/>
     </div>
     <div class="form-group">
@@ -593,7 +623,9 @@ function buildItemPopup(item) {
       <div class="item-popup-title">${item.title}</div>
       <div class="item-popup-cat">${item.category}</div>
       ${item.description ? `<div class="item-popup-desc">${item.description}</div>` : ''}
-      <div class="item-popup-by">מאת: ${item.nickname} · ${item.request_count} מתעניינים</div>
+      <div class="item-popup-by">מאת: ${item.nickname}</div>
+      <div class="item-popup-interest">${item.request_count} מתעניינים</div>
+      <button class="item-popup-info" onclick="showItemInfo(${item.id})">ℹ️ פרטי הפריט</button>
       ${!isMyItem ? `
         <button class="item-popup-btn ${requested ? 'requested' : ''}"
           onclick="${requested ? `cancelInterest(${item.id})` : `expressInterest(${item.id})`}">
@@ -608,6 +640,23 @@ function buildItemPopup(item) {
 function refreshItems() {
   loadItems();
   showToast('מרענן...');
+}
+
+// ── Item info modal ─────────────────────────────────────
+function showItemInfo(itemId) {
+  const item = itemsData.find(i => i.id === itemId);
+  if (!item) return;
+  const body = document.getElementById('item-info-body');
+  body.innerHTML = `
+    ${item.image_url ? `<img src="${item.image_url}" style="width:100%;border-radius:10px;margin-bottom:14px;max-height:240px;object-fit:cover;"/>` : ''}
+    <div style="font-size:19px;font-weight:700;color:var(--dark);margin-bottom:6px;">${item.title}</div>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:12px;">${item.category} · ${item.post_type === 'give' ? 'למסור' : 'לקחת'}</div>
+    ${item.description ? `<div style="font-size:14px;color:#444;line-height:1.6;margin-bottom:16px;">${item.description}</div>` : ''}
+    <div style="font-size:13px;color:var(--gray);">מאת: ${item.nickname}</div>
+    <div style="font-size:13px;color:var(--gray);margin-top:4px;">${item.request_count} מתעניינים</div>
+  `;
+  map.closePopup();
+  openPanel('item-info-panel');
 }
 
 // ── Interest ───────────────────────────────────────────
@@ -692,10 +741,21 @@ async function submitItem() {
   const btn = document.querySelector('#post-panel .btn-primary');
   btn.textContent = 'מפרסם...';
   btn.disabled = true;
+  document.getElementById('upload-overlay').classList.add('show');
 
-  const res = await fetch(`${API_BASE}/item`, { method: 'POST', body: form });
-  const data = await res.json();
+  let res, data;
+  try {
+    res = await fetch(`${API_BASE}/item`, { method: 'POST', body: form });
+    data = await res.json();
+  } catch (e) {
+    document.getElementById('upload-overlay').classList.remove('show');
+    btn.textContent = 'פרסם פריט';
+    btn.disabled = false;
+    showToast('שגיאה בהעלאה — בדוק את החיבור לאינטרנט');
+    return;
+  }
 
+  document.getElementById('upload-overlay').classList.remove('show');
   btn.textContent = 'פרסם פריט';
   btn.disabled = false;
 

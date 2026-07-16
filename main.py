@@ -454,3 +454,22 @@ def cancel_request(item_id: int, device_id: str):
     cur.close()
     conn.close()
     return {"ok": True}
+
+@app.get("/my-item-requests/{device_id}")
+def get_my_item_requests(device_id: str):
+    """All interest requests on items owned by this device — used by the app
+    to detect new interest and trigger notifications / the unread indicator."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT r.id, r.item_id, r.created_at, i.title AS item_title, u.nickname AS requester_name
+        FROM requests r
+        JOIN items i ON i.id = r.item_id
+        JOIN users u ON u.device_id = r.device_id
+        WHERE i.device_id = %s
+        ORDER BY r.created_at DESC
+    """, (device_id,))
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return rows
