@@ -52,7 +52,7 @@
       background:#F44336; color:white; border:none;
       width:56px; height:56px; border-radius:50%;
       font-size:28px; font-weight:700; cursor:pointer;
-      z-index:1000; box-shadow:0 4px 16px rgba(244,67,54,0.4);
+      z-index:900; box-shadow:0 4px 16px rgba(244,67,54,0.4);
       font-family:'Heebo',sans-serif;
       display:flex; align-items:center; justify-content:center;
       line-height:1;
@@ -62,7 +62,7 @@
       position:fixed; right:16px;
       background:white; border:none; border-radius:50%;
       width:46px; height:46px; font-size:20px; cursor:pointer;
-      z-index:1000; box-shadow:0 3px 10px rgba(0,0,0,0.2);
+      z-index:2000; box-shadow:0 3px 10px rgba(0,0,0,0.2);
       display:flex; align-items:center; justify-content:center;
     }
     #center-btn { bottom:24px; }
@@ -710,7 +710,6 @@ async function submitItem() {
 
 // ── My items ───────────────────────────────────────────
 async function openMyItems() {
-  alert('openMyItems called');
   // Close any open panels first
   document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
   closeMenu();
