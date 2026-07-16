@@ -164,6 +164,8 @@
     .requester-name { font-size:15px; font-weight:700; color:var(--dark); }
     .requester-meta { font-size:12px; color:var(--gray); }
 
+    .leaflet-top.leaflet-left { top: 58px !important; }
+
     /* ── Progress bar ── */
     #post-progress {
       display:flex; align-items:center; gap:8px;
@@ -300,10 +302,14 @@
 </div>
 
 <div id="header">
-  <div style="display:flex; align-items:center; gap:10px;">
+  <div style="display:flex; align-items:center; gap:8px;">
     <div id="header-title">iNeed</div>
-    <button class="header-btn" onclick="refreshItems()" title="רענן" style="font-size:16px;">↺</button>
+    <button class="header-btn" onclick="refreshItems()" style="font-size:18px; font-weight:bold;">↺</button>
   </div>
+  <div id="header-actions">
+    <button class="header-btn" onclick="openMenu()">☰</button>
+  </div>
+</div>
   <div id="header-actions">
     <button class="header-btn" onclick="openMenu()">☰</button>
   </div>
@@ -321,8 +327,8 @@
 <div id="menu-overlay" onclick="closeMenu()"></div>
 <div id="side-menu">
   <div id="menu-header">iNeed</div>
-  <div class="menu-item" onclick="openSettings()">⚙️ הגדרות</div>
-  <div class="menu-item" onclick="openMyItems()">📦 הפריטים שלי</div>
+  <div class="menu-item" onclick="openSettings()">הגדרות</div>
+  <div class="menu-item" onclick="openMyItems()">הפריטים שלי</div>
 </div>
 
 <!-- Post item panel (multi-step) -->
@@ -345,10 +351,10 @@
       או <strong>לקבל</strong> משהו שאתה צריך?
     </p>
     <div class="type-toggle">
-      <button class="type-btn" id="btn-give" onclick="selectPostType('give')">🎁 אני נותן</button>
-      <button class="type-btn" id="btn-take" onclick="selectPostType('take')">🙏 אני מקבל</button>
+      <button class="type-btn" id="btn-give" onclick="selectPostType('give')">למסור</button>
+      <button class="type-btn" id="btn-take" onclick="selectPostType('take')">לקחת</button>
     </div>
-    <button class="btn-primary" style="margin-top:24px;" onclick="postStepNext()">המשך ←</button>
+    
   </div>
 
   <!-- Step 2: Details -->
@@ -389,15 +395,9 @@
       <input type="file" id="photo-input" accept="image/*" style="display:none" onchange="previewPhoto(this)"/>
       <div id="photo-preview-container" style="display:none; position:relative; margin-top:10px;">
         <img id="photo-preview" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover;display:block;"/>
-        <button onclick="removePhoto()" style="
-          position:absolute; top:8px; left:8px;
-          background:rgba(0,0,0,0.65); color:white; border:none;
-          border-radius:6px; padding:6px 12px; font-size:13px;
-          cursor:pointer; font-family:Heebo,sans-serif;
-        ">הסר תמונה</button>
+        <button onclick="removePhoto()" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.65);color:white;border:none;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:Heebo,sans-serif;">הסר תמונה</button>
       </div>
-    </div>
-    <button class="btn-primary" onclick="submitItem()">פרסם פריט ✓</button>
+      <button class="btn-primary" onclick="submitItem()">פרסם פריט</button>
     <button class="btn-secondary" onclick="submitItem()">דלג ופרסם ללא תמונה</button>
   </div>
 </div>
@@ -579,9 +579,9 @@ function buildItemPopup(item) {
       ${!isMyItem ? `
         <button class="item-popup-btn ${requested ? 'requested' : ''}"
           onclick="${requested ? `cancelInterest(${item.id})` : `expressInterest(${item.id})`}">
-          ${requested ? '✓ מעוניין — לחץ לביטול' : 'אני רוצה את זה!'}
+          ${requested ? 'מעוניין — לחץ לביטול' : 'אני רוצה את זה!'}
         </button>
-        <button class="item-popup-report" onclick="reportImage(${item.id})">🚩 דווח על תמונה</button>
+        <button class="item-popup-report" onclick="reportImage(${item.id})"> דווח על תמונה</button>
       ` : `<div style="font-size:12px;color:var(--gray);text-align:center;padding:8px;">זה הפריט שלך</div>`}
     </div>`;
 }
@@ -600,7 +600,7 @@ async function expressInterest(itemId) {
     const myRequests = JSON.parse(localStorage.getItem('my_requests') || '{}');
     myRequests[itemId] = true;
     localStorage.setItem('my_requests', JSON.stringify(myRequests));
-    showToast('✓ הבעת עניין! בעל הפריט יעודכן');
+    showToast('הבעת עניין! בעל הפריט יעודכן');
     map.closePopup();
     loadItems();
   }
@@ -628,16 +628,24 @@ async function reportImage(itemId) {
 }
 
 // ── Post item ──────────────────────────────────────────
+function removePhoto() {
+  document.getElementById('photo-input').value = '';
+  document.getElementById('photo-preview').src = '';
+  document.getElementById('photo-preview-container').style.display = 'none';
+  document.getElementById('photo-upload-area').style.display = 'block';
+}
+
 function previewPhoto(input) {
   const file = input.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
-    const preview = document.getElementById('photo-preview');
-    preview.src = e.target.result;
+    document.getElementById('photo-preview').src = e.target.result;
     document.getElementById('photo-preview-container').style.display = 'block';
     document.getElementById('photo-upload-area').style.display = 'none';
   };
+  reader.readAsDataURL(file);
+};
   reader.readAsDataURL(file);
 }
 
@@ -679,7 +687,7 @@ async function submitItem() {
     document.getElementById('post-category').value = '';
     document.getElementById('post-desc').value = '';
     document.getElementById('photo-input').value = '';
-    document.getElementById('photo-preview-container').style.display = 'none';
+    const pc = document.getElementById('photo-preview-container'); if(pc) pc.style.display = 'none';
     document.getElementById('photo-upload-area').style.display = 'block';
     selectedPostType = null;
     document.getElementById('btn-give').className = 'type-btn';
@@ -709,10 +717,10 @@ async function openMyItems() {
     <div class="item-card">
       ${item.image_url ? `<img src="${item.image_url}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;"/>` : ''}
       <div class="item-card-title">${item.title}</div>
-      <div class="item-card-meta">${item.category} · ${item.request_count} מתעניינים · ${item.status === 'available' ? '🟢 זמין' : '🔴 נלקח'}</div>
+      <div class="item-card-meta">${item.category} · ${item.request_count} מתעניינים · ${item.status === 'available' ? 'זמין' : 'נלקח'}</div>
       <div class="item-card-actions">
         <button class="item-card-btn" style="background:#f0f0f0;color:var(--dark);"
-          onclick="viewRequesters(${item.id}, '${item.title}')">👥 מי רוצה?</button>
+          onclick="viewRequesters(${item.id}, '${item.title}')">מי רוצה?</button>
         <button class="item-card-btn" style="background:${item.status==='available'?'var(--green)':'var(--gray)'};color:white;"
           onclick="toggleItemStatus(${item.id}, '${item.status}')">
           ${item.status === 'available' ? 'סמן כנלקח' : 'החזר לזמין'}
@@ -864,6 +872,7 @@ function selectPostType(type) {
   selectedPostType = type;
   document.getElementById('btn-give').className = 'type-btn' + (type === 'give' ? ' give-active' : '');
   document.getElementById('btn-take').className = 'type-btn' + (type === 'take' ? ' take-active' : '');
+  setTimeout(() => postStepNext(), 300);
 }
 
 function updateProgressBar(step) {
@@ -921,7 +930,7 @@ function openPostPanel() {
   document.getElementById('post-category').value = '';
   document.getElementById('post-desc').value = '';
   document.getElementById('photo-input').value = '';
-  document.getElementById('photo-preview-container').style.display = 'none';
+  const pc = document.getElementById('photo-preview-container'); if(pc) pc.style.display = 'none';
   document.getElementById('photo-upload-area').style.display = 'block';
   showPostStep(1);
   openPanel('post-panel');
