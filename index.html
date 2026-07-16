@@ -1156,8 +1156,16 @@ function showToast(msg) {
 // ── App init ───────────────────────────────────────────
 // ── Interest notifications (new requests on my items) ──
 async function requestNotificationPermission() {
-  if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
-    try { await window.Capacitor.Plugins.LocalNotifications.requestPermissions(); } catch(e) {}
+  if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+    let attempts = 0;
+    while (attempts < 20) {
+      if (window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) break;
+      await new Promise(r => setTimeout(r, 200));
+      attempts++;
+    }
+    if (window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
+      try { await window.Capacitor.Plugins.LocalNotifications.requestPermissions(); } catch(e) {}
+    }
   }
 }
 
