@@ -831,24 +831,55 @@ async function completeSetup() {
 
   if (!nickname) { showToast('נא להזין כינוי'); return; }
 
-  const res = await fetch(`${API_BASE}/user/setup`, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ device_id: deviceId, nickname, radius_km: radius, email: email || null })
-  });
+  const btn = document.querySelector('#setup-screen .btn-primary');
+  btn.textContent = 'טוען...';
+  btn.disabled = true;
 
-  const data = await res.json();
-  if (data.ok) {
-    currentUser = { device_id: deviceId, nickname, radius_km: radius, email };
-    localStorage.setItem('ineed_user', JSON.stringify(currentUser));
-    document.getElementById('setup-screen').style.display = 'none';
-    startApp();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    
+    const res = await fetch(`${API_BASE}/user/setup`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ device_id: deviceId, nickname, radius_km: radius, email: email || null }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    const data = await res.json();
+    if (data.ok) {
+      currentUser = { device_id: deviceId, nickname, radius_km: radius, email };
+      localStorage.setItem('ineed_user', JSON.stringify(currentUser));
+      document.getElementById('setup-screen').style.display = 'none';
+      startApp();
+    } else {
+      showToast('שגיאה — נסה שוב');
+    }
+  } catch(e) {
+    showToast('לא ניתן להתחבר לשרת — בדוק את החיבור לאינטרנט');
+    console.error('Setup error:', e);
+  } finally {
+    btn.textContent = 'בואו נתחיל ←';
+    btn.disabled = false;
   }
 }
 
 // ── Location ───────────────────────────────────────────
 let centeredOnUser = false;
-function startLocation() {
+async function startLocation() {
+  // Request location permission on native Android
+  if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+    let attempts = 0;
+    while (attempts < 20) {
+      if (window.Capacitor.Plugins && window.Capacitor.Plugins.Geolocation) break;
+      await new Promise(r => setTimeout(r, 200));
+      attempts++;
+    }
+    if (window.Capacitor.Plugins && window.Capacitor.Plugins.Geolocation) {
+      try { await window.Capacitor.Plugins.Geolocation.requestPermissions(); } catch(e) {}
+    }
+  }
   if (!navigator.geolocation) return;
   navigator.geolocation.watchPosition(pos => {
     userLat = pos.coords.latitude;
@@ -857,7 +888,9 @@ function startLocation() {
       centeredOnUser = true;
       map.setView([userLat, userLon], 14);
     }
-  }, null, { enableHighAccuracy: true, maximumAge: 5000 });
+  }, (err) => {
+    console.log('Location error:', err);
+  }, { enableHighAccuracy: true, maximumAge: 5000 });
 }
 
 function centerOnUser() {
