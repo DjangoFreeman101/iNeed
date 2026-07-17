@@ -462,7 +462,8 @@ def get_my_item_requests(device_id: str):
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
-        SELECT r.id, r.item_id, r.created_at, i.title AS item_title, u.nickname AS requester_name
+        SELECT r.id, r.item_id, r.created_at, i.title AS item_title,
+               i.post_type, u.nickname AS requester_name
         FROM requests r
         JOIN items i ON i.id = r.item_id
         JOIN users u ON u.device_id = r.device_id

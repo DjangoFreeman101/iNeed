@@ -479,6 +479,51 @@
   <div class="panel-body" id="item-info-body"></div>
 </div>
 
+<!-- Edit item panel -->
+<div id="edit-item-panel" class="panel">
+  <div class="panel-header">
+    <button class="panel-back" onclick="closePanel('edit-item-panel')">←</button>
+    <span class="panel-title">ערוך פריט</span>
+  </div>
+  <div class="panel-body">
+    <div class="form-group">
+      <label class="form-label">כותרת *</label>
+      <input type="text" class="form-input" id="edit-title" maxlength="80"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">קטגוריה *</label>
+      <select class="form-select" id="edit-category">
+        <option value="">בחר קטגוריה</option>
+        <option>ריהוט</option>
+        <option>אלקטרוניקה</option>
+        <option>ביגוד והנעלה</option>
+        <option>ספרים ולימוד</option>
+        <option>מטבח וכלי בית</option>
+        <option>צעצועים וילדים</option>
+        <option>ספורט ופנאי</option>
+        <option>גינה וכלי עבודה</option>
+        <option>אחר</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">תיאור</label>
+      <textarea class="form-textarea" id="edit-desc"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">תמונה</label>
+      <div id="edit-photo-upload-area" onclick="document.getElementById('edit-photo-input').click()" style="border:2px dashed #ddd;border-radius:12px;padding:24px;text-align:center;cursor:pointer;color:var(--gray);font-size:14px;">
+        לחץ להוספת תמונה
+      </div>
+      <input type="file" id="edit-photo-input" accept="image/*" style="display:none" onchange="previewEditPhoto(this)"/>
+      <div id="edit-photo-preview-container" style="display:none; position:relative; margin-top:10px;">
+        <img id="edit-photo-preview" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover;display:block;"/>
+        <button type="button" onclick="removeEditPhoto()" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.65);color:white;border:none;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:Heebo,sans-serif;">הסר תמונה</button>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="submitEditItem()">שמור שינויים</button>
+  </div>
+</div>
+
 <!-- Settings panel -->
 <div id="settings-panel" class="panel">
   <div class="panel-header">
@@ -818,6 +863,10 @@ async function openMyItems() {
           onclick="toggleItemStatus(${item.id}, '${item.status}')">
           ${item.status === 'available' ? 'סמן כנלקח' : 'החזר לזמין'}
         </button>
+      </div>
+      <div class="item-card-actions" style="margin-top:8px;">
+        <button class="item-card-btn" style="background:#f0f0f0;color:var(--dark);"
+          onclick="openEditItem(${item.id})">ערוך</button>
         <button class="item-card-btn" style="background:var(--accent);color:white;"
           onclick="deleteItem(${item.id})">מחק</button>
       </div>
@@ -869,6 +918,100 @@ async function deleteItem(itemId) {
   showToast('הפריט נמחק');
   openMyItems();
   loadItems();
+}
+
+// ── Edit item ────────────────────────────────────────────
+let editingItemId = null;
+let editRemoveImageFlag = false;
+
+function openEditItem(itemId) {
+  const item = myItemsData.find(i => i.id === itemId);
+  if (!item) return;
+  editingItemId = itemId;
+  editRemoveImageFlag = false;
+
+  document.getElementById('edit-title').value = item.title || '';
+  document.getElementById('edit-category').value = item.category || '';
+  document.getElementById('edit-desc').value = item.description || '';
+  document.getElementById('edit-photo-input').value = '';
+
+  const preview = document.getElementById('edit-photo-preview');
+  const previewContainer = document.getElementById('edit-photo-preview-container');
+  const uploadArea = document.getElementById('edit-photo-upload-area');
+  if (item.image_url) {
+    preview.src = item.image_url;
+    previewContainer.style.display = 'block';
+    uploadArea.style.display = 'none';
+  } else {
+    preview.src = '';
+    previewContainer.style.display = 'none';
+    uploadArea.style.display = 'block';
+  }
+
+  openPanel('edit-item-panel');
+}
+
+function previewEditPhoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  editRemoveImageFlag = false;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('edit-photo-preview').src = e.target.result;
+    document.getElementById('edit-photo-preview-container').style.display = 'block';
+    document.getElementById('edit-photo-upload-area').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeEditPhoto() {
+  editRemoveImageFlag = true;
+  document.getElementById('edit-photo-input').value = '';
+  document.getElementById('edit-photo-preview').src = '';
+  document.getElementById('edit-photo-preview-container').style.display = 'none';
+  document.getElementById('edit-photo-upload-area').style.display = 'block';
+}
+
+async function submitEditItem() {
+  if (editingItemId === null) return;
+  const title = document.getElementById('edit-title').value.trim();
+  const category = document.getElementById('edit-category').value;
+  const desc = document.getElementById('edit-desc').value.trim();
+  const photoInput = document.getElementById('edit-photo-input');
+
+  if (!title || !category) { showToast('נא למלא כותרת וקטגוריה'); return; }
+
+  const form = new FormData();
+  form.append('device_id', deviceId);
+  form.append('title', title);
+  form.append('description', desc);
+  form.append('category', category);
+  form.append('remove_image', editRemoveImageFlag ? 'true' : 'false');
+  if (photoInput.files[0]) form.append('image', photoInput.files[0]);
+
+  const btn = document.querySelector('#edit-item-panel .btn-primary');
+  btn.textContent = 'שומר...';
+  btn.disabled = true;
+  document.getElementById('upload-overlay').classList.add('show');
+
+  try {
+    const res = await fetch(`${API_BASE}/item/${editingItemId}`, { method: 'PATCH', body: form });
+    const data = await res.json();
+    if (data.ok) {
+      showToast('הפריט עודכן בהצלחה!');
+      closePanel('edit-item-panel');
+      openMyItems();
+      loadItems();
+    } else {
+      showToast('שגיאה — נסה שוב');
+    }
+  } catch (e) {
+    showToast('שגיאה בשמירה — בדוק את החיבור לאינטרנט');
+  } finally {
+    document.getElementById('upload-overlay').classList.remove('show');
+    btn.textContent = 'שמור שינויים';
+    btn.disabled = false;
+  }
 }
 
 // ── Settings ───────────────────────────────────────────
@@ -1156,8 +1299,16 @@ function showToast(msg) {
 // ── App init ───────────────────────────────────────────
 // ── Interest notifications (new requests on my items) ──
 async function requestNotificationPermission() {
-  if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
-    try { await window.Capacitor.Plugins.LocalNotifications.requestPermissions(); } catch(e) {}
+  if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+    let attempts = 0;
+    while (attempts < 20) {
+      if (window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) break;
+      await new Promise(r => setTimeout(r, 200));
+      attempts++;
+    }
+    if (window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
+      try { await window.Capacitor.Plugins.LocalNotifications.requestPermissions(); } catch(e) {}
+    }
   }
 }
 

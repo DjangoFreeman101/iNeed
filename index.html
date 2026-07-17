@@ -75,6 +75,11 @@
       border-radius:50%; border:2px solid white;
     }
     .unread-dot.show { display:block; }
+
+    .item-unread-dot {
+      display:inline-block; width:9px; height:9px; background:var(--accent);
+      border-radius:50%; margin:0 6px; vertical-align:middle;
+    }
     
     /* Give/Take toggle */
     .type-toggle { display:flex; gap:10px; margin-bottom:16px; }
@@ -199,6 +204,21 @@
       pointer-events:none; white-space:nowrap;
     }
     #toast.show { opacity:1; }
+
+    #interest-banner {
+      position:fixed; top:50px; left:0; right:0;
+      background:var(--green); color:white;
+      padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px;
+      z-index:9998; box-shadow:0 4px 14px rgba(0,0,0,0.3);
+      transform:translateY(-130%); transition:transform 0.35s ease;
+      font-size:15px; font-weight:700; cursor:pointer; font-family:'Heebo',sans-serif;
+    }
+    #interest-banner.show { transform:translateY(0); }
+    #interest-banner button {
+      background:rgba(255,255,255,0.25); color:white; border:none;
+      border-radius:6px; width:26px; height:26px; font-size:14px;
+      cursor:pointer; flex-shrink:0;
+    }
 
     /* ── Loading ── */
     #loading {
@@ -359,6 +379,11 @@
 
 <div id="toast"></div>
 
+<div id="interest-banner" onclick="dismissInterestBanner(true)">
+  <span id="interest-banner-text"></span>
+  <button onclick="event.stopPropagation(); dismissInterestBanner(false)">✕</button>
+</div>
+
 <div id="upload-overlay">
   <div id="upload-spinner"></div>
   <div id="upload-overlay-text">מעלה...</div>
@@ -477,6 +502,51 @@
     <span class="panel-title">פרטי הפריט</span>
   </div>
   <div class="panel-body" id="item-info-body"></div>
+</div>
+
+<!-- Edit item panel -->
+<div id="edit-item-panel" class="panel">
+  <div class="panel-header">
+    <button class="panel-back" onclick="closePanel('edit-item-panel')">←</button>
+    <span class="panel-title">ערוך פריט</span>
+  </div>
+  <div class="panel-body">
+    <div class="form-group">
+      <label class="form-label">כותרת *</label>
+      <input type="text" class="form-input" id="edit-title" maxlength="80"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">קטגוריה *</label>
+      <select class="form-select" id="edit-category">
+        <option value="">בחר קטגוריה</option>
+        <option>ריהוט</option>
+        <option>אלקטרוניקה</option>
+        <option>ביגוד והנעלה</option>
+        <option>ספרים ולימוד</option>
+        <option>מטבח וכלי בית</option>
+        <option>צעצועים וילדים</option>
+        <option>ספורט ופנאי</option>
+        <option>גינה וכלי עבודה</option>
+        <option>אחר</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">תיאור</label>
+      <textarea class="form-textarea" id="edit-desc"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">תמונה</label>
+      <div id="edit-photo-upload-area" onclick="document.getElementById('edit-photo-input').click()" style="border:2px dashed #ddd;border-radius:12px;padding:24px;text-align:center;cursor:pointer;color:var(--gray);font-size:14px;">
+        לחץ להוספת תמונה
+      </div>
+      <input type="file" id="edit-photo-input" accept="image/*" style="display:none" onchange="previewEditPhoto(this)"/>
+      <div id="edit-photo-preview-container" style="display:none; position:relative; margin-top:10px;">
+        <img id="edit-photo-preview" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover;display:block;"/>
+        <button type="button" onclick="removeEditPhoto()" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.65);color:white;border:none;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:Heebo,sans-serif;">הסר תמונה</button>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="submitEditItem()">שמור שינויים</button>
+  </div>
 </div>
 
 <!-- Settings panel -->
@@ -620,6 +690,14 @@ async function loadItems() {
   });
 }
 
+// Wording helpers — a 'give' post is something offered (others want it),
+// a 'take' post is something wanted (others can offer it).
+function isTakePost(item) { return item && item.post_type === 'take'; }
+function interestActionLabel(item) { return isTakePost(item) ? 'יש לי את זה!' : 'אני רוצה את זה!'; }
+function interestCancelLabel(item) { return isTakePost(item) ? 'מציע — לחץ לביטול' : 'מעוניין — לחץ לביטול'; }
+function interestCountLabel(item) { return isTakePost(item) ? 'מציעים' : 'מתעניינים'; }
+function requestersPanelLabel(item) { return isTakePost(item) ? 'מי מציע' : 'מי רוצה'; }
+
 function buildItemPopup(item) {
   const myRequests = JSON.parse(localStorage.getItem('my_requests') || '{}');
   const requested = myRequests[item.id];
@@ -628,15 +706,15 @@ function buildItemPopup(item) {
     <div class="item-popup">
       ${item.image_url ? `<img src="${item.image_url}" class="item-popup-img"/>` : ''}
       <div class="item-popup-title">${item.title}</div>
-      <div class="item-popup-cat">${item.category}</div>
+      <div class="item-popup-cat">${item.category} · ${isTakePost(item) ? 'מחפש' : 'מוסר'}</div>
       ${item.description ? `<div class="item-popup-desc">${item.description}</div>` : ''}
       <div class="item-popup-by">מאת: ${item.nickname}</div>
-      <div class="item-popup-interest">${item.request_count} מתעניינים</div>
+      <div class="item-popup-interest">${item.request_count} ${interestCountLabel(item)}</div>
       <button class="item-popup-info" onclick="showItemInfo(${item.id})">ℹ️ פרטי הפריט</button>
       ${!isMyItem ? `
         <button class="item-popup-btn ${requested ? 'requested' : ''}"
           onclick="${requested ? `cancelInterest(${item.id})` : `expressInterest(${item.id})`}">
-          ${requested ? 'מעוניין — לחץ לביטול' : 'אני רוצה את זה!'}
+          ${requested ? interestCancelLabel(item) : interestActionLabel(item)}
         </button>
         <button class="item-popup-report" onclick="reportImage(${item.id})"> דווח על תמונה</button>
       ` : `<div style="font-size:12px;color:var(--gray);text-align:center;padding:8px;">זה הפריט שלך</div>`}
@@ -660,7 +738,7 @@ function showItemInfo(itemId) {
     <div style="font-size:13px;color:var(--gray);margin-bottom:12px;">${item.category} · ${item.post_type === 'give' ? 'למסור' : 'לקחת'}</div>
     ${item.description ? `<div style="font-size:14px;color:#444;line-height:1.6;margin-bottom:16px;">${item.description}</div>` : ''}
     <div style="font-size:13px;color:var(--gray);">מאת: ${item.nickname}</div>
-    <div style="font-size:13px;color:var(--gray);margin-top:4px;">${item.request_count} מתעניינים</div>
+    <div style="font-size:13px;color:var(--gray);margin-top:4px;">${item.request_count} ${interestCountLabel(item)}</div>
   `;
   map.closePopup();
   openPanel('item-info-panel');
@@ -678,7 +756,8 @@ async function expressInterest(itemId) {
     const myRequests = JSON.parse(localStorage.getItem('my_requests') || '{}');
     myRequests[itemId] = true;
     localStorage.setItem('my_requests', JSON.stringify(myRequests));
-    showToast('הבעת עניין! בעל הפריט יעודכן');
+    const item = itemsData.find(i => i.id === itemId);
+    showToast(isTakePost(item) ? 'עדכנו את המבקש שיש לך את הפריט!' : 'הבעת עניין! בעל הפריט יעודכן');
     map.closePopup();
     loadItems();
   }
@@ -800,24 +879,33 @@ async function openMyItems() {
   const res = await fetch(`${API_BASE}/my-items/${deviceId}`);
   const items = await res.json();
   myItemsData = items;
+  renderMyItemsList(items);
+}
 
+function renderMyItemsList(items) {
+  const body = document.getElementById('my-items-body');
   if (items.length === 0) {
     body.innerHTML = '<p style="color:var(--gray);text-align:center;margin-top:40px;">אין לך פריטים עדיין.<br>לחץ על "+ פרסם פריט" להתחלה!</p>';
     return;
   }
 
+  const unreadItemIds = getUnreadItemIds();
   body.innerHTML = items.map(item => `
     <div class="item-card">
       ${item.image_url ? `<img src="${item.image_url}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;"/>` : ''}
-      <div class="item-card-title">${item.title}</div>
-      <div class="item-card-meta">${item.category} · ${item.request_count} מתעניינים · ${item.status === 'available' ? 'זמין' : 'נלקח'}</div>
+      <div class="item-card-title">${item.title}${unreadItemIds.has(item.id) ? '<span class="item-unread-dot"></span>' : ''}</div>
+      <div class="item-card-meta">${item.category} · ${isTakePost(item) ? 'מחפש' : 'מוסר'} · ${item.request_count} ${interestCountLabel(item)} · ${item.status === 'available' ? 'זמין' : 'נלקח'}</div>
       <div class="item-card-actions">
         <button class="item-card-btn" style="background:#f0f0f0;color:var(--dark);"
-          onclick="viewRequesters(${item.id})">מי רוצה?</button>
+          onclick="viewRequesters(${item.id})">${requestersPanelLabel(item)}?</button>
         <button class="item-card-btn" style="background:${item.status==='available'?'var(--green)':'var(--gray)'};color:white;"
           onclick="toggleItemStatus(${item.id}, '${item.status}')">
           ${item.status === 'available' ? 'סמן כנלקח' : 'החזר לזמין'}
         </button>
+      </div>
+      <div class="item-card-actions" style="margin-top:8px;">
+        <button class="item-card-btn" style="background:#f0f0f0;color:var(--dark);"
+          onclick="openEditItem(${item.id})">ערוך</button>
         <button class="item-card-btn" style="background:var(--accent);color:white;"
           onclick="deleteItem(${item.id})">מחק</button>
       </div>
@@ -826,10 +914,13 @@ async function openMyItems() {
 }
 
 async function viewRequesters(itemId) {
+  markItemRead(itemId);
+  renderMyItemsList(myItemsData);
+
   const item = myItemsData.find(i => i.id === itemId);
   const itemTitle = item ? item.title : '';
   openPanel('requesters-panel');
-  document.getElementById('requesters-title').textContent = `מי רוצה: ${itemTitle}`;
+  document.getElementById('requesters-title').textContent = `${requestersPanelLabel(item)}: ${itemTitle}`;
   const body = document.getElementById('requesters-body');
   body.innerHTML = '<p style="color:var(--gray);text-align:center;">טוען...</p>';
 
@@ -837,7 +928,7 @@ async function viewRequesters(itemId) {
   const requesters = await res.json();
 
   if (requesters.length === 0) {
-    body.innerHTML = '<p style="color:var(--gray);text-align:center;margin-top:40px;">אין מתעניינים עדיין.</p>';
+    body.innerHTML = `<p style="color:var(--gray);text-align:center;margin-top:40px;">אין ${interestCountLabel(item)} עדיין.</p>`;
     return;
   }
 
@@ -869,6 +960,100 @@ async function deleteItem(itemId) {
   showToast('הפריט נמחק');
   openMyItems();
   loadItems();
+}
+
+// ── Edit item ────────────────────────────────────────────
+let editingItemId = null;
+let editRemoveImageFlag = false;
+
+function openEditItem(itemId) {
+  const item = myItemsData.find(i => i.id === itemId);
+  if (!item) return;
+  editingItemId = itemId;
+  editRemoveImageFlag = false;
+
+  document.getElementById('edit-title').value = item.title || '';
+  document.getElementById('edit-category').value = item.category || '';
+  document.getElementById('edit-desc').value = item.description || '';
+  document.getElementById('edit-photo-input').value = '';
+
+  const preview = document.getElementById('edit-photo-preview');
+  const previewContainer = document.getElementById('edit-photo-preview-container');
+  const uploadArea = document.getElementById('edit-photo-upload-area');
+  if (item.image_url) {
+    preview.src = item.image_url;
+    previewContainer.style.display = 'block';
+    uploadArea.style.display = 'none';
+  } else {
+    preview.src = '';
+    previewContainer.style.display = 'none';
+    uploadArea.style.display = 'block';
+  }
+
+  openPanel('edit-item-panel');
+}
+
+function previewEditPhoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  editRemoveImageFlag = false;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('edit-photo-preview').src = e.target.result;
+    document.getElementById('edit-photo-preview-container').style.display = 'block';
+    document.getElementById('edit-photo-upload-area').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeEditPhoto() {
+  editRemoveImageFlag = true;
+  document.getElementById('edit-photo-input').value = '';
+  document.getElementById('edit-photo-preview').src = '';
+  document.getElementById('edit-photo-preview-container').style.display = 'none';
+  document.getElementById('edit-photo-upload-area').style.display = 'block';
+}
+
+async function submitEditItem() {
+  if (editingItemId === null) return;
+  const title = document.getElementById('edit-title').value.trim();
+  const category = document.getElementById('edit-category').value;
+  const desc = document.getElementById('edit-desc').value.trim();
+  const photoInput = document.getElementById('edit-photo-input');
+
+  if (!title || !category) { showToast('נא למלא כותרת וקטגוריה'); return; }
+
+  const form = new FormData();
+  form.append('device_id', deviceId);
+  form.append('title', title);
+  form.append('description', desc);
+  form.append('category', category);
+  form.append('remove_image', editRemoveImageFlag ? 'true' : 'false');
+  if (photoInput.files[0]) form.append('image', photoInput.files[0]);
+
+  const btn = document.querySelector('#edit-item-panel .btn-primary');
+  btn.textContent = 'שומר...';
+  btn.disabled = true;
+  document.getElementById('upload-overlay').classList.add('show');
+
+  try {
+    const res = await fetch(`${API_BASE}/item/${editingItemId}`, { method: 'PATCH', body: form });
+    const data = await res.json();
+    if (data.ok) {
+      showToast('הפריט עודכן בהצלחה!');
+      closePanel('edit-item-panel');
+      openMyItems();
+      loadItems();
+    } else {
+      showToast('שגיאה — נסה שוב');
+    }
+  } catch (e) {
+    showToast('שגיאה בשמירה — בדוק את החיבור לאינטרנט');
+  } finally {
+    document.getElementById('upload-overlay').classList.remove('show');
+    btn.textContent = 'שמור שינויים';
+    btn.disabled = false;
+  }
 }
 
 // ── Settings ───────────────────────────────────────────
@@ -1176,14 +1361,51 @@ function setUnreadDot(show) {
   localStorage.setItem('ineed_has_unread_interest', show ? '1' : '0');
 }
 
+function getUnreadItemIds() {
+  return new Set(JSON.parse(localStorage.getItem('ineed_unread_item_ids') || '[]'));
+}
+function saveUnreadItemIds(set) {
+  localStorage.setItem('ineed_unread_item_ids', JSON.stringify(Array.from(set)));
+}
+function markItemRead(itemId) {
+  const unread = getUnreadItemIds();
+  if (unread.delete(itemId)) saveUnreadItemIds(unread);
+}
+
+let interestBannerTimeout = null;
+
+function showInterestBanner(message) {
+  document.getElementById('interest-banner-text').textContent = message;
+  document.getElementById('interest-banner').classList.add('show');
+  clearTimeout(interestBannerTimeout);
+  interestBannerTimeout = setTimeout(() => dismissInterestBanner(false), 6000);
+}
+
+function dismissInterestBanner(openItems) {
+  document.getElementById('interest-banner').classList.remove('show');
+  clearTimeout(interestBannerTimeout);
+  if (openItems) openMyItems();
+}
+
 async function checkForNewInterest() {
   try {
     const res = await fetch(`${API_BASE}/my-item-requests/${deviceId}`);
     if (!res.ok) return;
     const rows = await res.json();
 
-    const notified = JSON.parse(localStorage.getItem('ineed_notified_request_ids') || '[]');
+    const storedRaw = localStorage.getItem('ineed_notified_request_ids');
+    const isFirstRun = storedRaw === null;
+    const notified = JSON.parse(storedRaw || '[]');
     const notifiedSet = new Set(notified);
+
+    if (isFirstRun) {
+      // First time this device checks — establish a baseline so pre-existing
+      // requests don't all fire as "new" at once.
+      rows.forEach(r => notifiedSet.add(r.id));
+      localStorage.setItem('ineed_notified_request_ids', JSON.stringify(Array.from(notifiedSet)));
+      return;
+    }
+
     const newRows = rows.filter(r => !notifiedSet.has(r.id));
     if (newRows.length === 0) return;
 
@@ -1191,19 +1413,31 @@ async function checkForNewInterest() {
     localStorage.setItem('ineed_notified_request_ids', JSON.stringify(Array.from(notifiedSet)));
     setUnreadDot(true);
 
+    const unreadItems = getUnreadItemIds();
+    newRows.forEach(r => unreadItems.add(r.item_id));
+    saveUnreadItemIds(unreadItems);
+
+    const single = newRows[0];
+    const singleIsTake = isTakePost(single);
     const message = newRows.length === 1
-      ? `${newRows[0].requester_name} מעוניין ב"${newRows[0].item_title}"`
+      ? (singleIsTake
+          ? `ל${single.requester_name} יש "${single.item_title}" בשבילך`
+          : `${single.requester_name} מעוניין ב"${single.item_title}"`)
       : `יש ${newRows.length} עדכונים חדשים על הפריטים שלך`;
-    showToast(message);
+    showInterestBanner(message);
+
+    const notifTitle = newRows.length === 1 && singleIsTake
+      ? 'מישהו מצא את מה שחיפשת!'
+      : 'מישהו מעוניין בפריט שלך!';
 
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
       try {
         await window.Capacitor.Plugins.LocalNotifications.schedule({
           notifications: [{
             id: Math.floor(Date.now() % 2147483647),
-            title: 'מישהו מעוניין בפריט שלך!',
+            title: notifTitle,
             body: message,
-            schedule: { at: new Date(Date.now() + 300) }
+            schedule: { at: new Date(Date.now() + 1000) }
           }]
         });
       } catch(e) {}
