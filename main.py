@@ -96,6 +96,19 @@ def init_db():
         ALTER TABLE requests ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending'
     """)
 
+    # Taker swiped "לקחתי" on their awaiting-list request
+    cur.execute("""
+        ALTER TABLE requests ADD COLUMN IF NOT EXISTS taken BOOLEAN NOT NULL DEFAULT FALSE
+    """)
+    cur.execute("""
+        ALTER TABLE requests ADD COLUMN IF NOT EXISTS taken_at DOUBLE PRECISION
+    """)
+
+    # Timestamp for when an item's owner swiped it as exchanged
+    cur.execute("""
+        ALTER TABLE items ADD COLUMN IF NOT EXISTS exchanged_at DOUBLE PRECISION
+    """)
+
     conn.commit()
     cur.close()
     conn.close()
@@ -266,10 +279,12 @@ def get_my_items(device_id: str):
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
-        SELECT i.*, COUNT(r.id) as request_count
+        SELECT i.*, COUNT(r.id) as request_count,
+               COUNT(r.id) FILTER (WHERE r.status = 'approved') as approved_count
         FROM items i
         LEFT JOIN requests r ON r.item_id = i.id
         WHERE i.device_id = %s
+          AND i.status != 'exchanged'
         GROUP BY i.id
         ORDER BY i.created_at DESC
     """, (device_id,))
@@ -496,6 +511,8 @@ def get_my_outgoing_requests(device_id: str):
         JOIN items i ON i.id = r.item_id
         JOIN users owner ON owner.device_id = i.device_id
         WHERE r.device_id = %s
+          AND r.taken = FALSE
+          AND i.status != 'exchanged'
         ORDER BY r.created_at DESC
     """, (device_id,))
     rows = [dict(r) for r in cur.fetchall()]
@@ -506,6 +523,118 @@ def get_my_outgoing_requests(device_id: str):
     cur.close()
     conn.close()
     return rows
+
+@app.post("/request/{request_id}/take")
+def mark_request_taken(request_id: int, device_id: str):
+    """Taker swipes 'לקחתי' on their awaiting-list request. Only allowed if the
+    request belongs to this user AND has been approved by the giver."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT device_id, status, taken FROM requests WHERE id = %s", (request_id,))
+    row = cur.fetchone()
+    if not row:
+        cur.close(); conn.close()
+        raise HTTPException(status_code=404, detail="Request not found")
+    if row["device_id"] != device_id:
+        cur.close(); conn.close()
+        raise HTTPException(status_code=403, detail="Not your request")
+    if row["status"] != "approved":
+        cur.close(); conn.close()
+        raise HTTPException(status_code=400, detail="Request not approved yet")
+    cur.execute("UPDATE requests SET taken = TRUE, taken_at = %s WHERE id = %s",
+                (time.time(), request_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"ok": True}
+
+@app.post("/item/{item_id}/exchange")
+def mark_item_exchanged(item_id: int, device_id: str):
+    """Owner swipes 'מסרתי'/'לקחתי' on their own item in My Items. Only allowed
+    if the item belongs to this user AND at least one request on it is approved."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT device_id, status FROM items WHERE id = %s", (item_id,))
+    row = cur.fetchone()
+    if not row:
+        cur.close(); conn.close()
+        raise HTTPException(status_code=404, detail="Item not found")
+    if row["device_id"] != device_id:
+        cur.close(); conn.close()
+        raise HTTPException(status_code=403, detail="Not your item")
+    # Must have approved at least one requester
+    cur.execute("SELECT COUNT(*) AS n FROM requests WHERE item_id = %s AND status = 'approved'",
+                (item_id,))
+    if cur.fetchone()["n"] == 0:
+        cur.close(); conn.close()
+        raise HTTPException(status_code=400, detail="No approved request on this item")
+    cur.execute("UPDATE items SET status = 'exchanged', exchanged_at = %s WHERE id = %s",
+                (time.time(), item_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"ok": True}
+
+@app.get("/pending-exchanges/{device_id}")
+def get_pending_exchanges(device_id: str):
+    """Items owned by this user that have an approved request but haven't been
+    marked exchanged yet — used to remind them to confirm they gave/took it."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT DISTINCT i.id AS item_id, i.title, i.post_type
+        FROM items i
+        JOIN requests r ON r.item_id = i.id
+        WHERE i.device_id = %s
+          AND i.status != 'exchanged'
+          AND r.status = 'approved'
+    """, (device_id,))
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return rows
+
+@app.get("/history/{device_id}")
+def get_history(device_id: str):
+    """A user's completed exchanges: items they own that are exchanged, plus
+    requests they made that they marked taken. Each labeled מסרתי / לקחתי."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    # Items I own that are exchanged. Label by post_type: give -> מסרתי, take -> לקחתי.
+    cur.execute("""
+        SELECT i.id AS item_id, i.title, i.description, i.category, i.image_url,
+               i.post_type, i.exchanged_at AS done_at
+        FROM items i
+        WHERE i.device_id = %s AND i.status = 'exchanged'
+    """, (device_id,))
+    owned = []
+    for r in cur.fetchall():
+        d = dict(r)
+        d["role"] = "gave" if d["post_type"] == "give" else "took"
+        d["source"] = "item"
+        owned.append(d)
+
+    # Requests I made that I marked taken -> always לקחתי.
+    cur.execute("""
+        SELECT r.id AS request_id, r.taken_at AS done_at,
+               i.id AS item_id, i.title, i.description, i.category, i.image_url, i.post_type
+        FROM requests r
+        JOIN items i ON i.id = r.item_id
+        WHERE r.device_id = %s AND r.taken = TRUE
+    """, (device_id,))
+    taken = []
+    for r in cur.fetchall():
+        d = dict(r)
+        d["role"] = "took"
+        d["source"] = "request"
+        taken.append(d)
+
+    cur.close()
+    conn.close()
+    combined = owned + taken
+    combined.sort(key=lambda x: x.get("done_at") or 0, reverse=True)
+    return combined
 
 @app.get("/my-requests/{device_id}")
 def get_my_requests(device_id: str):

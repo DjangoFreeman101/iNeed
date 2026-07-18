@@ -77,6 +77,26 @@
     }
     .unread-dot.show { display:block; }
 
+    /* ── Swipe to action ── */
+    .swipe-wrap { position:relative; overflow:hidden; border-radius:12px; margin-bottom:10px; }
+    .swipe-reveal {
+      position:absolute; inset:0; display:flex; align-items:center;
+      justify-content:flex-start; padding-right:24px;
+      background:var(--green); color:white; font-size:18px; font-weight:800;
+      border-radius:12px;
+    }
+    .swipe-front { position:relative; touch-action:pan-y; will-change:transform; }
+    .swipe-front .item-card, .swipe-front .request-card { margin-bottom:0; }
+
+    /* ── History ── */
+    .history-card {
+      background:white; border-radius:12px; padding:14px; margin-bottom:10px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.06);
+    }
+    .history-card-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+    .history-date { font-size:12px; color:var(--gray); }
+    .history-title { font-size:16px; font-weight:700; color:var(--dark); margin-top:6px; }
+
     /* ── My requests list ── */
     .request-card {
       background:white; border-radius:12px; margin-bottom:10px;
@@ -397,6 +417,7 @@
 
     /* ── Radius slider ── */
     input[type=range] { width:100%; accent-color:var(--dark); }
+    #setup-screen input[type=range] { accent-color:white; }
     #radius-display { font-size:22px; font-weight:700; color:var(--dark); text-align:center; margin:8px 0; }
     #setup-screen #radius-display { color:white; }
     /* ── Upload overlay ── */
@@ -500,6 +521,7 @@
 <div id="side-menu">
   <div id="menu-header">iNeed</div>
   <div class="menu-item" onclick="openSettings()">הגדרות</div>
+  <div class="menu-item" onclick="openHistory()">היסטוריה</div>
   <div class="menu-item menu-item-danger" onclick="deleteAccount()">מחק חשבון</div>
 </div>
 
@@ -600,6 +622,17 @@
     <span class="panel-title">הבקשות שלי</span>
   </div>
   <div class="panel-body" id="my-requests-body">
+    <p style="color:var(--gray); text-align:center;">טוען...</p>
+  </div>
+</div>
+
+<!-- History panel -->
+<div id="history-panel" class="panel">
+  <div class="panel-header">
+    <button class="panel-back" onclick="closePanel('history-panel')">←</button>
+    <span class="panel-title">היסטוריה</span>
+  </div>
+  <div class="panel-body" id="history-body">
     <p style="color:var(--gray); text-align:center;">טוען...</p>
   </div>
 </div>
@@ -705,6 +738,57 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
 const API_BASE = 'https://ineed-0otk.onrender.com';
+
+// ── Swipe-to-action helper ─────────────────────────────
+// Attaches to a wrapper that contains a .swipe-reveal (behind) and a
+// .swipe-front (the moving card). Swiping the front to the right past a
+// threshold fires onCommit(). Distinguishes horizontal swipe from vertical
+// scroll so the list still scrolls normally.
+function attachSwipe(wrapper, onCommit) {
+  const front = wrapper.querySelector('.swipe-front');
+  if (!front) return;
+  let startX = 0, startY = 0, dx = 0, dragging = false, decided = false, horizontal = false;
+  const THRESHOLD = 90; // px to the right to trigger
+
+  front.addEventListener('touchstart', e => {
+    const t = e.touches[0];
+    startX = t.clientX; startY = t.clientY;
+    dx = 0; dragging = true; decided = false; horizontal = false;
+    front.style.transition = 'none';
+  }, { passive: true });
+
+  front.addEventListener('touchmove', e => {
+    if (!dragging) return;
+    const t = e.touches[0];
+    const mx = t.clientX - startX;
+    const my = t.clientY - startY;
+    if (!decided) {
+      // Decide direction on first meaningful movement.
+      if (Math.abs(mx) > 8 || Math.abs(my) > 8) {
+        decided = true;
+        horizontal = Math.abs(mx) > Math.abs(my);
+      }
+    }
+    if (horizontal) {
+      dx = Math.max(0, mx); // only allow rightward drag
+      front.style.transform = `translateX(${dx}px)`;
+      if (e.cancelable) e.preventDefault(); // stop the list from scrolling mid-swipe
+    }
+  }, { passive: false });
+
+  front.addEventListener('touchend', () => {
+    if (!dragging) return;
+    dragging = false;
+    front.style.transition = 'transform 0.25s ease';
+    if (horizontal && dx >= THRESHOLD) {
+      front.style.transform = 'translateX(100%)';
+      setTimeout(() => onCommit(), 200);
+    } else {
+      front.style.transform = 'translateX(0)';
+    }
+  });
+}
+
 
 // ── Device ID ──────────────────────────────────────────
 let deviceId = localStorage.getItem('ineed_device_id');
@@ -855,6 +939,14 @@ async function loadItems() {
 // Wording helpers — a 'give' post is something offered (others want it),
 // a 'take' post is something wanted (others can offer it).
 function isTakePost(item) { return item && item.post_type === 'take'; }
+
+// Build a WhatsApp chat link from an Israeli phone number.
+// WhatsApp needs country code, no leading zero, no '+': 05XXXXXXXX -> 9725XXXXXXXX
+function waLink(phone) {
+  const digits = (phone || '').replace(/\D/g, '');       // keep digits only
+  const intl = digits.replace(/^0/, '972');              // 05... -> 9725...
+  return `https://wa.me/${intl}`;
+}
 function interestActionLabel(item) { return isTakePost(item) ? 'יש לי את זה!' : 'אני רוצה את זה!'; }
 function interestCancelLabel(item) { return isTakePost(item) ? 'מציע — לחץ לביטול' : 'מעוניין — לחץ לביטול'; }
 function interestCountLabel(item) { return isTakePost(item) ? 'מציעים' : 'מתעניינים'; }
@@ -876,7 +968,7 @@ function buildItemPopup(item) {
       ${item.description ? `<div class="item-popup-desc">${item.description}</div>` : ''}
       <div class="item-popup-by">מאת: ${item.nickname}</div>
       <div class="item-popup-interest">${item.request_count} ${interestCountLabel(item)}</div>
-      ${approvedPhone ? `<div class="item-popup-approved">אושר! טלפון: <a href="tel:${approvedPhone}" style="direction:ltr;">${approvedPhone}</a></div>` : ''}
+      ${approvedPhone ? `<div class="item-popup-approved">אושר! <a href="${waLink(approvedPhone)}" target="_blank" style="direction:ltr;">💬 ${approvedPhone}</a></div>` : ''}
       ${!isMyItem ? `
         <button class="item-popup-btn ${requested ? 'requested' : ''}"
           onclick="${requested ? `cancelInterest(${item.id})` : `expressInterest(${item.id})`}">
@@ -1036,7 +1128,7 @@ let myItemsData = [];
 // ── My requests (items I asked for on others' pins) ────
 let myRequestsData = [];
 
-async function openMyRequests() {
+async function openMyRequests(expandItemId) {
   document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
   openPanel('my-requests-panel');
   const body = document.getElementById('my-requests-body');
@@ -1047,6 +1139,16 @@ async function openMyRequests() {
     const rows = await res.json();
     myRequestsData = rows;
     renderMyRequestsList(rows);
+    // If asked, auto-expand the row for a specific item (e.g. tapped an approval banner).
+    if (expandItemId != null) {
+      const match = rows.find(r => r.item_id === expandItemId);
+      if (match) {
+        const el = document.getElementById(`request-details-${match.id}`);
+        if (el) el.style.display = 'block';
+        const card = el ? el.closest('.request-card') : null;
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
   } catch (e) {
     body.innerHTML = '<p style="color:var(--gray);text-align:center;">שגיאה בטעינה. נסה שוב.</p>';
   }
@@ -1061,7 +1163,7 @@ function renderMyRequestsList(rows) {
 
   body.innerHTML = rows.map(r => {
     const isApproved = r.status === 'approved';
-    return `
+    const cardInner = `
     <div class="request-card">
       <div class="request-card-head" onclick="toggleRequestDetails(${r.id})">
         <span class="request-card-title">${r.item_title}</span>
@@ -1073,12 +1175,72 @@ function renderMyRequestsList(rows) {
         ${r.item_description ? `<div class="request-detail-desc">${r.item_description}</div>` : ''}
         <div class="request-detail-line">מאת: ${r.giver_name}</div>
         ${isApproved && r.giver_phone
-          ? `<div class="request-phone">טלפון: <a href="tel:${r.giver_phone}" style="direction:ltr;">${r.giver_phone}</a></div>`
+          ? `<div class="request-phone">💬 <a href="${waLink(r.giver_phone)}" target="_blank" style="direction:ltr;">${r.giver_phone}</a></div>`
           : '<div class="request-detail-line" style="color:var(--gray);">מספר הטלפון יופיע לאחר אישור המוסר</div>'}
         <button class="request-cancel-btn" onclick="cancelRequestFromList(${r.item_id})">בטל בקשה</button>
       </div>
     </div>`;
+    if (!isApproved) return cardInner; // can only swipe לקחתי after approval
+    return `
+      <div class="swipe-wrap" data-request-id="${r.id}">
+        <div class="swipe-reveal">לקחתי!</div>
+        <div class="swipe-front">${cardInner}</div>
+      </div>`;
   }).join('');
+
+  // Wire up swipe handlers for approved rows.
+  body.querySelectorAll('.swipe-wrap[data-request-id]').forEach(wrap => {
+    const requestId = Number(wrap.getAttribute('data-request-id'));
+    attachSwipe(wrap, () => takeRequest(requestId));
+  });
+}
+
+async function takeRequest(requestId) {
+  try {
+    const res = await fetch(`${API_BASE}/request/${requestId}/take?device_id=${encodeURIComponent(deviceId)}`, { method: 'POST' });
+    if (!res.ok) { showToast('שגיאה — נסה שוב'); openMyRequests(); return; }
+    showToast('נוסף להיסטוריה!');
+    openMyRequests();
+  } catch (e) {
+    showToast('שגיאה בחיבור');
+    openMyRequests();
+  }
+}
+
+// ── History ────────────────────────────────────────────
+async function openHistory() {
+  document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
+  closeMenu();
+  openPanel('history-panel');
+  const body = document.getElementById('history-body');
+  body.innerHTML = '<p style="color:var(--gray);text-align:center;">טוען...</p>';
+
+  try {
+    const res = await fetch(`${API_BASE}/history/${deviceId}`);
+    const rows = await res.json();
+    if (!rows || rows.length === 0) {
+      body.innerHTML = '<p style="color:var(--gray);text-align:center;margin-top:40px;">אין עדיין היסטוריה.</p>';
+      return;
+    }
+    body.innerHTML = rows.map(r => {
+      const isGave = r.role === 'gave';
+      const label = isGave ? 'מסרתי' : 'לקחתי';
+      const when = r.done_at ? new Date(r.done_at * 1000).toLocaleString('he-IL') : '';
+      return `
+        <div class="history-card">
+          <div class="history-card-top">
+            <span class="item-badge ${isGave ? 'give' : 'take'}">${label}</span>
+            <span class="history-date">${when}</span>
+          </div>
+          ${r.image_url ? `<img src="${r.image_url}" class="request-detail-img"/>` : ''}
+          <div class="history-title">${r.title}</div>
+          <div class="request-detail-line">${r.category || ''}</div>
+          ${r.description ? `<div class="request-detail-desc">${r.description}</div>` : ''}
+        </div>`;
+    }).join('');
+  } catch (e) {
+    body.innerHTML = '<p style="color:var(--gray);text-align:center;">שגיאה בטעינה. נסה שוב.</p>';
+  }
 }
 
 function toggleRequestDetails(requestId) {
@@ -1115,25 +1277,53 @@ function renderMyItemsList(items) {
   }
 
   const unreadItemIds = getUnreadItemIds();
-  body.innerHTML = items.map(item => `
-    <div class="item-card" onclick="openEditItem(${item.id})">
-      <div class="item-card-top">
-        <span class="item-badge ${isTakePost(item) ? 'take' : 'give'}">${isTakePost(item) ? 'אני צריך' : 'אני מוסר'}</span>
-        <button class="item-delete-x" title="מחק" onclick="event.stopPropagation(); deleteItem(${item.id})">✕</button>
-      </div>
-      ${item.image_url ? `<img src="${item.image_url}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;"/>` : ''}
-      <div class="item-card-title">${item.title}${unreadItemIds.has(item.id) ? '<span class="item-unread-dot"></span>' : ''}</div>
-      <div class="item-card-meta">${item.category} · ${item.request_count} ${interestCountLabel(item)} · ${item.status === 'available' ? 'זמין' : 'נלקח'}</div>
-      <div class="item-card-actions">
-        <button class="item-card-btn" style="background:#f0f0f0;color:var(--dark);"
-          onclick="event.stopPropagation(); viewRequesters(${item.id})">${requestersPanelLabel(item)}?</button>
-        <button class="item-card-btn" style="background:${item.status==='available'?'var(--green)':'var(--gray)'};color:white;"
-          onclick="event.stopPropagation(); toggleItemStatus(${item.id}, '${item.status}')">
-          ${item.status === 'available' ? 'סמן כנלקח' : 'החזר לזמין'}
-        </button>
-      </div>
-    </div>
-  `).join('');
+  body.innerHTML = items.map(item => {
+    const swipeable = (item.approved_count || 0) > 0;
+    const revealLabel = isTakePost(item) ? 'לקחתי!' : 'מסרתי!';
+    const cardInner = `
+      <div class="item-card" onclick="openEditItem(${item.id})">
+        <div class="item-card-top">
+          <span class="item-badge ${isTakePost(item) ? 'take' : 'give'}">${isTakePost(item) ? 'אני צריך' : 'אני מוסר'}</span>
+          <button class="item-delete-x" title="מחק" onclick="event.stopPropagation(); deleteItem(${item.id})">✕</button>
+        </div>
+        ${item.image_url ? `<img src="${item.image_url}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;"/>` : ''}
+        <div class="item-card-title">${item.title}${unreadItemIds.has(item.id) ? '<span class="item-unread-dot"></span>' : ''}</div>
+        <div class="item-card-meta">${item.category} · ${item.request_count} ${interestCountLabel(item)} · ${item.status === 'available' ? 'זמין' : 'נלקח'}</div>
+        <div class="item-card-actions">
+          <button class="item-card-btn" style="background:#f0f0f0;color:var(--dark);"
+            onclick="event.stopPropagation(); viewRequesters(${item.id})">${requestersPanelLabel(item)}?</button>
+          <button class="item-card-btn" style="background:${item.status==='available'?'var(--green)':'var(--gray)'};color:white;"
+            onclick="event.stopPropagation(); toggleItemStatus(${item.id}, '${item.status}')">
+            ${item.status === 'available' ? 'סמן כנלקח' : 'החזר לזמין'}
+          </button>
+        </div>
+      </div>`;
+    if (!swipeable) return cardInner;
+    return `
+      <div class="swipe-wrap" data-item-id="${item.id}">
+        <div class="swipe-reveal">${revealLabel}</div>
+        <div class="swipe-front">${cardInner}</div>
+      </div>`;
+  }).join('');
+
+  // Wire up swipe handlers for eligible rows.
+  body.querySelectorAll('.swipe-wrap[data-item-id]').forEach(wrap => {
+    const itemId = Number(wrap.getAttribute('data-item-id'));
+    attachSwipe(wrap, () => exchangeItem(itemId));
+  });
+}
+
+async function exchangeItem(itemId) {
+  try {
+    const res = await fetch(`${API_BASE}/item/${itemId}/exchange?device_id=${encodeURIComponent(deviceId)}`, { method: 'POST' });
+    if (!res.ok) { showToast('שגיאה — נסה שוב'); openMyItems(); return; }
+    showToast('נוסף להיסטוריה!');
+    openMyItems();
+    loadItems();
+  } catch (e) {
+    showToast('שגיאה בחיבור');
+    openMyItems();
+  }
 }
 
 async function viewRequesters(itemId) {
@@ -1163,7 +1353,7 @@ async function viewRequesters(itemId) {
         <div class="requester-name">${r.nickname}</div>
         <div class="requester-meta">${new Date(r.created_at * 1000).toLocaleDateString('he-IL')}</div>
         ${isApproved && r.requester_phone
-          ? `<a href="tel:${r.requester_phone}" class="requester-phone" style="direction:ltr;display:inline-block;">${r.requester_phone}</a>`
+          ? `<a href="${waLink(r.requester_phone)}" target="_blank" class="requester-phone" style="direction:ltr;display:inline-block;">💬 ${r.requester_phone}</a>`
           : ''}
       </div>
       ${isApproved
@@ -1663,8 +1853,12 @@ function markItemRead(itemId) {
 
 let interestBannerTimeout = null;
 let interestBannerHideTimeout = null;
+let interestBannerTarget = 'my-items'; // which panel a tap should open
+let interestBannerItemId = null; // specific item row to expand (my-requests only)
 
-function showInterestBanner(message) {
+function showInterestBanner(message, target, itemId) {
+  interestBannerTarget = target || 'my-items';
+  interestBannerItemId = (itemId != null) ? itemId : null;
   const banner = document.getElementById('interest-banner');
   clearTimeout(interestBannerTimeout);
   clearTimeout(interestBannerHideTimeout);
@@ -1693,7 +1887,10 @@ function dismissInterestBanner(openItems) {
     banner.style.display = 'none';
   }, 400); // slightly longer than the 0.35s transition
 
-  if (openItems) openMyItems();
+  if (openItems) {
+    if (interestBannerTarget === 'my-requests') openMyRequests(interestBannerItemId);
+    else openMyItems();
+  }
 }
 
 async function checkForNewInterest() {
@@ -1733,7 +1930,7 @@ async function checkForNewInterest() {
           ? `ל${single.requester_name} יש "${single.item_title}" בשבילך`
           : `${single.requester_name} מעוניין ב"${single.item_title}"`)
       : `יש ${newRows.length} עדכונים חדשים על הפריטים שלך`;
-    showInterestBanner(message);
+    showInterestBanner(message, 'my-items');
 
     const notifTitle = newRows.length === 1 && singleIsTake
       ? 'מישהו מצא את מה שחיפשת!'
@@ -1792,7 +1989,7 @@ async function checkForApprovals() {
     const message = newlyApproved.length === 1
       ? `${single.giver_name} אישר את הבקשה שלך ל"${single.item_title}"`
       : `${newlyApproved.length} מהבקשות שלך אושרו`;
-    showInterestBanner(message);
+    showInterestBanner(message, 'my-requests', newlyApproved.length === 1 ? single.item_id : null);
 
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
       try {
@@ -1811,6 +2008,68 @@ async function checkForApprovals() {
   }
 }
 
+// ── Reminder: approved but not yet swiped as gave/took ──
+async function checkPendingExchanges() {
+  try {
+    const res = await fetch(`${API_BASE}/pending-exchanges/${deviceId}`);
+    if (!res.ok) return;
+    const rows = await res.json();
+    if (!rows || rows.length === 0) {
+      setPendingExchangeDot(false);
+      return;
+    }
+    // There are items awaiting my confirmation — light the dot.
+    setPendingExchangeDot(true);
+
+    const storedRaw = localStorage.getItem('ineed_reminded_exchange_ids');
+    const isFirstRun = storedRaw === null;
+    const remindedSet = new Set(JSON.parse(storedRaw || '[]'));
+
+    if (isFirstRun) {
+      rows.forEach(r => remindedSet.add(r.item_id));
+      localStorage.setItem('ineed_reminded_exchange_ids', JSON.stringify(Array.from(remindedSet)));
+      return; // dot is shown, but don't fire a notification retroactively
+    }
+
+    const newOnes = rows.filter(r => !remindedSet.has(r.item_id));
+    if (newOnes.length === 0) return;
+    newOnes.forEach(r => remindedSet.add(r.item_id));
+    localStorage.setItem('ineed_reminded_exchange_ids', JSON.stringify(Array.from(remindedSet)));
+
+    const single = newOnes[0];
+    const gaveOrTook = single.post_type === 'give' ? 'מסרת' : 'לקחת';
+    const message = newOnes.length === 1
+      ? `האם ${gaveOrTook} את "${single.title}"? החלק ימינה כדי לאשר`
+      : `יש ${newOnes.length} פריטים שממתינים לאישור מסירה/קבלה`;
+    showInterestBanner(message, 'my-items');
+
+    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
+      try {
+        await window.Capacitor.Plugins.LocalNotifications.schedule({
+          notifications: [{
+            id: Math.floor((Date.now() + 2) % 2147483647),
+            title: 'אישור מסירה/קבלה',
+            body: message,
+            schedule: { at: new Date(Date.now() + 1000) }
+          }]
+        });
+      } catch(e) {}
+    }
+  } catch(e) {
+    console.log('Pending-exchange check failed:', e);
+  }
+}
+
+function setPendingExchangeDot(show) {
+  const dot = document.getElementById('my-items-dot');
+  if (!dot) return;
+  // Reuse the My Items dot; either unread interest OR a pending exchange lights it.
+  if (show) {
+    dot.classList.add('show');
+  }
+  // Note: we don't force-hide here, since unread interest may also want it on.
+}
+
 function startApp() {
   // Remove loading screen immediately - don't wait for data
   const loadingEl = document.getElementById('loading');
@@ -1826,6 +2085,8 @@ function startApp() {
   setInterval(checkForNewInterest, 20000);
   checkForApprovals();
   setInterval(checkForApprovals, 20000);
+  checkPendingExchanges();
+  setInterval(checkPendingExchanges, 25000);
 }
 
 async function syncMyRequests() {
