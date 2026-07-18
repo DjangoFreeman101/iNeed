@@ -253,7 +253,7 @@
     /* ── Loading ── */
     #loading {
       position:fixed; top:0; left:0; right:0; bottom:0;
-      background:var(--dark); z-index:99998;
+      background:#000000; z-index:99998;
       display:flex; flex-direction:column;
       align-items:center; justify-content:center;
     }
@@ -354,6 +354,7 @@
     /* ── Radius slider ── */
     input[type=range] { width:100%; accent-color:var(--dark); }
     #radius-display { font-size:22px; font-weight:700; color:var(--dark); text-align:center; margin:8px 0; }
+    #setup-screen #radius-display { color:white; }
     /* ── Upload overlay ── */
     #upload-overlay {
       display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
@@ -374,7 +375,7 @@
 
 <div id="loading">
   <div id="loading-logo">iNeed</div>
-  <div id="loading-sub">תן. קח. שתף.</div>
+  <div id="loading-sub">תן וקח</div>
   <div id="loading-spinner"></div>
 </div>
 <script>
@@ -395,13 +396,19 @@
   <p>לפני שנתחיל — ספר לנו קצת עליך</p>
   <div style="width:100%; max-width:340px;">
     <div class="form-group">
-      <label class="form-label">כינוי (שם תצוגה)</label>
+      <label class="form-label">כינוי (שם תצוגה) *</label>
       <input type="text" class="form-input" id="setup-nickname" placeholder="למשל: יוגב מראשון לציון" maxlength="30"/>
     </div>
     <div class="form-group">
-      <label class="form-label">רדיוס חיפוש</label>
+      <label class="form-label">רדיוס חיפוש *</label>
       <div id="radius-display">5 ק"מ</div>
-      <input type="range" id="setup-radius" min="1" max="100" value="5"/>
+      <div class="radius-row">
+        <input type="range" id="setup-radius" min="1" max="100" value="5"/>
+        <div class="radius-arrows">
+          <button type="button" class="radius-arrow" onclick="adjustSetupRadius(1)">←</button>
+          <button type="button" class="radius-arrow" onclick="adjustSetupRadius(-1)">→</button>
+        </div>
+      </div>
     </div>
     <div class="form-group">
       <label class="form-label">אימייל (אופציונלי — לעדכונים)</label>
@@ -1184,6 +1191,15 @@ function updateSetupRadiusDisplay() {
 document.getElementById('setup-radius').addEventListener('input', updateSetupRadiusDisplay);
 document.getElementById('setup-radius').addEventListener('change', updateSetupRadiusDisplay);
 updateSetupRadiusDisplay();
+
+function adjustSetupRadius(delta) {
+  const el = document.getElementById('setup-radius');
+  const min = parseInt(el.min), max = parseInt(el.max);
+  let val = parseInt(el.value) + delta;
+  val = Math.max(min, Math.min(max, val)); // clamp within slider bounds
+  el.value = val;
+  updateSetupRadiusDisplay();
+}
 
 function updateSettingsRadiusDisplay() {
   const el = document.getElementById('settings-radius');

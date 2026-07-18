@@ -474,3 +474,40 @@ def get_my_item_requests(device_id: str):
     cur.close()
     conn.close()
     return rows
+
+
+@app.delete("/account/{device_id}")
+def delete_account(device_id: str):
+    """Fully delete a user's account and all associated data.
+    Order matters because of foreign keys:
+      requests -> items, users ; items -> users ; image_reports -> items."""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # 1. This user's own requests (interest they expressed on others' items)
+        cur.execute("DELETE FROM requests WHERE device_id = %s", (device_id,))
+        # 2. Others' requests pointing at THIS user's items
+        cur.execute("""
+            DELETE FROM requests
+            WHERE item_id IN (SELECT id FROM items WHERE device_id = %s)
+        """, (device_id,))
+        # 3. Image reports on this user's items
+        cur.execute("""
+            DELETE FROM image_reports
+            WHERE item_id IN (SELECT id FROM items WHERE device_id = %s)
+        """, (device_id,))
+        # 4. Reports this user filed on any item (no FK, but tidy up)
+        cur.execute("DELETE FROM image_reports WHERE reporter_device_id = %s", (device_id,))
+        # 5. This user's items
+        cur.execute("DELETE FROM items WHERE device_id = %s", (device_id,))
+        # 6. The user row itself
+        cur.execute("DELETE FROM users WHERE device_id = %s", (device_id,))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=500, detail=f"Failed to delete account: {e}")
+    cur.close()
+    conn.close()
+    return {"ok": True}
