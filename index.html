@@ -58,7 +58,7 @@
       line-height:1;
     }
 
-    #center-btn, #my-items-btn {
+    #center-btn, #my-items-btn, #requests-btn {
       position:fixed; right:16px;
       background:white; border:none; border-radius:50%;
       width:46px; height:46px; font-size:20px; cursor:pointer;
@@ -67,6 +67,7 @@
     }
     #center-btn { bottom:24px; }
     #my-items-btn { bottom:78px; font-size:16px; }
+    #requests-btn { bottom:132px; }
 
     .unread-dot {
       display:none;
@@ -75,6 +76,31 @@
       border-radius:50%; border:2px solid white;
     }
     .unread-dot.show { display:block; }
+
+    /* ── My requests list ── */
+    .request-card {
+      background:white; border-radius:12px; margin-bottom:10px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.06); overflow:hidden;
+    }
+    .request-card-head {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px; cursor:pointer;
+    }
+    .request-card-title { font-size:15px; font-weight:700; color:var(--dark); }
+    .request-card-status { font-size:12px; font-weight:700; padding:3px 10px; border-radius:20px; white-space:nowrap; }
+    .request-card-status.pending { background:#f0f0f0; color:var(--gray); }
+    .request-card-status.approved { background:#eafbf0; color:var(--green); }
+    .request-card-details { padding:0 14px 14px; border-top:1px solid #f2f2f2; }
+    .request-detail-img { width:100%; height:130px; object-fit:cover; border-radius:8px; margin:12px 0 8px; }
+    .request-detail-line { font-size:13px; color:#444; margin-top:6px; }
+    .request-detail-desc { font-size:14px; color:#444; line-height:1.5; margin-top:8px; }
+    .request-phone { font-size:15px; font-weight:700; color:var(--green); margin-top:10px; }
+    .request-phone a { color:var(--green); text-decoration:none; }
+    .request-cancel-btn {
+      width:100%; margin-top:14px; padding:10px; border:none; border-radius:8px;
+      background:var(--accent); color:white; font-size:14px; font-weight:700;
+      cursor:pointer; font-family:'Heebo',sans-serif;
+    }
 
     .item-unread-dot {
       display:inline-block; width:9px; height:9px; background:var(--accent);
@@ -454,6 +480,7 @@
 
 <button id="post-btn" onclick="openPostPanel()">+</button>
 <button id="my-items-btn" onclick="openMyItems()" style="cursor:pointer;"><img style="pointer-events:none;" src="data:image/png;base64,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" width="22" height="22"/><span id="my-items-dot" class="unread-dot"></span></button>
+<button id="requests-btn" onclick="openMyRequests()" style="cursor:pointer;"><img style="pointer-events:none;" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAACXBIWXMAAAsTAAALEwEAmpwYAAADZ0lEQVR4nO2azW9MURjGf9LqjFTU1EetJF1SYeFvQEvQLrqhdqSx8JFiiYbEZxMrSf8O0jQlCJNoqa+F0NbHBhU0dqqNcuXluckJMzVz59zpXOmT3GRmzjnvOc993/Pe8z53YB7/L+qBVuAi0AeMAJ+BaV32+bnarM9OIEOFIA3sAa4B34GgyGsGGAA6gNRcEFgEHAHGnUVNATeB4/LMGt3xhboy+s3aTgC3NCYc/w7o0s0pC7YBr5wFDAN7gboItpYC+4AHjr2XQAsxwu5UrzPhQ2CzR/vNwGPH/uU4vLNKC7cJvgAHgCrfk/Db5iFg0vF2gy/jjXJ3oKyzjvixHhjVnC+0hpI9EZK4qxRbLO4BgxHGLQOGHDKRPZN2wslI1Ea0E8Z8FNQ6ZIaj7pleJ5yieMIHkdAzo04CKDrFhhu71D1RKpFwz4QJwLJbwQ+78Dlh2YkKIGI47OyXgkLsqPOcqKogItXAE9kyUrMipaOCdd6EH/giYtgqW+P/8kqHkyGoQCILnEy6a7aO19XJzk6VSMTQKXv95EG9jtVTEQ+A5SKSUX3zLd862zThDfzCNxHDbdncTg70qNHqiUon0i2bF3I19qlxRwKItMnmlVyNY2q0Ks4HrCo87xC55LGcbZJN0wX+woQa7WzjA+dy1OinPdleLnufcjVOq7HG02TvI4gRAZAtwHbK0QliJ+IKE8Vcdwq0n83X13donc2xSNOzYseY581erc1uIfZRqdJ+ix19ImIKYKLRIyImniUarSJiamGikXEOjaYAJhoD8orJmInGbhExLTbRSAFvRWYLCUeXiDyKSd8tG9KOTGqCcjmQLfIYUzBaNGBS4lhiiSB5MpBc6ev8FVVIf10KkbRkoUBCclQRuxQscd5mDZZSba5QFWaD7+t7udDgaFgmk64stWxulKEwzDYQPzY6+rO9DVjtq/5vcMJsUtprHEfyauCYU+QNqaz1KmSknQQQSFBu8SiF2quMZ7L9I49Y4VWRaXZCLVAcd0b8F4Nlw/3AU8feyCxvi71LS2mFV3icCRQOpgCelO7UpIXWqL+F51qgHTilZ8eMM/4NcFAyUjk1sl9ISRXv/2NRhV5TGtte4J4L4iLiok5arNXmV5VtJuSpr8AHhY2pg2dUyC0uco5sESrLPJhL/ATcq2k2baxZkQAAAABJRU5ErkJggg==" width="24" height="24"/><span id="requests-dot" class="unread-dot"></span></button>
 <button id="center-btn" onclick="centerOnUser()" style="cursor:pointer;"><img style="pointer-events:none;" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAACXBIWXMAAAsTAAALEwEAmpwYAAADo0lEQVR4nO2ZyU5UQRSGvwWtGBFMBER2RsJGRQRb2TiAD2AgLB2ewhgXGIaNMSaogAYeQN04MITwECIGFMXWByCIKMMGGtuU+W9SQZu+dYemSfyTm0Duqapz+kz/qQvxI6Nn1yPz35ACw64zZA9wGegCRoBZYNEyxPz9ARiWTAuQoIDQCAwBPy2l/T4/gEGgYScNaADGtyj2EXgAXNX7I9a7ahl9DXgIzG1ZOwbU59OAfUAvkJYCK1LseIAcOQE8AlYlswHcB4qJGbXAtA5N69eviCDZK2VQWrJTQA0x4RzwTQfNKUyirlpJICX5Bf0fuRErOmAUKCU+lFm5txylMbWWJ54CRcSPBPDM8syxKBJ72vJEPoywjRm3ciZUAei1ciLOcNouzFLS4V7QTRpURdIOiR0HzkoHU5rrgmzgudWU2J1Gv3Qx1McJjVazy9Un8oHDapq/XLv/kAwxHbtQ0CedHruwWI8AZqMd+OjUPao2q3reAt0hPHxKOn33Wz1bLAIYBO1qZNkYr/mR2gLundIeF/wId4UIq3bFsVn/CrgI7NdzCXitd5tAa4jw6vAjPCJhQ7ddw8nzxM1t5G5Zs0i54xk3tPalH+FZCbv2jh7LE35/LON9F5zRuhk/wt54aoYiF7zTOhNOudAsWVMAXFCtdYb7/QW/Y2kueOy4xIfsAYvd5kLGr35RGbLsYEipVcEiMyRbaBk3umBK60x18lviJwOG1kKcyd6tdabE5sKoZDsdz0i6JPtwwPJbYTECU2Kz4bZkloBDAcvvCz/CnRI2lwGuaFOz85hqs3KmROHkecLIXAnBgjtwKI2fCIZWNbtsSbkU0AiDL9rjPD5HTE8Rc+8UBOVqdpMqy6aivZG3XcPJQ710WnQZuQdDhFdc6JdOA65jbkb023ConUYVsCZCaui8E8YKyCtPHEr7P2NyQ4N/5Dd+DmhSlVsPkbN/LpQzGmjM1Uy+cRD4Kh3uhr2g81jteJ4/zCSACZ1tKt7esBvWiNtkdI2ZD2MSwHOdOQ8cjfKSbNnyTFnM4TRhsePILweTlmdSMi7qzwpNVk7Mx3nDWWPR9bQuAyojMKRKJXbTyonIwikbilXNNqymaXrNyQCG1Ktjr0lmXdUpdGK7oM5is97zWUZdV1hs/RiaFBXvswhgRh3bjA+B+0QUOK2wWHIYSzMWARwIQjviRJFuUO7oSui99aXLG09nNBR1iIrn88NRaLhUrYLGf0MKDXkx5Dd0IIXtaDD14wAAAABJRU5ErkJggg==" width="24" height="24"/></button>
 
 <div id="toast"></div>
@@ -562,6 +589,17 @@
     <span class="panel-title">הפריטים שלי</span>
   </div>
   <div class="panel-body" id="my-items-body">
+    <p style="color:var(--gray); text-align:center;">טוען...</p>
+  </div>
+</div>
+
+<!-- My requests panel (items I asked for) -->
+<div id="my-requests-panel" class="panel">
+  <div class="panel-header">
+    <button class="panel-back" onclick="closePanel('my-requests-panel')">←</button>
+    <span class="panel-title">הבקשות שלי</span>
+  </div>
+  <div class="panel-body" id="my-requests-body">
     <p style="color:var(--gray); text-align:center;">טוען...</p>
   </div>
 </div>
@@ -994,6 +1032,65 @@ async function submitItem() {
 
 // ── My items ───────────────────────────────────────────
 let myItemsData = [];
+
+// ── My requests (items I asked for on others' pins) ────
+let myRequestsData = [];
+
+async function openMyRequests() {
+  document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
+  openPanel('my-requests-panel');
+  const body = document.getElementById('my-requests-body');
+  body.innerHTML = '<p style="color:var(--gray);text-align:center;">טוען...</p>';
+
+  try {
+    const res = await fetch(`${API_BASE}/my-outgoing-requests/${deviceId}`);
+    const rows = await res.json();
+    myRequestsData = rows;
+    renderMyRequestsList(rows);
+  } catch (e) {
+    body.innerHTML = '<p style="color:var(--gray);text-align:center;">שגיאה בטעינה. נסה שוב.</p>';
+  }
+}
+
+function renderMyRequestsList(rows) {
+  const body = document.getElementById('my-requests-body');
+  if (!rows || rows.length === 0) {
+    body.innerHTML = '<p style="color:var(--gray);text-align:center;margin-top:40px;">עדיין לא ביקשת פריטים.<br>לחץ "אני רוצה את זה!" על פריט במפה.</p>';
+    return;
+  }
+
+  body.innerHTML = rows.map(r => {
+    const isApproved = r.status === 'approved';
+    return `
+    <div class="request-card">
+      <div class="request-card-head" onclick="toggleRequestDetails(${r.id})">
+        <span class="request-card-title">${r.item_title}</span>
+        <span class="request-card-status ${isApproved ? 'approved' : 'pending'}">${isApproved ? 'אושר ✓' : 'ממתין'}</span>
+      </div>
+      <div class="request-card-details" id="request-details-${r.id}" style="display:none;">
+        ${r.item_image_url ? `<img src="${r.item_image_url}" class="request-detail-img"/>` : ''}
+        <div class="request-detail-line">${r.item_category || ''}</div>
+        ${r.item_description ? `<div class="request-detail-desc">${r.item_description}</div>` : ''}
+        <div class="request-detail-line">מאת: ${r.giver_name}</div>
+        ${isApproved && r.giver_phone
+          ? `<div class="request-phone">טלפון: <a href="tel:${r.giver_phone}" style="direction:ltr;">${r.giver_phone}</a></div>`
+          : '<div class="request-detail-line" style="color:var(--gray);">מספר הטלפון יופיע לאחר אישור המוסר</div>'}
+        <button class="request-cancel-btn" onclick="cancelRequestFromList(${r.item_id})">בטל בקשה</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleRequestDetails(requestId) {
+  const el = document.getElementById(`request-details-${requestId}`);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function cancelRequestFromList(itemId) {
+  if (!confirm('לבטל את הבקשה על הפריט?')) return;
+  await cancelInterest(itemId);
+  openMyRequests(); // reload the list
+}
 
 async function openMyItems() {
   // Close any open panels first
