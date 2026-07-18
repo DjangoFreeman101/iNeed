@@ -158,6 +158,28 @@
       background:white; border-radius:12px;
       padding:14px; margin-bottom:12px;
       box-shadow:0 2px 8px rgba(0,0,0,0.06);
+      cursor:pointer;
+    }
+    .item-card:active { background:#fafafa; }
+    /* RTL: justify-content:flex-end packs to the LEFT. DOM order badge-then-X
+       therefore renders visually as [X][badge] at the top-left. */
+    .item-card-top {
+      display:flex; justify-content:space-between; align-items:center;
+      gap:8px; margin-bottom:8px;
+    }
+    .item-badge {
+      display:inline-block;
+      font-size:12px; font-weight:700; color:white;
+      padding:3px 10px; border-radius:20px; white-space:nowrap;
+    }
+    .item-badge.give { background:var(--accent); }
+    .item-badge.take { background:var(--green); }
+
+    .item-delete-x {
+      background:none; border:none; color:var(--accent);
+      font-size:17px; font-weight:700; line-height:1;
+      width:26px; height:26px; padding:0; flex-shrink:0;
+      cursor:pointer; font-family:'Heebo',sans-serif;
     }
     .item-card-title { font-size:16px; font-weight:700; color:var(--dark); margin-bottom:4px; }
     .item-card-meta { font-size:12px; color:var(--gray); margin-bottom:8px; }
@@ -208,12 +230,20 @@
     #interest-banner {
       position:fixed; top:50px; left:0; right:0;
       background:var(--green); color:white;
-      padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:14px 16px;
+      /* display:none keeps it out of the render tree entirely when idle.
+         JS flips it to flex just before animating in, and back to none
+         once the slide-out transition has finished. */
+      display:none;
+      align-items:center; justify-content:space-between; gap:12px;
       z-index:9998; box-shadow:0 4px 14px rgba(0,0,0,0.3);
-      transform:translateY(-130%); transition:transform 0.35s ease;
+      /* Must travel its own full height PLUS the 50px top offset (plus margin for
+         the shadow) to clear the screen — a plain % only moves it by its own height. */
+      transform:translateY(calc(-100% - 70px)); transition:transform 0.35s ease;
+      pointer-events:none;
       font-size:15px; font-weight:700; cursor:pointer; font-family:'Heebo',sans-serif;
     }
-    #interest-banner.show { transform:translateY(0); }
+    #interest-banner.show { transform:translateY(0); pointer-events:auto; }
     #interest-banner button {
       background:rgba(255,255,255,0.25); color:white; border:none;
       border-radius:6px; width:26px; height:26px; font-size:14px;
@@ -257,6 +287,26 @@
 
     /* ── Item popup (map) ── */
     .item-popup { min-width:220px; direction:rtl; text-align:right; }
+    .item-popup-top { margin-bottom:8px; text-align:left; }
+    /* Bigger, bolder badge specifically inside the map popup, pinned top-left */
+    .item-popup-top .item-badge {
+      font-size:14px; font-weight:800;
+      padding:5px 14px; border-radius:20px;
+    }
+
+    /* RTL: slider is first in the DOM so it sits on the right, putting the
+       arrows on the left. direction:ltr on the group fixes the arrows in a
+       predictable ← then → order. */
+    .radius-row { display:flex; align-items:center; gap:10px; }
+    .radius-row input[type=range] { flex:1; min-width:0; }
+    .radius-arrows { display:flex; gap:4px; direction:ltr; flex-shrink:0; }
+    .radius-arrow {
+      background:#f0f0f0; border:none; border-radius:6px;
+      width:32px; height:32px; padding:0; line-height:1;
+      font-size:15px; font-weight:700; color:var(--dark);
+      cursor:pointer; font-family:'Heebo',sans-serif;
+    }
+    .radius-arrow:active { background:#dcdcdc; }
     .item-popup-img { width:100%; height:140px; object-fit:cover; border-radius:8px; margin-bottom:10px; }
     .item-popup-title { font-size:15px; font-weight:700; color:var(--dark); margin-bottom:4px; }
     .item-popup-cat { font-size:12px; color:var(--gray); margin-bottom:8px; }
@@ -563,7 +613,13 @@
     <div class="form-group">
       <label class="form-label">רדיוס חיפוש</label>
       <div id="settings-radius-display">5 ק"מ</div>
-      <input type="range" id="settings-radius" min="1" max="100" value="5"/>
+      <div class="radius-row">
+        <input type="range" id="settings-radius" min="1" max="100" value="5"/>
+        <div class="radius-arrows">
+          <button type="button" class="radius-arrow" onclick="adjustRadius(1)">←</button>
+          <button type="button" class="radius-arrow" onclick="adjustRadius(-1)">→</button>
+        </div>
+      </div>
     </div>
     <div class="form-group">
       <label class="form-label">אימייל</label>
@@ -638,6 +694,32 @@ function makeItemIcon(category) {
 // ── Load items ─────────────────────────────────────────
 const MIN_ZOOM = 12;
 
+// ── Radius filtering ───────────────────────────────────
+// Great-circle distance in km between two lat/lon points.
+function distanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function getRadiusKm() {
+  const r = currentUser && currentUser.radius_km;
+  return (typeof r === 'number' && r > 0) ? r : 5;
+}
+
+function filterByRadius(items) {
+  // Without a location fix we can't measure distance. Rather than showing an
+  // empty map (e.g. if location permission was denied), fall back to showing
+  // whatever is in view — filtering resumes as soon as a fix arrives.
+  if (userLat === null || userLon === null) return items;
+  const radius = getRadiusKm();
+  return items.filter(i => distanceKm(userLat, userLon, i.lat, i.lon) <= radius);
+}
+
 async function loadItems() {
   if (map.getZoom() < MIN_ZOOM) {
     clusterGroup.clearLayers();
@@ -645,15 +727,23 @@ async function loadItems() {
     return;
   }
   const b = map.getBounds();
+  // Pad the fetch area beyond the visible viewport. Without this, pins sitting
+  // right at the screen edge flicker out as you pan (the fetch box moves and no
+  // longer includes them). The padding keeps a buffer of off-screen pins loaded.
+  const latPad = (b.getNorth() - b.getSouth()) * 0.5;
+  const lonPad = (b.getEast() - b.getWest()) * 0.5;
   const params = new URLSearchParams({
-    lat_min: b.getSouth().toFixed(5),
-    lat_max: b.getNorth().toFixed(5),
-    lon_min: b.getWest().toFixed(5),
-    lon_max: b.getEast().toFixed(5),
+    lat_min: (b.getSouth() - latPad).toFixed(5),
+    lat_max: (b.getNorth() + latPad).toFixed(5),
+    lon_min: (b.getWest() - lonPad).toFixed(5),
+    lon_max: (b.getEast() + lonPad).toFixed(5),
     device_id: deviceId
   });
   const res = await fetch(`${API_BASE}/items?${params}`);
-  const items = await res.json();
+  const allItems = await res.json();
+
+  // Only show items within the user's chosen radius.
+  const items = filterByRadius(allItems);
 
   // Hide loading after first load
   const loadingEl = document.getElementById('loading');
@@ -666,12 +756,12 @@ async function loadItems() {
     else itemsData.push(item);
   });
 
-  // Remove out-of-view markers
-  const bounds = map.getBounds();
+  // Drop any marker that shouldn't be shown any more — either it left the
+  // viewport, or it's now outside the radius (e.g. after a settings change).
+  const visibleIds = new Set(items.map(i => i.id));
   Object.keys(itemMarkers).forEach(id => {
-    const m = itemMarkers[id];
-    if (!bounds.contains(m.getLatLng())) {
-      clusterGroup.removeLayer(m);
+    if (!visibleIds.has(Number(id))) {
+      clusterGroup.removeLayer(itemMarkers[id]);
       delete itemMarkers[id];
     }
   });
@@ -704,13 +794,13 @@ function buildItemPopup(item) {
   const isMyItem = item.device_id === deviceId;
   return `
     <div class="item-popup">
+      <div class="item-popup-top"><span class="item-badge ${isTakePost(item) ? 'take' : 'give'}">${isTakePost(item) ? 'אני צריך' : 'אני מוסר'}</span></div>
       ${item.image_url ? `<img src="${item.image_url}" class="item-popup-img"/>` : ''}
       <div class="item-popup-title">${item.title}</div>
-      <div class="item-popup-cat">${item.category} · ${isTakePost(item) ? 'מחפש' : 'מוסר'}</div>
+      <div class="item-popup-cat">${item.category}</div>
       ${item.description ? `<div class="item-popup-desc">${item.description}</div>` : ''}
       <div class="item-popup-by">מאת: ${item.nickname}</div>
       <div class="item-popup-interest">${item.request_count} ${interestCountLabel(item)}</div>
-      <button class="item-popup-info" onclick="showItemInfo(${item.id})">ℹ️ פרטי הפריט</button>
       ${!isMyItem ? `
         <button class="item-popup-btn ${requested ? 'requested' : ''}"
           onclick="${requested ? `cancelInterest(${item.id})` : `expressInterest(${item.id})`}">
@@ -891,23 +981,21 @@ function renderMyItemsList(items) {
 
   const unreadItemIds = getUnreadItemIds();
   body.innerHTML = items.map(item => `
-    <div class="item-card">
+    <div class="item-card" onclick="openEditItem(${item.id})">
+      <div class="item-card-top">
+        <span class="item-badge ${isTakePost(item) ? 'take' : 'give'}">${isTakePost(item) ? 'אני צריך' : 'אני מוסר'}</span>
+        <button class="item-delete-x" title="מחק" onclick="event.stopPropagation(); deleteItem(${item.id})">✕</button>
+      </div>
       ${item.image_url ? `<img src="${item.image_url}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;"/>` : ''}
       <div class="item-card-title">${item.title}${unreadItemIds.has(item.id) ? '<span class="item-unread-dot"></span>' : ''}</div>
-      <div class="item-card-meta">${item.category} · ${isTakePost(item) ? 'מחפש' : 'מוסר'} · ${item.request_count} ${interestCountLabel(item)} · ${item.status === 'available' ? 'זמין' : 'נלקח'}</div>
+      <div class="item-card-meta">${item.category} · ${item.request_count} ${interestCountLabel(item)} · ${item.status === 'available' ? 'זמין' : 'נלקח'}</div>
       <div class="item-card-actions">
         <button class="item-card-btn" style="background:#f0f0f0;color:var(--dark);"
-          onclick="viewRequesters(${item.id})">${requestersPanelLabel(item)}?</button>
+          onclick="event.stopPropagation(); viewRequesters(${item.id})">${requestersPanelLabel(item)}?</button>
         <button class="item-card-btn" style="background:${item.status==='available'?'var(--green)':'var(--gray)'};color:white;"
-          onclick="toggleItemStatus(${item.id}, '${item.status}')">
+          onclick="event.stopPropagation(); toggleItemStatus(${item.id}, '${item.status}')">
           ${item.status === 'available' ? 'סמן כנלקח' : 'החזר לזמין'}
         </button>
-      </div>
-      <div class="item-card-actions" style="margin-top:8px;">
-        <button class="item-card-btn" style="background:#f0f0f0;color:var(--dark);"
-          onclick="openEditItem(${item.id})">ערוך</button>
-        <button class="item-card-btn" style="background:var(--accent);color:white;"
-          onclick="deleteItem(${item.id})">מחק</button>
       </div>
     </div>
   `).join('');
@@ -1085,6 +1173,7 @@ async function saveSettings() {
   localStorage.setItem('ineed_user', JSON.stringify(currentUser));
   showToast('הגדרות נשמרו');
   closePanel('settings-panel');
+  loadItems(); // radius may have changed — re-apply the filter right away
 }
 
 // ── Setup ──────────────────────────────────────────────
@@ -1102,6 +1191,15 @@ function updateSettingsRadiusDisplay() {
 }
 document.getElementById('settings-radius').addEventListener('input', updateSettingsRadiusDisplay);
 document.getElementById('settings-radius').addEventListener('change', updateSettingsRadiusDisplay);
+
+function adjustRadius(delta) {
+  const el = document.getElementById('settings-radius');
+  const min = parseInt(el.min), max = parseInt(el.max);
+  let val = parseInt(el.value) + delta;
+  val = Math.max(min, Math.min(max, val)); // clamp within slider bounds
+  el.value = val;
+  updateSettingsRadiusDisplay();
+}
 
 async function completeSetup() {
   const nickname = document.getElementById('setup-nickname').value.trim();
@@ -1373,17 +1471,37 @@ function markItemRead(itemId) {
 }
 
 let interestBannerTimeout = null;
+let interestBannerHideTimeout = null;
 
 function showInterestBanner(message) {
-  document.getElementById('interest-banner-text').textContent = message;
-  document.getElementById('interest-banner').classList.add('show');
+  const banner = document.getElementById('interest-banner');
   clearTimeout(interestBannerTimeout);
+  clearTimeout(interestBannerHideTimeout);
+
+  document.getElementById('interest-banner-text').textContent = message;
+
+  // Enter the render tree, then force a reflow so the browser registers the
+  // off-screen start position. Without this, adding .show in the same frame
+  // would snap it into place with no slide animation.
+  banner.style.display = 'flex';
+  void banner.offsetHeight;
+  banner.classList.add('show');
+
   interestBannerTimeout = setTimeout(() => dismissInterestBanner(false), 6000);
 }
 
 function dismissInterestBanner(openItems) {
-  document.getElementById('interest-banner').classList.remove('show');
+  const banner = document.getElementById('interest-banner');
   clearTimeout(interestBannerTimeout);
+  clearTimeout(interestBannerHideTimeout);
+
+  banner.classList.remove('show');
+
+  // Let the slide-out play, then drop it out of the render tree entirely.
+  interestBannerHideTimeout = setTimeout(() => {
+    banner.style.display = 'none';
+  }, 400); // slightly longer than the 0.35s transition
+
   if (openItems) openMyItems();
 }
 

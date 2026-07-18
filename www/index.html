@@ -75,6 +75,11 @@
       border-radius:50%; border:2px solid white;
     }
     .unread-dot.show { display:block; }
+
+    .item-unread-dot {
+      display:inline-block; width:9px; height:9px; background:var(--accent);
+      border-radius:50%; margin:0 6px; vertical-align:middle;
+    }
     
     /* Give/Take toggle */
     .type-toggle { display:flex; gap:10px; margin-bottom:16px; }
@@ -153,6 +158,28 @@
       background:white; border-radius:12px;
       padding:14px; margin-bottom:12px;
       box-shadow:0 2px 8px rgba(0,0,0,0.06);
+      cursor:pointer;
+    }
+    .item-card:active { background:#fafafa; }
+    /* RTL: justify-content:flex-end packs to the LEFT. DOM order badge-then-X
+       therefore renders visually as [X][badge] at the top-left. */
+    .item-card-top {
+      display:flex; justify-content:space-between; align-items:center;
+      gap:8px; margin-bottom:8px;
+    }
+    .item-badge {
+      display:inline-block;
+      font-size:12px; font-weight:700; color:white;
+      padding:3px 10px; border-radius:20px; white-space:nowrap;
+    }
+    .item-badge.give { background:var(--accent); }
+    .item-badge.take { background:var(--green); }
+
+    .item-delete-x {
+      background:none; border:none; color:var(--accent);
+      font-size:17px; font-weight:700; line-height:1;
+      width:26px; height:26px; padding:0; flex-shrink:0;
+      cursor:pointer; font-family:'Heebo',sans-serif;
     }
     .item-card-title { font-size:16px; font-weight:700; color:var(--dark); margin-bottom:4px; }
     .item-card-meta { font-size:12px; color:var(--gray); margin-bottom:8px; }
@@ -200,6 +227,29 @@
     }
     #toast.show { opacity:1; }
 
+    #interest-banner {
+      position:fixed; top:50px; left:0; right:0;
+      background:var(--green); color:white;
+      padding:14px 16px;
+      /* display:none keeps it out of the render tree entirely when idle.
+         JS flips it to flex just before animating in, and back to none
+         once the slide-out transition has finished. */
+      display:none;
+      align-items:center; justify-content:space-between; gap:12px;
+      z-index:9998; box-shadow:0 4px 14px rgba(0,0,0,0.3);
+      /* Must travel its own full height PLUS the 50px top offset (plus margin for
+         the shadow) to clear the screen — a plain % only moves it by its own height. */
+      transform:translateY(calc(-100% - 70px)); transition:transform 0.35s ease;
+      pointer-events:none;
+      font-size:15px; font-weight:700; cursor:pointer; font-family:'Heebo',sans-serif;
+    }
+    #interest-banner.show { transform:translateY(0); pointer-events:auto; }
+    #interest-banner button {
+      background:rgba(255,255,255,0.25); color:white; border:none;
+      border-radius:6px; width:26px; height:26px; font-size:14px;
+      cursor:pointer; flex-shrink:0;
+    }
+
     /* ── Loading ── */
     #loading {
       position:fixed; top:0; left:0; right:0; bottom:0;
@@ -237,6 +287,26 @@
 
     /* ── Item popup (map) ── */
     .item-popup { min-width:220px; direction:rtl; text-align:right; }
+    .item-popup-top { margin-bottom:8px; text-align:left; }
+    /* Bigger, bolder badge specifically inside the map popup, pinned top-left */
+    .item-popup-top .item-badge {
+      font-size:14px; font-weight:800;
+      padding:5px 14px; border-radius:20px;
+    }
+
+    /* RTL: slider is first in the DOM so it sits on the right, putting the
+       arrows on the left. direction:ltr on the group fixes the arrows in a
+       predictable ← then → order. */
+    .radius-row { display:flex; align-items:center; gap:10px; }
+    .radius-row input[type=range] { flex:1; min-width:0; }
+    .radius-arrows { display:flex; gap:4px; direction:ltr; flex-shrink:0; }
+    .radius-arrow {
+      background:#f0f0f0; border:none; border-radius:6px;
+      width:32px; height:32px; padding:0; line-height:1;
+      font-size:15px; font-weight:700; color:var(--dark);
+      cursor:pointer; font-family:'Heebo',sans-serif;
+    }
+    .radius-arrow:active { background:#dcdcdc; }
     .item-popup-img { width:100%; height:140px; object-fit:cover; border-radius:8px; margin-bottom:10px; }
     .item-popup-title { font-size:15px; font-weight:700; color:var(--dark); margin-bottom:4px; }
     .item-popup-cat { font-size:12px; color:var(--gray); margin-bottom:8px; }
@@ -358,6 +428,11 @@
 <button id="center-btn" onclick="centerOnUser()" style="cursor:pointer;"><img style="pointer-events:none;" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAACXBIWXMAAAsTAAALEwEAmpwYAAADo0lEQVR4nO2ZyU5UQRSGvwWtGBFMBER2RsJGRQRb2TiAD2AgLB2ewhgXGIaNMSaogAYeQN04MITwECIGFMXWByCIKMMGGtuU+W9SQZu+dYemSfyTm0Duqapz+kz/qQvxI6Nn1yPz35ACw64zZA9wGegCRoBZYNEyxPz9ARiWTAuQoIDQCAwBPy2l/T4/gEGgYScNaADGtyj2EXgAXNX7I9a7ahl9DXgIzG1ZOwbU59OAfUAvkJYCK1LseIAcOQE8AlYlswHcB4qJGbXAtA5N69eviCDZK2VQWrJTQA0x4RzwTQfNKUyirlpJICX5Bf0fuRErOmAUKCU+lFm5txylMbWWJ54CRcSPBPDM8syxKBJ72vJEPoywjRm3ciZUAei1ciLOcNouzFLS4V7QTRpURdIOiR0HzkoHU5rrgmzgudWU2J1Gv3Qx1McJjVazy9Un8oHDapq/XLv/kAwxHbtQ0CedHruwWI8AZqMd+OjUPao2q3reAt0hPHxKOn33Wz1bLAIYBO1qZNkYr/mR2gLundIeF/wId4UIq3bFsVn/CrgI7NdzCXitd5tAa4jw6vAjPCJhQ7ddw8nzxM1t5G5Zs0i54xk3tPalH+FZCbv2jh7LE35/LON9F5zRuhk/wt54aoYiF7zTOhNOudAsWVMAXFCtdYb7/QW/Y2kueOy4xIfsAYvd5kLGr35RGbLsYEipVcEiMyRbaBk3umBK60x18lviJwOG1kKcyd6tdabE5sKoZDsdz0i6JPtwwPJbYTECU2Kz4bZkloBDAcvvCz/CnRI2lwGuaFOz85hqs3KmROHkecLIXAnBgjtwKI2fCIZWNbtsSbkU0AiDL9rjPD5HTE8Rc+8UBOVqdpMqy6aivZG3XcPJQ710WnQZuQdDhFdc6JdOA65jbkb023ConUYVsCZCaui8E8YKyCtPHEr7P2NyQ4N/5Dd+DmhSlVsPkbN/LpQzGmjM1Uy+cRD4Kh3uhr2g81jteJ4/zCSACZ1tKt7esBvWiNtkdI2ZD2MSwHOdOQ8cjfKSbNnyTFnM4TRhsePILweTlmdSMi7qzwpNVk7Mx3nDWWPR9bQuAyojMKRKJXbTyonIwikbilXNNqymaXrNyQCG1Ktjr0lmXdUpdGK7oM5is97zWUZdV1hs/RiaFBXvswhgRh3bjA+B+0QUOK2wWHIYSzMWARwIQjviRJFuUO7oSui99aXLG09nNBR1iIrn88NRaLhUrYLGf0MKDXkx5Dd0IIXtaDD14wAAAABJRU5ErkJggg==" width="24" height="24"/></button>
 
 <div id="toast"></div>
+
+<div id="interest-banner" onclick="dismissInterestBanner(true)">
+  <span id="interest-banner-text"></span>
+  <button onclick="event.stopPropagation(); dismissInterestBanner(false)">✕</button>
+</div>
 
 <div id="upload-overlay">
   <div id="upload-spinner"></div>
@@ -538,7 +613,13 @@
     <div class="form-group">
       <label class="form-label">רדיוס חיפוש</label>
       <div id="settings-radius-display">5 ק"מ</div>
-      <input type="range" id="settings-radius" min="1" max="100" value="5"/>
+      <div class="radius-row">
+        <input type="range" id="settings-radius" min="1" max="100" value="5"/>
+        <div class="radius-arrows">
+          <button type="button" class="radius-arrow" onclick="adjustRadius(1)">←</button>
+          <button type="button" class="radius-arrow" onclick="adjustRadius(-1)">→</button>
+        </div>
+      </div>
     </div>
     <div class="form-group">
       <label class="form-label">אימייל</label>
@@ -613,6 +694,32 @@ function makeItemIcon(category) {
 // ── Load items ─────────────────────────────────────────
 const MIN_ZOOM = 12;
 
+// ── Radius filtering ───────────────────────────────────
+// Great-circle distance in km between two lat/lon points.
+function distanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function getRadiusKm() {
+  const r = currentUser && currentUser.radius_km;
+  return (typeof r === 'number' && r > 0) ? r : 5;
+}
+
+function filterByRadius(items) {
+  // Without a location fix we can't measure distance. Rather than showing an
+  // empty map (e.g. if location permission was denied), fall back to showing
+  // whatever is in view — filtering resumes as soon as a fix arrives.
+  if (userLat === null || userLon === null) return items;
+  const radius = getRadiusKm();
+  return items.filter(i => distanceKm(userLat, userLon, i.lat, i.lon) <= radius);
+}
+
 async function loadItems() {
   if (map.getZoom() < MIN_ZOOM) {
     clusterGroup.clearLayers();
@@ -620,15 +727,23 @@ async function loadItems() {
     return;
   }
   const b = map.getBounds();
+  // Pad the fetch area beyond the visible viewport. Without this, pins sitting
+  // right at the screen edge flicker out as you pan (the fetch box moves and no
+  // longer includes them). The padding keeps a buffer of off-screen pins loaded.
+  const latPad = (b.getNorth() - b.getSouth()) * 0.5;
+  const lonPad = (b.getEast() - b.getWest()) * 0.5;
   const params = new URLSearchParams({
-    lat_min: b.getSouth().toFixed(5),
-    lat_max: b.getNorth().toFixed(5),
-    lon_min: b.getWest().toFixed(5),
-    lon_max: b.getEast().toFixed(5),
+    lat_min: (b.getSouth() - latPad).toFixed(5),
+    lat_max: (b.getNorth() + latPad).toFixed(5),
+    lon_min: (b.getWest() - lonPad).toFixed(5),
+    lon_max: (b.getEast() + lonPad).toFixed(5),
     device_id: deviceId
   });
   const res = await fetch(`${API_BASE}/items?${params}`);
-  const items = await res.json();
+  const allItems = await res.json();
+
+  // Only show items within the user's chosen radius.
+  const items = filterByRadius(allItems);
 
   // Hide loading after first load
   const loadingEl = document.getElementById('loading');
@@ -641,12 +756,12 @@ async function loadItems() {
     else itemsData.push(item);
   });
 
-  // Remove out-of-view markers
-  const bounds = map.getBounds();
+  // Drop any marker that shouldn't be shown any more — either it left the
+  // viewport, or it's now outside the radius (e.g. after a settings change).
+  const visibleIds = new Set(items.map(i => i.id));
   Object.keys(itemMarkers).forEach(id => {
-    const m = itemMarkers[id];
-    if (!bounds.contains(m.getLatLng())) {
-      clusterGroup.removeLayer(m);
+    if (!visibleIds.has(Number(id))) {
+      clusterGroup.removeLayer(itemMarkers[id]);
       delete itemMarkers[id];
     }
   });
@@ -665,23 +780,31 @@ async function loadItems() {
   });
 }
 
+// Wording helpers — a 'give' post is something offered (others want it),
+// a 'take' post is something wanted (others can offer it).
+function isTakePost(item) { return item && item.post_type === 'take'; }
+function interestActionLabel(item) { return isTakePost(item) ? 'יש לי את זה!' : 'אני רוצה את זה!'; }
+function interestCancelLabel(item) { return isTakePost(item) ? 'מציע — לחץ לביטול' : 'מעוניין — לחץ לביטול'; }
+function interestCountLabel(item) { return isTakePost(item) ? 'מציעים' : 'מתעניינים'; }
+function requestersPanelLabel(item) { return isTakePost(item) ? 'מי מציע' : 'מי רוצה'; }
+
 function buildItemPopup(item) {
   const myRequests = JSON.parse(localStorage.getItem('my_requests') || '{}');
   const requested = myRequests[item.id];
   const isMyItem = item.device_id === deviceId;
   return `
     <div class="item-popup">
+      <div class="item-popup-top"><span class="item-badge ${isTakePost(item) ? 'take' : 'give'}">${isTakePost(item) ? 'אני צריך' : 'אני מוסר'}</span></div>
       ${item.image_url ? `<img src="${item.image_url}" class="item-popup-img"/>` : ''}
       <div class="item-popup-title">${item.title}</div>
       <div class="item-popup-cat">${item.category}</div>
       ${item.description ? `<div class="item-popup-desc">${item.description}</div>` : ''}
       <div class="item-popup-by">מאת: ${item.nickname}</div>
-      <div class="item-popup-interest">${item.request_count} מתעניינים</div>
-      <button class="item-popup-info" onclick="showItemInfo(${item.id})">ℹ️ פרטי הפריט</button>
+      <div class="item-popup-interest">${item.request_count} ${interestCountLabel(item)}</div>
       ${!isMyItem ? `
         <button class="item-popup-btn ${requested ? 'requested' : ''}"
           onclick="${requested ? `cancelInterest(${item.id})` : `expressInterest(${item.id})`}">
-          ${requested ? 'מעוניין — לחץ לביטול' : 'אני רוצה את זה!'}
+          ${requested ? interestCancelLabel(item) : interestActionLabel(item)}
         </button>
         <button class="item-popup-report" onclick="reportImage(${item.id})"> דווח על תמונה</button>
       ` : `<div style="font-size:12px;color:var(--gray);text-align:center;padding:8px;">זה הפריט שלך</div>`}
@@ -705,7 +828,7 @@ function showItemInfo(itemId) {
     <div style="font-size:13px;color:var(--gray);margin-bottom:12px;">${item.category} · ${item.post_type === 'give' ? 'למסור' : 'לקחת'}</div>
     ${item.description ? `<div style="font-size:14px;color:#444;line-height:1.6;margin-bottom:16px;">${item.description}</div>` : ''}
     <div style="font-size:13px;color:var(--gray);">מאת: ${item.nickname}</div>
-    <div style="font-size:13px;color:var(--gray);margin-top:4px;">${item.request_count} מתעניינים</div>
+    <div style="font-size:13px;color:var(--gray);margin-top:4px;">${item.request_count} ${interestCountLabel(item)}</div>
   `;
   map.closePopup();
   openPanel('item-info-panel');
@@ -723,7 +846,8 @@ async function expressInterest(itemId) {
     const myRequests = JSON.parse(localStorage.getItem('my_requests') || '{}');
     myRequests[itemId] = true;
     localStorage.setItem('my_requests', JSON.stringify(myRequests));
-    showToast('הבעת עניין! בעל הפריט יעודכן');
+    const item = itemsData.find(i => i.id === itemId);
+    showToast(isTakePost(item) ? 'עדכנו את המבקש שיש לך את הפריט!' : 'הבעת עניין! בעל הפריט יעודכן');
     map.closePopup();
     loadItems();
   }
@@ -845,40 +969,46 @@ async function openMyItems() {
   const res = await fetch(`${API_BASE}/my-items/${deviceId}`);
   const items = await res.json();
   myItemsData = items;
+  renderMyItemsList(items);
+}
 
+function renderMyItemsList(items) {
+  const body = document.getElementById('my-items-body');
   if (items.length === 0) {
     body.innerHTML = '<p style="color:var(--gray);text-align:center;margin-top:40px;">אין לך פריטים עדיין.<br>לחץ על "+ פרסם פריט" להתחלה!</p>';
     return;
   }
 
+  const unreadItemIds = getUnreadItemIds();
   body.innerHTML = items.map(item => `
-    <div class="item-card">
+    <div class="item-card" onclick="openEditItem(${item.id})">
+      <div class="item-card-top">
+        <span class="item-badge ${isTakePost(item) ? 'take' : 'give'}">${isTakePost(item) ? 'אני צריך' : 'אני מוסר'}</span>
+        <button class="item-delete-x" title="מחק" onclick="event.stopPropagation(); deleteItem(${item.id})">✕</button>
+      </div>
       ${item.image_url ? `<img src="${item.image_url}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;"/>` : ''}
-      <div class="item-card-title">${item.title}</div>
-      <div class="item-card-meta">${item.category} · ${item.request_count} מתעניינים · ${item.status === 'available' ? 'זמין' : 'נלקח'}</div>
+      <div class="item-card-title">${item.title}${unreadItemIds.has(item.id) ? '<span class="item-unread-dot"></span>' : ''}</div>
+      <div class="item-card-meta">${item.category} · ${item.request_count} ${interestCountLabel(item)} · ${item.status === 'available' ? 'זמין' : 'נלקח'}</div>
       <div class="item-card-actions">
         <button class="item-card-btn" style="background:#f0f0f0;color:var(--dark);"
-          onclick="viewRequesters(${item.id})">מי רוצה?</button>
+          onclick="event.stopPropagation(); viewRequesters(${item.id})">${requestersPanelLabel(item)}?</button>
         <button class="item-card-btn" style="background:${item.status==='available'?'var(--green)':'var(--gray)'};color:white;"
-          onclick="toggleItemStatus(${item.id}, '${item.status}')">
+          onclick="event.stopPropagation(); toggleItemStatus(${item.id}, '${item.status}')">
           ${item.status === 'available' ? 'סמן כנלקח' : 'החזר לזמין'}
         </button>
-      </div>
-      <div class="item-card-actions" style="margin-top:8px;">
-        <button class="item-card-btn" style="background:#f0f0f0;color:var(--dark);"
-          onclick="openEditItem(${item.id})">ערוך</button>
-        <button class="item-card-btn" style="background:var(--accent);color:white;"
-          onclick="deleteItem(${item.id})">מחק</button>
       </div>
     </div>
   `).join('');
 }
 
 async function viewRequesters(itemId) {
+  markItemRead(itemId);
+  renderMyItemsList(myItemsData);
+
   const item = myItemsData.find(i => i.id === itemId);
   const itemTitle = item ? item.title : '';
   openPanel('requesters-panel');
-  document.getElementById('requesters-title').textContent = `מי רוצה: ${itemTitle}`;
+  document.getElementById('requesters-title').textContent = `${requestersPanelLabel(item)}: ${itemTitle}`;
   const body = document.getElementById('requesters-body');
   body.innerHTML = '<p style="color:var(--gray);text-align:center;">טוען...</p>';
 
@@ -886,7 +1016,7 @@ async function viewRequesters(itemId) {
   const requesters = await res.json();
 
   if (requesters.length === 0) {
-    body.innerHTML = '<p style="color:var(--gray);text-align:center;margin-top:40px;">אין מתעניינים עדיין.</p>';
+    body.innerHTML = `<p style="color:var(--gray);text-align:center;margin-top:40px;">אין ${interestCountLabel(item)} עדיין.</p>`;
     return;
   }
 
@@ -1043,6 +1173,7 @@ async function saveSettings() {
   localStorage.setItem('ineed_user', JSON.stringify(currentUser));
   showToast('הגדרות נשמרו');
   closePanel('settings-panel');
+  loadItems(); // radius may have changed — re-apply the filter right away
 }
 
 // ── Setup ──────────────────────────────────────────────
@@ -1060,6 +1191,15 @@ function updateSettingsRadiusDisplay() {
 }
 document.getElementById('settings-radius').addEventListener('input', updateSettingsRadiusDisplay);
 document.getElementById('settings-radius').addEventListener('change', updateSettingsRadiusDisplay);
+
+function adjustRadius(delta) {
+  const el = document.getElementById('settings-radius');
+  const min = parseInt(el.min), max = parseInt(el.max);
+  let val = parseInt(el.value) + delta;
+  val = Math.max(min, Math.min(max, val)); // clamp within slider bounds
+  el.value = val;
+  updateSettingsRadiusDisplay();
+}
 
 async function completeSetup() {
   const nickname = document.getElementById('setup-nickname').value.trim();
@@ -1319,14 +1459,71 @@ function setUnreadDot(show) {
   localStorage.setItem('ineed_has_unread_interest', show ? '1' : '0');
 }
 
+function getUnreadItemIds() {
+  return new Set(JSON.parse(localStorage.getItem('ineed_unread_item_ids') || '[]'));
+}
+function saveUnreadItemIds(set) {
+  localStorage.setItem('ineed_unread_item_ids', JSON.stringify(Array.from(set)));
+}
+function markItemRead(itemId) {
+  const unread = getUnreadItemIds();
+  if (unread.delete(itemId)) saveUnreadItemIds(unread);
+}
+
+let interestBannerTimeout = null;
+let interestBannerHideTimeout = null;
+
+function showInterestBanner(message) {
+  const banner = document.getElementById('interest-banner');
+  clearTimeout(interestBannerTimeout);
+  clearTimeout(interestBannerHideTimeout);
+
+  document.getElementById('interest-banner-text').textContent = message;
+
+  // Enter the render tree, then force a reflow so the browser registers the
+  // off-screen start position. Without this, adding .show in the same frame
+  // would snap it into place with no slide animation.
+  banner.style.display = 'flex';
+  void banner.offsetHeight;
+  banner.classList.add('show');
+
+  interestBannerTimeout = setTimeout(() => dismissInterestBanner(false), 6000);
+}
+
+function dismissInterestBanner(openItems) {
+  const banner = document.getElementById('interest-banner');
+  clearTimeout(interestBannerTimeout);
+  clearTimeout(interestBannerHideTimeout);
+
+  banner.classList.remove('show');
+
+  // Let the slide-out play, then drop it out of the render tree entirely.
+  interestBannerHideTimeout = setTimeout(() => {
+    banner.style.display = 'none';
+  }, 400); // slightly longer than the 0.35s transition
+
+  if (openItems) openMyItems();
+}
+
 async function checkForNewInterest() {
   try {
     const res = await fetch(`${API_BASE}/my-item-requests/${deviceId}`);
     if (!res.ok) return;
     const rows = await res.json();
 
-    const notified = JSON.parse(localStorage.getItem('ineed_notified_request_ids') || '[]');
+    const storedRaw = localStorage.getItem('ineed_notified_request_ids');
+    const isFirstRun = storedRaw === null;
+    const notified = JSON.parse(storedRaw || '[]');
     const notifiedSet = new Set(notified);
+
+    if (isFirstRun) {
+      // First time this device checks — establish a baseline so pre-existing
+      // requests don't all fire as "new" at once.
+      rows.forEach(r => notifiedSet.add(r.id));
+      localStorage.setItem('ineed_notified_request_ids', JSON.stringify(Array.from(notifiedSet)));
+      return;
+    }
+
     const newRows = rows.filter(r => !notifiedSet.has(r.id));
     if (newRows.length === 0) return;
 
@@ -1334,19 +1531,31 @@ async function checkForNewInterest() {
     localStorage.setItem('ineed_notified_request_ids', JSON.stringify(Array.from(notifiedSet)));
     setUnreadDot(true);
 
+    const unreadItems = getUnreadItemIds();
+    newRows.forEach(r => unreadItems.add(r.item_id));
+    saveUnreadItemIds(unreadItems);
+
+    const single = newRows[0];
+    const singleIsTake = isTakePost(single);
     const message = newRows.length === 1
-      ? `${newRows[0].requester_name} מעוניין ב"${newRows[0].item_title}"`
+      ? (singleIsTake
+          ? `ל${single.requester_name} יש "${single.item_title}" בשבילך`
+          : `${single.requester_name} מעוניין ב"${single.item_title}"`)
       : `יש ${newRows.length} עדכונים חדשים על הפריטים שלך`;
-    showToast(message);
+    showInterestBanner(message);
+
+    const notifTitle = newRows.length === 1 && singleIsTake
+      ? 'מישהו מצא את מה שחיפשת!'
+      : 'מישהו מעוניין בפריט שלך!';
 
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
       try {
         await window.Capacitor.Plugins.LocalNotifications.schedule({
           notifications: [{
             id: Math.floor(Date.now() % 2147483647),
-            title: 'מישהו מעוניין בפריט שלך!',
+            title: notifTitle,
             body: message,
-            schedule: { at: new Date(Date.now() + 300) }
+            schedule: { at: new Date(Date.now() + 1000) }
           }]
         });
       } catch(e) {}
