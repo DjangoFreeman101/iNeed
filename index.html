@@ -81,7 +81,7 @@
     .swipe-wrap { position:relative; overflow:hidden; border-radius:12px; margin-bottom:10px; }
     .swipe-reveal {
       position:absolute; inset:0; display:flex; align-items:center;
-      justify-content:flex-start; padding-right:24px;
+      justify-content:flex-start; padding-left:28px; direction:ltr;
       background:var(--green); color:white; font-size:18px; font-weight:800;
       border-radius:12px;
     }
@@ -522,6 +522,7 @@
   <div id="menu-header">iNeed</div>
   <div class="menu-item" onclick="openSettings()">הגדרות</div>
   <div class="menu-item" onclick="openHistory()">היסטוריה</div>
+  <div class="menu-item" onclick="window.open('https://ineed-0otk.onrender.com/privacy', '_blank')">מדיניות פרטיות</div>
   <div class="menu-item menu-item-danger" onclick="deleteAccount()">מחק חשבון</div>
 </div>
 
@@ -1183,7 +1184,7 @@ function renderMyRequestsList(rows) {
     if (!isApproved) return cardInner; // can only swipe לקחתי after approval
     return `
       <div class="swipe-wrap" data-request-id="${r.id}">
-        <div class="swipe-reveal">לקחתי!</div>
+        <div class="swipe-reveal">לקחתי</div>
         <div class="swipe-front">${cardInner}</div>
       </div>`;
   }).join('');
@@ -1279,7 +1280,7 @@ function renderMyItemsList(items) {
   const unreadItemIds = getUnreadItemIds();
   body.innerHTML = items.map(item => {
     const swipeable = (item.approved_count || 0) > 0;
-    const revealLabel = isTakePost(item) ? 'לקחתי!' : 'מסרתי!';
+    const revealLabel = isTakePost(item) ? 'לקחתי' : 'מסרתי';
     const cardInner = `
       <div class="item-card" onclick="openEditItem(${item.id})">
         <div class="item-card-top">
