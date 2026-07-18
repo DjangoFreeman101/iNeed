@@ -86,6 +86,16 @@ def init_db():
         )
     """)
 
+    # Add phone column to users (for existing tables)
+    cur.execute("""
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT
+    """)
+
+    # Add status column to requests: 'pending' or 'approved' (for existing tables)
+    cur.execute("""
+        ALTER TABLE requests ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending'
+    """)
+
     conn.commit()
     cur.close()
     conn.close()
@@ -99,6 +109,7 @@ class UserSetup(BaseModel):
     nickname: str
     radius_km: int
     email: Optional[str] = None
+    phone: Optional[str] = None
 
 class UserSettings(BaseModel):
     device_id: str
@@ -140,18 +151,24 @@ def privacy():
 
 @app.post("/user/setup")
 def setup_user(user: UserSetup):
+    # Server-side phone validation: exactly 10 digits, starting with '05'.
+    phone = (user.phone or "").strip()
+    if not (phone.isdigit() and len(phone) == 10 and phone.startswith("05")):
+        raise HTTPException(status_code=400, detail="Phone must be 10 digits starting with 05")
+
     conn = get_db()
     cur = conn.cursor()
     now = time.time()
     cur.execute("""
-        INSERT INTO users (device_id, nickname, radius_km, email, created_at, last_seen)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO users (device_id, nickname, radius_km, email, phone, created_at, last_seen)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT(device_id) DO UPDATE SET
             nickname = EXCLUDED.nickname,
             radius_km = EXCLUDED.radius_km,
             email = COALESCE(EXCLUDED.email, users.email),
+            phone = EXCLUDED.phone,
             last_seen = EXCLUDED.last_seen
-    """, (user.device_id, user.nickname, user.radius_km, user.email, now, now))
+    """, (user.device_id, user.nickname, user.radius_km, user.email, phone, now, now))
     conn.commit()
     cur.close()
     conn.close()
@@ -271,13 +288,17 @@ def get_item_requests(item_id: int, device_id: str):
     if not row or row["device_id"] != device_id:
         raise HTTPException(status_code=403, detail="Not your item")
     cur.execute("""
-        SELECT r.*, u.nickname
+        SELECT r.*, u.nickname, u.phone AS requester_phone
         FROM requests r
         JOIN users u ON r.device_id = u.device_id
         WHERE r.item_id = %s
         ORDER BY r.created_at ASC
     """, (item_id,))
     requests = [dict(r) for r in cur.fetchall()]
+    # Only expose the phone once the giver has approved this specific request.
+    for req in requests:
+        if req.get("status") != "approved":
+            req["requester_phone"] = None
     cur.close()
     conn.close()
     return requests
@@ -431,6 +452,59 @@ def request_item(req: ItemRequest):
             "requester_name": row["requester_name"]
         }
     return {"ok": True, "notification": notification_data}
+
+@app.post("/request/{request_id}/approve")
+def approve_request(request_id: int, device_id: str):
+    """The giver (item owner) approves a taker's request. Verifies the caller
+    owns the item the request is on, then flips status to 'approved'."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    # Fetch the request together with the owning item's device_id
+    cur.execute("""
+        SELECT r.id, i.device_id AS owner_device_id
+        FROM requests r
+        JOIN items i ON i.id = r.item_id
+        WHERE r.id = %s
+    """, (request_id,))
+    row = cur.fetchone()
+    if not row:
+        cur.close(); conn.close()
+        raise HTTPException(status_code=404, detail="Request not found")
+    if row["owner_device_id"] != device_id:
+        cur.close(); conn.close()
+        raise HTTPException(status_code=403, detail="Not your item")
+
+    cur.execute("UPDATE requests SET status = 'approved' WHERE id = %s", (request_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"ok": True}
+
+@app.get("/my-outgoing-requests/{device_id}")
+def get_my_outgoing_requests(device_id: str):
+    """The requests THIS user made on other people's items — with status and,
+    once approved, the giver's phone. Used by the taker to detect approvals,
+    show the notification/banner, and reveal the giver's number."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT r.id, r.item_id, r.status, r.created_at,
+               i.title AS item_title, i.post_type,
+               owner.nickname AS giver_name, owner.phone AS giver_phone
+        FROM requests r
+        JOIN items i ON i.id = r.item_id
+        JOIN users owner ON owner.device_id = i.device_id
+        WHERE r.device_id = %s
+        ORDER BY r.created_at DESC
+    """, (device_id,))
+    rows = [dict(r) for r in cur.fetchall()]
+    # Only reveal the giver's phone once approved.
+    for r in rows:
+        if r.get("status") != "approved":
+            r["giver_phone"] = None
+    cur.close()
+    conn.close()
+    return rows
 
 @app.get("/my-requests/{device_id}")
 def get_my_requests(device_id: str):

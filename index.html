@@ -198,6 +198,17 @@
     }
     .requester-name { font-size:15px; font-weight:700; color:var(--dark); }
     .requester-meta { font-size:12px; color:var(--gray); }
+    .requester-approve-btn {
+      background:var(--green); color:white; border:none;
+      padding:8px 18px; border-radius:8px; font-size:14px; font-weight:700;
+      cursor:pointer; font-family:'Heebo',sans-serif; flex-shrink:0;
+    }
+    .requester-approve-btn:active { opacity:0.8; }
+    .requester-approved { font-size:13px; font-weight:700; color:var(--green); flex-shrink:0; }
+    .requester-phone {
+      font-size:15px; font-weight:700; color:var(--dark);
+      margin-top:4px; text-decoration:none;
+    }
 
     .leaflet-top.leaflet-left { top: 58px !important; }
 
@@ -313,6 +324,12 @@
     .item-popup-desc { font-size:13px; color:#444; margin-bottom:10px; line-height:1.5; }
     .item-popup-by { font-size:12px; color:var(--gray); margin-bottom:2px; }
     .item-popup-interest { font-size:12px; color:var(--gray); margin-bottom:10px; }
+    .item-popup-approved {
+      font-size:14px; font-weight:700; color:var(--green);
+      background:#eafbf0; border-radius:8px; padding:8px; margin-bottom:8px;
+      text-align:center;
+    }
+    .item-popup-approved a { color:var(--green); }
     .item-popup-btn {
       width:100%; background:var(--dark); color:white; border:none;
       padding:10px; border-radius:8px; font-size:14px; font-weight:700;
@@ -410,6 +427,10 @@
           <button type="button" class="radius-arrow" onclick="adjustSetupRadius(-1)">→</button>
         </div>
       </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">מספר טלפון *</label>
+      <input type="tel" class="form-input" id="setup-phone" placeholder="05XXXXXXXX" maxlength="10" inputmode="numeric" style="direction:ltr;"/>
     </div>
     <div class="form-group">
       <label class="form-label">אימייל (אופציונלי — לעדכונים)</label>
@@ -631,6 +652,10 @@
       </div>
     </div>
     <div class="form-group">
+      <label class="form-label">מספר טלפון *</label>
+      <input type="tel" class="form-input" id="settings-phone" placeholder="05XXXXXXXX" maxlength="10" inputmode="numeric" style="direction:ltr;"/>
+    </div>
+    <div class="form-group">
       <label class="form-label">אימייל</label>
       <input type="email" class="form-input" id="settings-email" style="direction:ltr;"/>
     </div>
@@ -801,6 +826,9 @@ function buildItemPopup(item) {
   const myRequests = JSON.parse(localStorage.getItem('my_requests') || '{}');
   const requested = myRequests[item.id];
   const isMyItem = item.device_id === deviceId;
+  // If I'm a taker whose request on this item was approved, show the giver phone.
+  const approvals = JSON.parse(localStorage.getItem('ineed_my_approvals') || '{}');
+  const approvedPhone = approvals[item.id];
   return `
     <div class="item-popup">
       <div class="item-popup-top"><span class="item-badge ${isTakePost(item) ? 'take' : 'give'}">${isTakePost(item) ? 'אני צריך' : 'אני מוסר'}</span></div>
@@ -810,6 +838,7 @@ function buildItemPopup(item) {
       ${item.description ? `<div class="item-popup-desc">${item.description}</div>` : ''}
       <div class="item-popup-by">מאת: ${item.nickname}</div>
       <div class="item-popup-interest">${item.request_count} ${interestCountLabel(item)}</div>
+      ${approvedPhone ? `<div class="item-popup-approved">אושר! טלפון: <a href="tel:${approvedPhone}" style="direction:ltr;">${approvedPhone}</a></div>` : ''}
       ${!isMyItem ? `
         <button class="item-popup-btn ${requested ? 'requested' : ''}"
           onclick="${requested ? `cancelInterest(${item.id})` : `expressInterest(${item.id})`}">
@@ -1029,14 +1058,33 @@ async function viewRequesters(itemId) {
     return;
   }
 
-  body.innerHTML = requesters.map(r => `
+  body.innerHTML = requesters.map(r => {
+    const isApproved = r.status === 'approved';
+    return `
     <div class="requester-card">
-      <div>
+      <div style="flex:1;">
         <div class="requester-name">${r.nickname}</div>
         <div class="requester-meta">${new Date(r.created_at * 1000).toLocaleDateString('he-IL')}</div>
+        ${isApproved && r.requester_phone
+          ? `<a href="tel:${r.requester_phone}" class="requester-phone" style="direction:ltr;display:inline-block;">${r.requester_phone}</a>`
+          : ''}
       </div>
-    </div>
-  `).join('');
+      ${isApproved
+        ? `<span class="requester-approved">מאושר ✓</span>`
+        : `<button class="requester-approve-btn" onclick="approveRequest(${r.id}, ${itemId})">אשר</button>`}
+    </div>`;
+  }).join('');
+}
+
+async function approveRequest(requestId, itemId) {
+  try {
+    const res = await fetch(`${API_BASE}/request/${requestId}/approve?device_id=${encodeURIComponent(deviceId)}`, { method: 'POST' });
+    if (!res.ok) { showToast('שגיאה באישור — נסה שוב'); return; }
+    showToast('הבקשה אושרה! מספר הטלפון יופיע כעת');
+    viewRequesters(itemId); // refresh the list to reveal the phone
+  } catch (e) {
+    showToast('שגיאה בחיבור — נסה שוב');
+  }
 }
 
 async function toggleItemStatus(itemId, currentStatus) {
@@ -1161,6 +1209,7 @@ function openSettings() {
     document.getElementById('settings-radius').value = currentUser.radius_km || 5;
     document.getElementById('settings-radius-display').textContent = (currentUser.radius_km || 5) + ' ק"מ';
     document.getElementById('settings-email').value = currentUser.email || '';
+    document.getElementById('settings-phone').value = currentUser.phone || '';
   }
   openPanel('settings-panel');
 }
@@ -1169,16 +1218,18 @@ async function saveSettings() {
   const nickname = document.getElementById('settings-nickname').value.trim();
   const radius = parseInt(document.getElementById('settings-radius').value);
   const email = document.getElementById('settings-email').value.trim();
+  const phone = document.getElementById('settings-phone').value.trim();
 
   if (!nickname) { showToast('נא להזין כינוי'); return; }
+  if (!/^05\d{8}$/.test(phone)) { showToast('מספר טלפון חייב להיות 10 ספרות ולהתחיל ב-05'); return; }
 
   await fetch(`${API_BASE}/user/setup`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ device_id: deviceId, nickname, radius_km: radius, email: email || null })
+    body: JSON.stringify({ device_id: deviceId, nickname, radius_km: radius, email: email || null, phone })
   });
 
-  currentUser = { ...currentUser, nickname, radius_km: radius, email };
+  currentUser = { ...currentUser, nickname, radius_km: radius, email, phone };
   localStorage.setItem('ineed_user', JSON.stringify(currentUser));
   showToast('הגדרות נשמרו');
   closePanel('settings-panel');
@@ -1223,8 +1274,11 @@ async function completeSetup() {
   const nickname = document.getElementById('setup-nickname').value.trim();
   const radius = parseInt(document.getElementById('setup-radius').value);
   const email = document.getElementById('setup-email').value.trim();
+  const phone = document.getElementById('setup-phone').value.trim();
 
   if (!nickname) { showToast('נא להזין כינוי'); return; }
+  // Phone: exactly 10 digits, must start with 05.
+  if (!/^05\d{8}$/.test(phone)) { showToast('מספר טלפון חייב להיות 10 ספרות ולהתחיל ב-05'); return; }
 
   const btn = document.querySelector('#setup-screen .btn-primary');
   btn.textContent = 'טוען...';
@@ -1237,14 +1291,14 @@ async function completeSetup() {
     const res = await fetch(`${API_BASE}/user/setup`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ device_id: deviceId, nickname, radius_km: radius, email: email || null }),
+      body: JSON.stringify({ device_id: deviceId, nickname, radius_km: radius, email: email || null, phone }),
       signal: controller.signal
     });
     clearTimeout(timeout);
 
     const data = await res.json();
     if (data.ok) {
-      currentUser = { device_id: deviceId, nickname, radius_km: radius, email };
+      currentUser = { device_id: deviceId, nickname, radius_km: radius, email, phone };
       localStorage.setItem('ineed_user', JSON.stringify(currentUser));
       document.getElementById('setup-screen').style.display = 'none';
       startApp();
@@ -1605,6 +1659,61 @@ async function checkForNewInterest() {
   }
 }
 
+// ── Taker side: detect when a giver approves my request ──
+async function checkForApprovals() {
+  try {
+    const res = await fetch(`${API_BASE}/my-outgoing-requests/${deviceId}`);
+    if (!res.ok) return;
+    const rows = await res.json();
+
+    // Only approved requests are interesting here.
+    const approved = rows.filter(r => r.status === 'approved');
+
+    const storedRaw = localStorage.getItem('ineed_notified_approval_ids');
+    const isFirstRun = storedRaw === null;
+    const notifiedSet = new Set(JSON.parse(storedRaw || '[]'));
+
+    // Cache giver phone by item_id so the pin popup can reveal it (always, even first run).
+    const approvalsMap = JSON.parse(localStorage.getItem('ineed_my_approvals') || '{}');
+    approved.forEach(r => { if (r.giver_phone) approvalsMap[r.item_id] = r.giver_phone; });
+    localStorage.setItem('ineed_my_approvals', JSON.stringify(approvalsMap));
+
+    if (isFirstRun) {
+      // Baseline so pre-existing approvals don't all fire at once.
+      approved.forEach(r => notifiedSet.add(r.id));
+      localStorage.setItem('ineed_notified_approval_ids', JSON.stringify(Array.from(notifiedSet)));
+      return;
+    }
+
+    const newlyApproved = approved.filter(r => !notifiedSet.has(r.id));
+    if (newlyApproved.length === 0) return;
+
+    newlyApproved.forEach(r => notifiedSet.add(r.id));
+    localStorage.setItem('ineed_notified_approval_ids', JSON.stringify(Array.from(notifiedSet)));
+
+    const single = newlyApproved[0];
+    const message = newlyApproved.length === 1
+      ? `${single.giver_name} אישר את הבקשה שלך ל"${single.item_title}"`
+      : `${newlyApproved.length} מהבקשות שלך אושרו`;
+    showInterestBanner(message);
+
+    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
+      try {
+        await window.Capacitor.Plugins.LocalNotifications.schedule({
+          notifications: [{
+            id: Math.floor((Date.now() + 1) % 2147483647),
+            title: 'הבקשה שלך אושרה!',
+            body: message,
+            schedule: { at: new Date(Date.now() + 1000) }
+          }]
+        });
+      } catch(e) {}
+    }
+  } catch(e) {
+    console.log('Approval check failed:', e);
+  }
+}
+
 function startApp() {
   // Remove loading screen immediately - don't wait for data
   const loadingEl = document.getElementById('loading');
@@ -1618,6 +1727,8 @@ function startApp() {
   setUnreadDot(localStorage.getItem('ineed_has_unread_interest') === '1');
   checkForNewInterest();
   setInterval(checkForNewInterest, 20000);
+  checkForApprovals();
+  setInterval(checkForApprovals, 20000);
 }
 
 async function syncMyRequests() {
