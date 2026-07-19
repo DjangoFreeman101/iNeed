@@ -97,6 +97,13 @@
     .history-date { font-size:12px; color:var(--gray); }
     .history-title { font-size:16px; font-weight:700; color:var(--dark); margin-top:6px; }
 
+    /* ── Privacy policy ── */
+    .privacy-body { line-height:1.7; color:#333; font-size:14px; }
+    .privacy-body h3 { font-size:16px; color:var(--dark); margin:20px 0 6px; }
+    .privacy-body ul { padding-inline-start:20px; margin:6px 0; }
+    .privacy-body li { margin-bottom:5px; }
+    .privacy-updated { color:var(--gray); font-size:13px; margin-bottom:16px; }
+
     /* ── My requests list ── */
     .request-card {
       background:white; border-radius:12px; margin-bottom:10px;
@@ -522,7 +529,7 @@
   <div id="menu-header">iNeed</div>
   <div class="menu-item" onclick="openSettings()">הגדרות</div>
   <div class="menu-item" onclick="openHistory()">היסטוריה</div>
-  <div class="menu-item" onclick="window.open('https://ineed-0otk.onrender.com/privacy', '_blank')">מדיניות פרטיות</div>
+  <div class="menu-item" onclick="openPrivacy()">מדיניות פרטיות</div>
   <div class="menu-item menu-item-danger" onclick="deleteAccount()">מחק חשבון</div>
 </div>
 
@@ -635,6 +642,55 @@
   </div>
   <div class="panel-body" id="history-body">
     <p style="color:var(--gray); text-align:center;">טוען...</p>
+  </div>
+</div>
+
+<!-- Privacy policy panel -->
+<div id="privacy-panel" class="panel">
+  <div class="panel-header">
+    <button class="panel-back" onclick="closePanel('privacy-panel')">←</button>
+    <span class="panel-title">מדיניות פרטיות</span>
+  </div>
+  <div class="panel-body privacy-body">
+    <p class="privacy-updated">עודכן לאחרונה: יולי 2026</p>
+    <p>אפליקציית iNeed מאפשרת למשתמשים לפרסם פריטים למסירה או לבקש פריטים באזור מגוריהם, ולראות אותם על גבי מפה. מדיניות זו מסבירה איזה מידע אנו אוספים, כיצד אנו משתמשים בו, ומהן זכויותיך.</p>
+
+    <h3>המידע שאנו אוספים</h3>
+    <ul>
+      <li><strong>מזהה מכשיר:</strong> מזהה ייחודי לזיהוי החשבון ללא שם משתמש וסיסמה.</li>
+      <li><strong>כינוי:</strong> השם שבחרת להצגה למשתמשים אחרים.</li>
+      <li><strong>מספר טלפון:</strong> לצורך יצירת קשר בין נותן למקבל. נחשף לצד השני אך ורק לאחר אישור בקשה, ואינו מוצג בפומבי על המפה.</li>
+      <li><strong>דוא"ל (אופציונלי):</strong> אם סופק, לצורך עדכונים.</li>
+      <li><strong>מיקום:</strong> להצגת פריטים בקרבתך ולמיקום פריטים שאתה מפרסם. ניתן להזין כתובת ידנית במקום מיקום נוכחי.</li>
+      <li><strong>תמונות:</strong> תמונות שאתה מעלה עבור פריטים.</li>
+      <li><strong>פעילות:</strong> פריטים שפרסמת, בקשות שהבעת בהן עניין, אישורים, ופריטים שסומנו כנמסרו/נלקחו.</li>
+    </ul>
+
+    <h3>כיצד אנו משתמשים במידע</h3>
+    <ul>
+      <li>הצגת פריטים רלוונטיים בקרבתך על המפה.</li>
+      <li>יצירת קשר בין נותן למקבל לאחר אישור בקשה.</li>
+      <li>שליחת התראות על עניין בפריטים שלך ועל אישור בקשות.</li>
+      <li>תפעול ושיפור האפליקציה.</li>
+    </ul>
+
+    <h3>שיתוף עם צדדים שלישיים</h3>
+    <p>איננו מוכרים את המידע שלך. אנו משתמשים בספקי שירות לצורך תפעול: Cloudinary (אחסון תמונות), OpenStreetMap (מפה ואיתור כתובות), ו-Render (אירוח השרת). מספר הטלפון והכינוי שלך משותפים עם משתמש אחר רק כאשר בקשה מאושרת, לצורך תיאום המסירה.</p>
+
+    <h3>שמירה ומחיקה</h3>
+    <p>אנו שומרים את המידע כל עוד החשבון פעיל. ניתן למחוק את החשבון בכל עת דרך "מחק חשבון" בתפריט. מחיקה מסירה לצמיתות את פרטי המשתמש, הפריטים והבקשות ממסד הנתונים.</p>
+
+    <h3>אבטחה</h3>
+    <p>אנו נוקטים באמצעים סבירים להגנה על המידע. עם זאת, אף שיטה אינה מאובטחת ב-100% ואיננו יכולים להבטיח אבטחה מוחלטת.</p>
+
+    <h3>ילדים</h3>
+    <p>האפליקציה אינה מיועדת לילדים מתחת לגיל 13, ואיננו אוספים ביודעין מידע מהם.</p>
+
+    <h3>שינויים</h3>
+    <p>אנו עשויים לעדכן מדיניות זו מעת לעת. עדכונים יפורסמו במסך זה.</p>
+
+    <h3>יצירת קשר</h3>
+    <p style="direction:ltr; text-align:right;">support@ineed.app</p>
   </div>
 </div>
 
@@ -1206,6 +1262,13 @@ async function takeRequest(requestId) {
     showToast('שגיאה בחיבור');
     openMyRequests();
   }
+}
+
+// ── Privacy policy ─────────────────────────────────────
+function openPrivacy() {
+  document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
+  closeMenu();
+  openPanel('privacy-panel');
 }
 
 // ── History ────────────────────────────────────────────
