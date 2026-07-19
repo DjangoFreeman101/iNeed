@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-import psycopg2, psycopg2.extras, time, os, cloudinary, cloudinary.uploader
+import psycopg2, psycopg2.extras, time, os, cloudinary, cloudinary.uploader, requests
 
 app = FastAPI()
 
@@ -420,15 +420,90 @@ class ImageReport(BaseModel):
 @app.post("/report-image")
 def report_image(report: ImageReport):
     conn = get_db()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    # Store the report
     cur.execute("""
         INSERT INTO image_reports (item_id, reporter_device_id, reason, created_at)
         VALUES (%s, %s, %s, %s)
     """, (report.item_id, report.reporter_device_id, report.reason, time.time()))
     conn.commit()
+
+    # Pull the item's details for the email
+    cur.execute("""
+        SELECT i.id, i.title, i.description, i.category, i.post_type, i.image_url,
+               i.lat, i.lon, u.nickname, u.phone
+        FROM items i
+        JOIN users u ON u.device_id = i.device_id
+        WHERE i.id = %s
+    """, (report.item_id,))
+    item = cur.fetchone()
     cur.close()
     conn.close()
+
+    # Send the moderation email (best-effort; never blocks the user's report)
+    try:
+        send_report_email(dict(item) if item else None, report)
+    except Exception as e:
+        print("Report email failed:", e)
+
     return {"ok": True}
+
+
+def send_report_email(item, report):
+    """Email a moderation report with the listing details and image embedded.
+    Uses Resend's HTTP API. Requires RESEND_API_KEY and REPORT_EMAIL_TO env vars;
+    if either is missing, silently skips (the report is still stored in the DB)."""
+    api_key = os.environ.get("RESEND_API_KEY", "")
+    to_addr = os.environ.get("REPORT_EMAIL_TO", "")
+    from_addr = os.environ.get("REPORT_EMAIL_FROM", "onboarding@resend.dev")
+    if not api_key or not to_addr:
+        print("Report email skipped: RESEND_API_KEY or REPORT_EMAIL_TO not set")
+        return
+
+    when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    if item:
+        img_html = f'<img src="{item.get("image_url")}" style="max-width:400px;border-radius:8px;"/>' if item.get("image_url") else "<i>(no image on this listing)</i>"
+        maps = f'https://www.openstreetmap.org/?mlat={item.get("lat")}&mlon={item.get("lon")}#map=17/{item.get("lat")}/{item.get("lon")}' if item.get("lat") else ""
+        body = f"""
+        <h2>Image report — iNeed</h2>
+        <p><b>Reported at:</b> {when}</p>
+        <p><b>Reason:</b> {report.reason or '(none given)'}</p>
+        <p><b>Reporter device:</b> {report.reporter_device_id}</p>
+        <hr/>
+        <h3>Listing details</h3>
+        <p><b>Item ID:</b> {item.get('id')}</p>
+        <p><b>Title:</b> {item.get('title')}</p>
+        <p><b>Description:</b> {item.get('description') or '(none)'}</p>
+        <p><b>Category:</b> {item.get('category')}</p>
+        <p><b>Type:</b> {item.get('post_type')}</p>
+        <p><b>Posted by:</b> {item.get('nickname')} ({item.get('phone') or 'no phone'})</p>
+        {f'<p><b>Location:</b> <a href="{maps}">{item.get("lat")}, {item.get("lon")}</a></p>' if maps else ''}
+        <h3>Reported image</h3>
+        {img_html}
+        """
+    else:
+        body = f"""
+        <h2>Image report — iNeed</h2>
+        <p><b>Reported at:</b> {when}</p>
+        <p><b>Reason:</b> {report.reason or '(none given)'}</p>
+        <p><b>Reporter device:</b> {report.reporter_device_id}</p>
+        <p style="color:#c00;"><b>Note:</b> item #{report.item_id} was not found (may have been deleted).</p>
+        """
+
+    resp = requests.post(
+        "https://api.resend.com/emails",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={
+            "from": from_addr,
+            "to": [to_addr],
+            "subject": f"[iNeed] Image reported — item #{report.item_id}",
+            "html": body,
+        },
+        timeout=10,
+    )
+    if resp.status_code >= 300:
+        print("Resend error:", resp.status_code, resp.text)
 
 # ── Requests ─────────────────────────────────────────────
 
