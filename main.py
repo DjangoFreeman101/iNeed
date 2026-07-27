@@ -160,6 +160,10 @@ def service_worker():
 def privacy():
     return FileResponse("privacy_policy.html", media_type="text/html")
 
+@app.get("/delete-account")
+def delete_account_page():
+    return FileResponse("delete-account.html", media_type="text/html")
+
 # ── Users ────────────────────────────────────────────────
 
 @app.post("/user/setup")
