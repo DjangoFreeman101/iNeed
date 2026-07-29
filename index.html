@@ -592,7 +592,7 @@
   <!-- Login -->
   <div class="auth-step" id="auth-step-login">
     <h1>התחברות</h1>
-    <input type="email" class="form-input" id="login-email" placeholder="your@email.com" style="direction:ltr;"/>
+    <input type="text" class="form-input" id="login-identifier" placeholder="אימייל או מספר טלפון" style="direction:ltr;"/>
     <input type="password" class="form-input" id="login-password" placeholder="סיסמה" style="direction:ltr;"/>
     <div class="auth-error" id="login-error"></div>
     <button class="btn-primary" onclick="doLogin()">התחבר/י ←</button>
@@ -1948,20 +1948,20 @@ async function completeSignup() {
 
 // ── Login ────────────────────────────────────────────────
 async function doLogin() {
-  const email = document.getElementById('login-email').value.trim();
+  const identifier = document.getElementById('login-identifier').value.trim();
   const password = document.getElementById('login-password').value;
   authError('login-error', '');
-  if (!email || !password) { authError('login-error', 'נא למלא אימייל וסיסמה'); return; }
+  if (!identifier || !password) { authError('login-error', 'נא למלא אימייל/טלפון וסיסמה'); return; }
 
   const btn = document.querySelector('#auth-step-login .btn-primary');
   btn.disabled = true; btn.textContent = 'מתחבר...';
   try {
     const res = await fetch(`${API_BASE}/login`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ identifier, password })
     });
     const data = await res.json();
-    if (!res.ok || !data.ok) { authError('login-error', 'אימייל או סיסמה שגויים'); return; }
+    if (!res.ok || !data.ok) { authError('login-error', 'פרטי ההתחברות שגויים'); return; }
 
     // Adopt this account's original device_id on this physical device, so
     // every future request from here acts as that account.

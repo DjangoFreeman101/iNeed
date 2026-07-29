@@ -865,19 +865,26 @@ def signup(body: SignupBody):
 # ── Auth: login / forgot password ────────────────────────
 
 class LoginBody(BaseModel):
-    email: str
+    identifier: str  # email OR phone number
     password: str
 
 @app.post("/login")
 def login(body: LoginBody):
-    email = (body.email or "").strip().lower()
+    identifier = (body.identifier or "").strip()
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT device_id, password_hash FROM users WHERE LOWER(email) = %s", (email,))
+
+    # Digits-only and 10 chars starting with 05 -> treat as a phone number.
+    # Anything else -> treat as an email (case-insensitive).
+    if identifier.isdigit() and len(identifier) == 10 and identifier.startswith("05"):
+        cur.execute("SELECT device_id, password_hash FROM users WHERE phone = %s", (identifier,))
+    else:
+        cur.execute("SELECT device_id, password_hash FROM users WHERE LOWER(email) = %s", (identifier.lower(),))
+
     row = cur.fetchone()
     cur.close(); conn.close()
     if not row or not row["password_hash"] or not check_password(body.password, row["password_hash"]):
-        raise HTTPException(status_code=400, detail="Invalid email or password")
+        raise HTTPException(status_code=400, detail="Invalid credentials")
     return {"ok": True, "device_id": row["device_id"]}
 
 class ForgotPasswordBody(BaseModel):
