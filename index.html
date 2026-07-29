@@ -498,7 +498,7 @@
   <div style="width:100%; max-width:340px;">
     <div class="form-group">
       <label class="form-label">כינוי (שם תצוגה) *</label>
-      <input type="text" class="form-input" id="setup-nickname" placeholder="למשל: יוגב מראשון לציון" maxlength="30"/>
+      <input type="text" class="form-input" id="setup-nickname" placeholder="למשל: מייקל סקוט הבוס הטוב בעולם" maxlength="30"/>
     </div>
     <div class="form-group">
       <label class="form-label">רדיוס חיפוש *</label>
@@ -738,7 +738,7 @@
     <p>אנו עשויים לעדכן מדיניות זו מעת לעת. עדכונים יפורסמו במסך זה.</p>
 
     <h3>יצירת קשר</h3>
-    <p style="direction:ltr; text-align:right;">support@ineed.app</p>
+    <p style="direction:ltr; text-align:right;">ybg1998@gmail.com</p>
   </div>
 </div>
 
@@ -1666,11 +1666,19 @@ async function saveSettings() {
   if (!nickname) { showToast('נא להזין כינוי'); return; }
   if (!/^05\d{8}$/.test(phone)) { showToast('מספר טלפון חייב להיות 10 ספרות ולהתחיל ב-05'); return; }
 
-  await fetch(`${API_BASE}/user/setup`, {
+  const res = await fetch(`${API_BASE}/user/setup`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ device_id: deviceId, nickname, radius_km: radius, email: email || null, phone })
   });
+  const data = await res.json();
+
+  if (!res.ok || !data.ok) {
+    if (data.detail === 'Phone number already registered') showToast('מספר הטלפון הזה כבר רשום במערכת');
+    else if (data.detail === 'Username already taken') showToast('הכינוי הזה כבר תפוס — נסה כינוי אחר');
+    else showToast('שגיאה — נסה שוב');
+    return;
+  }
 
   currentUser = { ...currentUser, nickname, radius_km: radius, email, phone };
   localStorage.setItem('ineed_user', JSON.stringify(currentUser));
@@ -1740,11 +1748,15 @@ async function completeSetup() {
     clearTimeout(timeout);
 
     const data = await res.json();
-    if (data.ok) {
+    if (res.ok && data.ok) {
       currentUser = { device_id: deviceId, nickname, radius_km: radius, email, phone };
       localStorage.setItem('ineed_user', JSON.stringify(currentUser));
       document.getElementById('setup-screen').style.display = 'none';
       startApp();
+    } else if (data.detail === 'Phone number already registered') {
+      showToast('מספר הטלפון הזה כבר רשום במערכת');
+    } else if (data.detail === 'Username already taken') {
+      showToast('הכינוי הזה כבר תפוס — נסה כינוי אחר');
     } else {
       showToast('שגיאה — נסה שוב');
     }

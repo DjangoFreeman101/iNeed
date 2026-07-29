@@ -322,6 +322,24 @@ def setup_user(user: UserSetup):
 
     conn = get_db()
     cur = conn.cursor()
+
+    # Reject if this phone or nickname already belongs to a DIFFERENT device.
+    # (Excluding this device_id lets an existing user re-submit their own
+    # unchanged info without tripping the check on themselves.)
+    cur.execute("SELECT device_id FROM users WHERE phone = %s AND device_id != %s", (phone, user.device_id))
+    if cur.fetchone():
+        cur.close(); conn.close()
+        raise HTTPException(status_code=400, detail="Phone number already registered")
+
+    nickname_norm = re.sub(r"\s+", " ", user.nickname.strip()).lower()
+    cur.execute("""
+        SELECT device_id FROM users
+        WHERE LOWER(TRIM(REGEXP_REPLACE(nickname, '\\s+', ' ', 'g'))) = %s AND device_id != %s
+    """, (nickname_norm, user.device_id))
+    if cur.fetchone():
+        cur.close(); conn.close()
+        raise HTTPException(status_code=400, detail="Username already taken")
+
     now = time.time()
     cur.execute("""
         INSERT INTO users (device_id, nickname, radius_km, email, phone, created_at, last_seen)
