@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-import psycopg2, psycopg2.extras, time, os, cloudinary, cloudinary.uploader, requests
+import psycopg2, psycopg2.extras, time, os, cloudinary, cloudinary.uploader, requests, re, math
 
 app = FastAPI()
 
@@ -109,6 +109,18 @@ def init_db():
         ALTER TABLE items ADD COLUMN IF NOT EXISTS exchanged_at DOUBLE PRECISION
     """)
 
+    # Give/take matches — a give-item and a take-item that matched on
+    # category + normalized title, within each other's radius. Notified once.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS matches (
+            id SERIAL PRIMARY KEY,
+            give_item_id INTEGER NOT NULL REFERENCES items(id),
+            take_item_id INTEGER NOT NULL REFERENCES items(id),
+            created_at DOUBLE PRECISION NOT NULL,
+            UNIQUE(give_item_id, take_item_id)
+        )
+    """)
+
     conn.commit()
     cur.close()
     conn.close()
@@ -136,6 +148,141 @@ class ItemRequest(BaseModel):
 class ItemStatusUpdate(BaseModel):
     device_id: str
     status: str  # 'available' or 'taken'
+
+# ── Give/Take matching ──────────────────────────────────
+# A "match" is a give-item and a take-item where: same category, same item
+# name after normalizing (strip redundant whitespace + lowercase), and each
+# item falls within the OTHER item's owner's radius (mutual). Checked whenever
+# an item is created/edited, or a user's radius changes. Each pair is only
+# ever notified once (enforced by the UNIQUE constraint on matches).
+
+def normalize_title(s):
+    return re.sub(r"\s+", " ", (s or "").strip()).lower()
+
+def haversine_km(lat1, lon1, lat2, lon2):
+    R = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
+    return 2 * R * math.asin(math.sqrt(a))
+
+def check_and_create_matches(item_id):
+    """Given an item that just changed, look for opposite-type items that now
+    match it, and record any new mutual matches. Safe to call repeatedly —
+    already-matched pairs are skipped via the UNIQUE constraint."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    cur.execute("""
+        SELECT i.id, i.post_type, i.title, i.category, i.lat, i.lon, i.status,
+               i.device_id, u.radius_km
+        FROM items i JOIN users u ON u.device_id = i.device_id
+        WHERE i.id = %s
+    """, (item_id,))
+    item = cur.fetchone()
+    if not item or item["status"] != "available":
+        cur.close(); conn.close()
+        return []
+
+    other_type = "take" if item["post_type"] == "give" else "give"
+    norm_name = normalize_title(item["title"])
+
+    cur.execute("""
+        SELECT i.id, i.lat, i.lon, i.device_id, u.radius_km
+        FROM items i JOIN users u ON u.device_id = i.device_id
+        WHERE i.post_type = %s
+          AND i.status = 'available'
+          AND i.category = %s
+          AND i.device_id != %s
+    """, (other_type, item["category"], item["device_id"]))
+    candidates = cur.fetchall()
+
+    new_matches = []
+    for c in candidates:
+        # Compare normalized in Python (accounts for extra/irregular whitespace).
+        cur.execute("SELECT title FROM items WHERE id = %s", (c["id"],))
+        cand_title = cur.fetchone()["title"]
+        if normalize_title(cand_title) != norm_name:
+            continue
+
+        dist = haversine_km(item["lat"], item["lon"], c["lat"], c["lon"])
+        if dist > item["radius_km"] or dist > c["radius_km"]:
+            continue  # must be within BOTH radii
+
+        give_id = item["id"] if item["post_type"] == "give" else c["id"]
+        take_id = c["id"] if item["post_type"] == "give" else item["id"]
+
+        try:
+            cur.execute("""
+                INSERT INTO matches (give_item_id, take_item_id, created_at)
+                VALUES (%s, %s, %s)
+            """, (give_id, take_id, time.time()))
+            conn.commit()
+            new_matches.append({"give_item_id": give_id, "take_item_id": take_id})
+        except psycopg2.errors.UniqueViolation:
+            conn.rollback()  # already matched before — skip silently
+
+    cur.close()
+    conn.close()
+    return new_matches
+
+def recheck_matches_for_user(device_id):
+    """Called when a user's radius changes — re-checks every one of their
+    active items against the world, since a wider/narrower radius can turn
+    existing items into new matches."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM items WHERE device_id = %s AND status = 'available'", (device_id,))
+    item_ids = [r[0] for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    for iid in item_ids:
+        check_and_create_matches(iid)
+
+@app.get("/my-matches/{device_id}")
+def get_my_matches(device_id: str):
+    """All matches involving items owned by this device — each row describes
+    the OTHER side's item + owner, so the client can drop a pin/banner for it."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT m.id AS match_id, m.created_at,
+               mine.id AS my_item_id, mine.title AS my_item_title, mine.post_type AS my_post_type,
+               other.id AS other_item_id, other.title AS other_item_title,
+               other.category AS other_item_category, other.description AS other_item_description,
+               other.image_url AS other_item_image_url, other.lat AS other_item_lat,
+               other.lon AS other_item_lon, other.post_type AS other_post_type,
+               other.device_id AS other_device_id,
+               ou.nickname AS other_nickname
+        FROM matches m
+        JOIN items mine ON mine.id = m.give_item_id
+        JOIN items other ON other.id = m.take_item_id
+        JOIN users ou ON ou.device_id = other.device_id
+        WHERE mine.device_id = %s
+
+        UNION ALL
+
+        SELECT m.id AS match_id, m.created_at,
+               mine.id AS my_item_id, mine.title AS my_item_title, mine.post_type AS my_post_type,
+               other.id AS other_item_id, other.title AS other_item_title,
+               other.category AS other_item_category, other.description AS other_item_description,
+               other.image_url AS other_item_image_url, other.lat AS other_item_lat,
+               other.lon AS other_item_lon, other.post_type AS other_post_type,
+               other.device_id AS other_device_id,
+               ou.nickname AS other_nickname
+        FROM matches m
+        JOIN items mine ON mine.id = m.take_item_id
+        JOIN items other ON other.id = m.give_item_id
+        JOIN users ou ON ou.device_id = other.device_id
+        WHERE mine.device_id = %s
+
+        ORDER BY created_at DESC
+    """, (device_id, device_id))
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return rows
 
 # ── Static files ─────────────────────────────────────────
 
@@ -208,6 +355,7 @@ def update_settings(settings: UserSettings):
     conn = get_db()
     cur = conn.cursor()
     now = time.time()
+    radius_changed = bool(settings.radius_km)
     if settings.radius_km:
         cur.execute("UPDATE users SET radius_km = %s, last_seen = %s WHERE device_id = %s",
                     (settings.radius_km, now, settings.device_id))
@@ -217,6 +365,8 @@ def update_settings(settings: UserSettings):
     conn.commit()
     cur.close()
     conn.close()
+    if radius_changed:
+        recheck_matches_for_user(settings.device_id)
     return {"ok": True}
 
 # ── Items ────────────────────────────────────────────────
@@ -249,6 +399,7 @@ async def post_item(
     conn.commit()
     cur.close()
     conn.close()
+    check_and_create_matches(item_id)
     return {"ok": True, "item_id": item_id}
 
 @app.get("/items")
@@ -360,6 +511,7 @@ async def edit_item(
     conn.commit()
     cur.close()
     conn.close()
+    check_and_create_matches(item_id)
     return {"ok": True}
 
 @app.patch("/item/{item_id}/status")

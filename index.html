@@ -441,6 +441,35 @@
     }
     #upload-overlay-text { margin-top:16px; font-size:16px; font-weight:700; }
     @keyframes upload-spin { to { transform: rotate(360deg); } }
+
+    /* ── Report modal ── */
+    #report-overlay {
+      display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55);
+      z-index:7000; align-items:center; justify-content:center; padding:20px;
+    }
+    #report-overlay.show { display:flex; }
+    #report-modal {
+      background:white; border-radius:16px; padding:22px; width:100%; max-width:360px;
+      max-height:85vh; overflow-y:auto;
+    }
+    #report-title { font-size:17px; font-weight:800; color:var(--dark); margin-bottom:16px; }
+    .report-option {
+      display:flex; align-items:center; gap:10px; padding:9px 0;
+      font-size:15px; color:#333; cursor:pointer;
+    }
+    .report-option input { width:18px; height:18px; flex-shrink:0; }
+    #report-other-text {
+      width:100%; box-sizing:border-box; margin-top:8px; padding:10px;
+      border:1px solid #ddd; border-radius:8px; font-family:'Heebo',sans-serif;
+      font-size:14px; min-height:70px; resize:vertical;
+    }
+    #report-actions { display:flex; gap:10px; margin-top:18px; }
+    #report-actions button {
+      flex:1; padding:11px; border:none; border-radius:8px; font-size:15px;
+      font-weight:700; cursor:pointer; font-family:'Heebo',sans-serif;
+    }
+    #report-cancel { background:#f0f0f0; color:var(--dark); }
+    #report-send { background:var(--accent); color:white; }
   </style>
 </head>
 <body>
@@ -521,6 +550,25 @@
 <div id="upload-overlay">
   <div id="upload-spinner"></div>
   <div id="upload-overlay-text">מעלה...</div>
+</div>
+
+<!-- Report reasons modal -->
+<div id="report-overlay" onclick="if(event.target===this) closeReportModal()">
+  <div id="report-modal">
+    <div id="report-title">מה לא בסדר בתמונה הזו, לדעתך?</div>
+    <label class="report-option"><input type="checkbox" value="תוכן פוגעני או לא הולם"/> תוכן פוגעני או לא הולם</label>
+    <label class="report-option"><input type="checkbox" value="תוכן מיני"/> תוכן מיני</label>
+    <label class="report-option"><input type="checkbox" value="אלימות"/> אלימות</label>
+    <label class="report-option"><input type="checkbox" value="ספאם או הונאה"/> ספאם או הונאה</label>
+    <label class="report-option"><input type="checkbox" value="התמונה אינה קשורה לפריט"/> התמונה אינה קשורה לפריט</label>
+    <label class="report-option"><input type="checkbox" value="מידע מטעה"/> מידע מטעה</label>
+    <label class="report-option"><input type="checkbox" id="report-other-check" value="אחר" onchange="toggleReportOther()"/> אחר</label>
+    <textarea id="report-other-text" placeholder="פרט/י..." style="display:none;"></textarea>
+    <div id="report-actions">
+      <button id="report-cancel" onclick="closeReportModal()">ביטול</button>
+      <button id="report-send" onclick="submitReport()">שלח דיווח</button>
+    </div>
+  </div>
 </div>
 
 <!-- Menu -->
@@ -1089,14 +1137,58 @@ async function cancelInterest(itemId) {
 }
 
 // ── Report image ───────────────────────────────────────
-async function reportImage(itemId) {
-  await fetch(`${API_BASE}/report-image`, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ item_id: itemId, reporter_device_id: deviceId, reason: 'user report' })
-  });
-  showToast('הדיווח נשלח. תודה!');
+let reportingItemId = null;
+
+function reportImage(itemId) {
+  reportingItemId = itemId;
+  // Reset the form each time it opens
+  document.querySelectorAll('#report-modal input[type=checkbox]').forEach(cb => cb.checked = false);
+  const other = document.getElementById('report-other-text');
+  other.value = '';
+  other.style.display = 'none';
   map.closePopup();
+  document.getElementById('report-overlay').classList.add('show');
+}
+
+function closeReportModal() {
+  document.getElementById('report-overlay').classList.remove('show');
+  reportingItemId = null;
+}
+
+function toggleReportOther() {
+  const checked = document.getElementById('report-other-check').checked;
+  document.getElementById('report-other-text').style.display = checked ? 'block' : 'none';
+}
+
+async function submitReport() {
+  if (reportingItemId == null) return;
+  // Collect all ticked reasons
+  const reasons = [];
+  document.querySelectorAll('#report-modal input[type=checkbox]:checked').forEach(cb => {
+    if (cb.id === 'report-other-check') {
+      const txt = document.getElementById('report-other-text').value.trim();
+      reasons.push(txt ? `אחר: ${txt}` : 'אחר');
+    } else {
+      reasons.push(cb.value);
+    }
+  });
+
+  if (reasons.length === 0) { showToast('נא לבחור לפחות סיבה אחת'); return; }
+
+  const reason = reasons.join('; ');
+  const itemId = reportingItemId;
+  closeReportModal();
+
+  try {
+    await fetch(`${API_BASE}/report-image`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ item_id: itemId, reporter_device_id: deviceId, reason })
+    });
+    showToast('הדיווח נשלח. תודה!');
+  } catch (e) {
+    showToast('שגיאה בשליחת הדיווח');
+  }
 }
 
 // ── Post item ──────────────────────────────────────────
@@ -1919,10 +2011,12 @@ let interestBannerTimeout = null;
 let interestBannerHideTimeout = null;
 let interestBannerTarget = 'my-items'; // which panel a tap should open
 let interestBannerItemId = null; // specific item row to expand (my-requests only)
+let interestBannerMatchItem = null; // the matched item to fly to (target === 'map-pin')
 
-function showInterestBanner(message, target, itemId) {
+function showInterestBanner(message, target, itemId, matchItem) {
   interestBannerTarget = target || 'my-items';
   interestBannerItemId = (itemId != null) ? itemId : null;
+  interestBannerMatchItem = matchItem || null;
   const banner = document.getElementById('interest-banner');
   clearTimeout(interestBannerTimeout);
   clearTimeout(interestBannerHideTimeout);
@@ -1952,9 +2046,37 @@ function dismissInterestBanner(openItems) {
   }, 400); // slightly longer than the 0.35s transition
 
   if (openItems) {
-    if (interestBannerTarget === 'my-requests') openMyRequests(interestBannerItemId);
+    if (interestBannerTarget === 'map-pin') goToItemPin(interestBannerMatchItem);
+    else if (interestBannerTarget === 'my-requests') openMyRequests(interestBannerItemId);
     else openMyItems();
   }
+}
+
+// Fly to a matched item's pin and open its popup, exactly as if the pin
+// itself had been tapped — even if it isn't currently loaded on the map.
+function goToItemPin(item) {
+  if (!item) return;
+
+  const idx = itemsData.findIndex(x => x.id === item.id);
+  if (idx >= 0) itemsData[idx] = { ...itemsData[idx], ...item };
+  else itemsData.push(item);
+
+  const openPopupNow = () => {
+    let marker = itemMarkers[item.id];
+    if (!marker) {
+      const popupHTML = buildItemPopup(item);
+      marker = L.marker([item.lat, item.lon], { icon: makeItemIcon(item.category) })
+        .bindPopup(popupHTML, { maxWidth: 260 });
+      itemMarkers[item.id] = marker;
+      clusterGroup.addLayer(marker);
+    } else {
+      marker.setPopupContent(buildItemPopup(item));
+    }
+    marker.openPopup();
+  };
+
+  map.once('moveend', () => setTimeout(openPopupNow, 150));
+  map.flyTo([item.lat, item.lon], 16);
 }
 
 async function checkForNewInterest() {
@@ -2014,6 +2136,67 @@ async function checkForNewInterest() {
     }
   } catch(e) {
     console.log('Interest check failed:', e);
+  }
+}
+
+// ── Give/take matches: notify both sides once, link to the other pin ──
+async function checkForMatches() {
+  try {
+    const res = await fetch(`${API_BASE}/my-matches/${deviceId}`);
+    if (!res.ok) return;
+    const rows = await res.json();
+
+    const storedRaw = localStorage.getItem('ineed_notified_match_ids');
+    const isFirstRun = storedRaw === null;
+    const notifiedSet = new Set(JSON.parse(storedRaw || '[]'));
+
+    if (isFirstRun) {
+      // Baseline so pre-existing matches don't all fire at once.
+      rows.forEach(r => notifiedSet.add(r.match_id));
+      localStorage.setItem('ineed_notified_match_ids', JSON.stringify(Array.from(notifiedSet)));
+      return;
+    }
+
+    const newRows = rows.filter(r => !notifiedSet.has(r.match_id));
+    if (newRows.length === 0) return;
+    newRows.forEach(r => notifiedSet.add(r.match_id));
+    localStorage.setItem('ineed_notified_match_ids', JSON.stringify(Array.from(notifiedSet)));
+
+    const single = newRows[0];
+    const otherItem = {
+      id: single.other_item_id,
+      title: single.other_item_title,
+      category: single.other_item_category,
+      description: single.other_item_description,
+      image_url: single.other_item_image_url,
+      lat: single.other_item_lat,
+      lon: single.other_item_lon,
+      post_type: single.other_post_type,
+      device_id: single.other_device_id,
+      nickname: single.other_nickname,
+      request_count: 0
+    };
+
+    const message = newRows.length === 1
+      ? `נמצאה התאמה! ${single.other_nickname} — "${single.my_item_title}"`
+      : `נמצאו ${newRows.length} התאמות חדשות`;
+
+    showInterestBanner(message, 'map-pin', null, newRows.length === 1 ? otherItem : null);
+
+    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
+      try {
+        await window.Capacitor.Plugins.LocalNotifications.schedule({
+          notifications: [{
+            id: Math.floor((Date.now() + 3) % 2147483647),
+            title: 'נמצאה התאמה!',
+            body: message,
+            schedule: { at: new Date(Date.now() + 1000) }
+          }]
+        });
+      } catch(e) {}
+    }
+  } catch(e) {
+    console.log('Match check failed:', e);
   }
 }
 
@@ -2151,6 +2334,8 @@ function startApp() {
   setInterval(checkForApprovals, 20000);
   checkPendingExchanges();
   setInterval(checkPendingExchanges, 25000);
+  checkForMatches();
+  setInterval(checkForMatches, 20000);
 }
 
 async function syncMyRequests() {
