@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-import psycopg2, psycopg2.extras, time, os, cloudinary, cloudinary.uploader, requests, re, math
+import psycopg2, psycopg2.extras, time, os, cloudinary, cloudinary.uploader, requests, re, math, bcrypt, random, string
 
 app = FastAPI()
 
@@ -118,6 +118,30 @@ def init_db():
             take_item_id INTEGER NOT NULL REFERENCES items(id),
             created_at DOUBLE PRECISION NOT NULL,
             UNIQUE(give_item_id, take_item_id)
+        )
+    """)
+
+    # Password hash for account login (bcrypt — never store plaintext).
+    cur.execute("""
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT
+    """)
+
+    # Email verification codes (sign-up) — one active code per email.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS email_verifications (
+            email TEXT PRIMARY KEY,
+            code TEXT NOT NULL,
+            created_at DOUBLE PRECISION NOT NULL,
+            verified_at DOUBLE PRECISION
+        )
+    """)
+
+    # Password reset codes ("forgot password") — one active code per email.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS password_resets (
+            email TEXT PRIMARY KEY,
+            code TEXT NOT NULL,
+            created_at DOUBLE PRECISION NOT NULL
         )
     """)
 
@@ -323,22 +347,20 @@ def setup_user(user: UserSetup):
     conn = get_db()
     cur = conn.cursor()
 
-    # Reject if this phone or nickname already belongs to a DIFFERENT device.
-    # (Excluding this device_id lets an existing user re-submit their own
-    # unchanged info without tripping the check on themselves.)
+    # Reject if this phone already belongs to a DIFFERENT device. (Excluding
+    # this device_id lets an existing user re-submit their own unchanged info
+    # without tripping the check on themselves.) Nicknames may duplicate freely.
     cur.execute("SELECT device_id FROM users WHERE phone = %s AND device_id != %s", (phone, user.device_id))
     if cur.fetchone():
         cur.close(); conn.close()
         raise HTTPException(status_code=400, detail="Phone number already registered")
 
-    nickname_norm = re.sub(r"\s+", " ", user.nickname.strip()).lower()
-    cur.execute("""
-        SELECT device_id FROM users
-        WHERE LOWER(TRIM(REGEXP_REPLACE(nickname, '\\s+', ' ', 'g'))) = %s AND device_id != %s
-    """, (nickname_norm, user.device_id))
-    if cur.fetchone():
-        cur.close(); conn.close()
-        raise HTTPException(status_code=400, detail="Username already taken")
+    if user.email:
+        email_norm = user.email.strip().lower()
+        cur.execute("SELECT device_id FROM users WHERE LOWER(email) = %s AND device_id != %s", (email_norm, user.device_id))
+        if cur.fetchone():
+            cur.close(); conn.close()
+            raise HTTPException(status_code=400, detail="Email already registered")
 
     now = time.time()
     cur.execute("""
@@ -678,6 +700,243 @@ def send_report_email(item, report):
     )
     if resp.status_code >= 300:
         print("Resend error:", resp.status_code, resp.text)
+
+# ── Auth: helpers ────────────────────────────────────────
+
+def hash_password(pw: str) -> str:
+    return bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+def check_password(pw: str, hashed: str) -> bool:
+    try:
+        return bcrypt.checkpw(pw.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        return False
+
+def gen_code() -> str:
+    return "".join(random.choices(string.digits, k=6))
+
+def send_simple_email(to_addr, subject, html):
+    """Generic Resend sender for verification/reset codes. Best-effort: returns
+    False (and logs) rather than raising, so callers can turn that into a
+    clean HTTP error."""
+    api_key = os.environ.get("RESEND_API_KEY", "")
+    from_addr = os.environ.get("REPORT_EMAIL_FROM", "onboarding@resend.dev")
+    if not api_key or not to_addr:
+        print("Email skipped: RESEND_API_KEY or recipient missing")
+        return False
+    resp = requests.post(
+        "https://api.resend.com/emails",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={"from": from_addr, "to": [to_addr], "subject": subject, "html": html},
+        timeout=10,
+    )
+    if resp.status_code >= 300:
+        print("Resend error:", resp.status_code, resp.text)
+        return False
+    return True
+
+# ── Auth: sign-up (per-screen checks + final creation) ───
+
+class PhoneCheck(BaseModel):
+    phone: str
+
+@app.post("/check-phone")
+def check_phone(body: PhoneCheck):
+    phone = (body.phone or "").strip()
+    if not (phone.isdigit() and len(phone) == 10 and phone.startswith("05")):
+        raise HTTPException(status_code=400, detail="Phone must be 10 digits starting with 05")
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT device_id FROM users WHERE phone = %s", (phone,))
+    taken = cur.fetchone() is not None
+    cur.close(); conn.close()
+    if taken:
+        raise HTTPException(status_code=400, detail="Phone number already registered")
+    return {"ok": True}
+
+class EmailCodeRequest(BaseModel):
+    email: str
+
+@app.post("/send-email-code")
+def send_email_code(body: EmailCodeRequest):
+    email = (body.email or "").strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Invalid email")
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT device_id FROM users WHERE LOWER(email) = %s", (email,))
+    if cur.fetchone():
+        cur.close(); conn.close()
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    code = gen_code()
+    cur.execute("""
+        INSERT INTO email_verifications (email, code, created_at, verified_at)
+        VALUES (%s, %s, %s, NULL)
+        ON CONFLICT (email) DO UPDATE SET code = EXCLUDED.code, created_at = EXCLUDED.created_at, verified_at = NULL
+    """, (email, code, time.time()))
+    conn.commit()
+    cur.close(); conn.close()
+
+    sent = send_simple_email(
+        email,
+        "קוד האימות שלך ל-iNeed",
+        f"<h2>iNeed</h2><p>קוד האימות שלך הוא:</p><h1 style='letter-spacing:4px;'>{code}</h1><p>הקוד בתוקף ל-15 דקות.</p>"
+    )
+    if not sent:
+        raise HTTPException(status_code=500, detail="Failed to send verification email")
+    return {"ok": True}
+
+class VerifyEmailCode(BaseModel):
+    email: str
+    code: str
+
+@app.post("/verify-email-code")
+def verify_email_code(body: VerifyEmailCode):
+    email = (body.email or "").strip().lower()
+    code = (body.code or "").strip()
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT code, created_at FROM email_verifications WHERE email = %s", (email,))
+    row = cur.fetchone()
+    if not row or row["code"] != code or (time.time() - row["created_at"]) > 900:
+        cur.close(); conn.close()
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+    cur.execute("UPDATE email_verifications SET verified_at = %s WHERE email = %s", (time.time(), email))
+    conn.commit()
+    cur.close(); conn.close()
+    return {"ok": True}
+
+class SignupBody(BaseModel):
+    device_id: str
+    nickname: str
+    phone: str
+    email: str
+    password: str
+    radius_km: int
+
+@app.post("/signup")
+def signup(body: SignupBody):
+    phone = (body.phone or "").strip()
+    email = (body.email or "").strip().lower()
+    if not (phone.isdigit() and len(phone) == 10 and phone.startswith("05")):
+        raise HTTPException(status_code=400, detail="Phone must be 10 digits starting with 05")
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Invalid email")
+    if not body.password or len(body.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    # Re-check uniqueness (the per-screen checks already covered this, but
+    # time may have passed since — someone else could have taken it meanwhile).
+    cur.execute("SELECT device_id FROM users WHERE phone = %s", (phone,))
+    if cur.fetchone():
+        cur.close(); conn.close()
+        raise HTTPException(status_code=400, detail="Phone number already registered")
+    cur.execute("SELECT device_id FROM users WHERE LOWER(email) = %s", (email,))
+    if cur.fetchone():
+        cur.close(); conn.close()
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    # Confirm this email actually completed verification recently.
+    cur.execute("SELECT verified_at FROM email_verifications WHERE email = %s", (email,))
+    ver = cur.fetchone()
+    if not ver or not ver["verified_at"] or (time.time() - ver["verified_at"]) > 3600:
+        cur.close(); conn.close()
+        raise HTTPException(status_code=400, detail="Email not verified")
+
+    now = time.time()
+    pw_hash = hash_password(body.password)
+    cur.execute("""
+        INSERT INTO users (device_id, nickname, radius_km, email, phone, password_hash, created_at, last_seen)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (device_id) DO UPDATE SET
+            nickname = EXCLUDED.nickname, radius_km = EXCLUDED.radius_km,
+            email = EXCLUDED.email, phone = EXCLUDED.phone,
+            password_hash = EXCLUDED.password_hash, last_seen = EXCLUDED.last_seen
+    """, (body.device_id, body.nickname, body.radius_km, email, phone, pw_hash, now, now))
+    conn.commit()
+    cur.close(); conn.close()
+    return {"ok": True}
+
+# ── Auth: login / forgot password ────────────────────────
+
+class LoginBody(BaseModel):
+    email: str
+    password: str
+
+@app.post("/login")
+def login(body: LoginBody):
+    email = (body.email or "").strip().lower()
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT device_id, password_hash FROM users WHERE LOWER(email) = %s", (email,))
+    row = cur.fetchone()
+    cur.close(); conn.close()
+    if not row or not row["password_hash"] or not check_password(body.password, row["password_hash"]):
+        raise HTTPException(status_code=400, detail="Invalid email or password")
+    return {"ok": True, "device_id": row["device_id"]}
+
+class ForgotPasswordBody(BaseModel):
+    email: str
+
+@app.post("/forgot-password")
+def forgot_password(body: ForgotPasswordBody):
+    email = (body.email or "").strip().lower()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT device_id FROM users WHERE LOWER(email) = %s", (email,))
+    exists = cur.fetchone() is not None
+    code = None
+    if exists:
+        code = gen_code()
+        cur.execute("""
+            INSERT INTO password_resets (email, code, created_at)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (email) DO UPDATE SET code = EXCLUDED.code, created_at = EXCLUDED.created_at
+        """, (email, code, time.time()))
+        conn.commit()
+    cur.close(); conn.close()
+
+    if exists:
+        send_simple_email(
+            email,
+            "איפוס סיסמה — iNeed",
+            f"<h2>iNeed</h2><p>קוד לאיפוס הסיסמה שלך:</p><h1 style='letter-spacing:4px;'>{code}</h1><p>הקוד בתוקף ל-30 דקות.</p>"
+        )
+    # Always return ok whether or not the email is registered — avoids
+    # leaking to a caller which emails exist in the system.
+    return {"ok": True}
+
+class ResetPasswordBody(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
+@app.post("/reset-password")
+def reset_password(body: ResetPasswordBody):
+    email = (body.email or "").strip().lower()
+    code = (body.code or "").strip()
+    if not body.new_password or len(body.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT code, created_at FROM password_resets WHERE email = %s", (email,))
+    row = cur.fetchone()
+    if not row or row["code"] != code or (time.time() - row["created_at"]) > 1800:
+        cur.close(); conn.close()
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+
+    pw_hash = hash_password(body.new_password)
+    cur.execute("UPDATE users SET password_hash = %s WHERE LOWER(email) = %s", (pw_hash, email))
+    cur.execute("DELETE FROM password_resets WHERE email = %s", (email,))
+    conn.commit()
+    cur.close(); conn.close()
+    return {"ok": True}
 
 # ── Requests ─────────────────────────────────────────────
 

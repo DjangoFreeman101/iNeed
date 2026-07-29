@@ -332,22 +332,45 @@
     }
     @keyframes spin { to { transform:rotate(360deg); } }
 
-    /* ── Setup screen ── */
-    #setup-screen {
+    /* ── Auth screen (gate / sign-up steps / login / forgot-password) ── */
+    #auth-screen {
       position:fixed; top:0; left:0; right:0; bottom:0;
       background:var(--dark); z-index:99997;
       display:none; flex-direction:column;
-      align-items:center; justify-content:center;
-      padding:30px 24px;
     }
-    #setup-screen h1 { color:white; font-size:36px; font-weight:900; margin-bottom:8px; }
-    #setup-screen p { color:rgba(255,255,255,0.6); font-size:14px; margin-bottom:30px; text-align:center; }
-    #setup-screen .form-input, #setup-screen .form-select {
+    .auth-step {
+      display:none; flex-direction:column; align-items:center; justify-content:center;
+      width:100%; height:100%; padding:30px 24px; box-sizing:border-box;
+    }
+    .auth-step h1 { color:white; font-size:32px; font-weight:900; margin-bottom:8px; text-align:center; }
+    .auth-step p { color:rgba(255,255,255,0.6); font-size:14px; margin-bottom:24px; text-align:center; }
+    .auth-step .form-input {
       background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.2);
-      color:white; margin-bottom:12px;
+      color:white; margin-bottom:12px; width:100%; max-width:320px; box-sizing:border-box;
     }
-    #setup-screen .form-label { color:rgba(255,255,255,0.7); }
-    #setup-screen .btn-primary { background:var(--accent); margin-top:16px; }
+    .auth-step .btn-primary {
+      background:var(--accent); margin-top:8px; width:100%; max-width:320px;
+    }
+    .auth-step .btn-secondary {
+      background:rgba(255,255,255,0.12); color:white; border:none;
+      width:100%; max-width:320px; padding:14px; border-radius:12px; font-size:16px;
+      cursor:pointer; font-family:'Heebo',sans-serif; margin-top:12px;
+    }
+    .auth-step .btn-back {
+      background:none; color:rgba(255,255,255,0.5); border:none;
+      width:100%; max-width:320px; padding:10px; font-size:14px;
+      cursor:pointer; font-family:'Heebo',sans-serif; margin-top:10px;
+    }
+    .auth-step .auth-link {
+      color:var(--accent); font-size:14px; margin-top:14px; cursor:pointer; text-align:center;
+    }
+    .auth-step .auth-error {
+      color:#ff6b6b; font-size:13px; text-align:center; margin-top:-6px; margin-bottom:8px;
+      min-height:16px; width:100%; max-width:320px;
+    }
+    #auth-screen input[type=range] { accent-color:white; }
+    #auth-screen #signup-radius-display { color:white; font-size:22px; font-weight:700; text-align:center; margin:8px 0; }
+    #auth-screen .radius-row { width:100%; max-width:320px; }
 
     /* ── Item popup (map) ── */
     .item-popup { min-width:220px; direction:rtl; text-align:right; }
@@ -424,9 +447,7 @@
 
     /* ── Radius slider ── */
     input[type=range] { width:100%; accent-color:var(--dark); }
-    #setup-screen input[type=range] { accent-color:white; }
     #radius-display { font-size:22px; font-weight:700; color:var(--dark); text-align:center; margin:8px 0; }
-    #setup-screen #radius-display { color:white; }
     /* ── Upload overlay ── */
     #upload-overlay {
       display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
@@ -484,43 +505,122 @@
   window._loadingTimer = setTimeout(function() {
     var el = document.getElementById('loading');
     if (el) el.remove();
-    var setup = document.getElementById('setup-screen');
-    // If no user saved, show setup
-    if (!localStorage.getItem('ineed_user') && setup) {
-      setup.style.display = 'flex';
+    var auth = document.getElementById('auth-screen');
+    // If no user saved, show the auth gate
+    if (!localStorage.getItem('ineed_user') && auth) {
+      auth.style.display = 'flex';
     }
   }, 4000);
 </script>
 
-<div id="setup-screen">
-  <h1>iNeed</h1>
-  <p>לפני שנתחיל — ספר לנו קצת עליך</p>
-  <div style="width:100%; max-width:340px;">
-    <div class="form-group">
-      <label class="form-label">כינוי (שם תצוגה) *</label>
-      <input type="text" class="form-input" id="setup-nickname" placeholder="למשל: מייקל סקוט הבוס הטוב בעולם" maxlength="30"/>
-    </div>
-    <div class="form-group">
-      <label class="form-label">רדיוס חיפוש *</label>
-      <div id="radius-display">5 ק"מ</div>
-      <div class="radius-row">
-        <input type="range" id="setup-radius" min="1" max="100" value="5"/>
-        <div class="radius-arrows">
-          <button type="button" class="radius-arrow" onclick="adjustSetupRadius(1)">←</button>
-          <button type="button" class="radius-arrow" onclick="adjustSetupRadius(-1)">→</button>
-        </div>
+<div id="auth-screen">
+
+  <!-- Step: gate -->
+  <div class="auth-step" id="auth-step-gate" style="display:flex;">
+    <h1>iNeed</h1>
+    <p>תן וקח בשכונה שלך</p>
+    <button class="btn-primary" onclick="goToAuthStep('signup-name')">הרשמה</button>
+    <button class="btn-secondary" onclick="goToAuthStep('login')">התחברות</button>
+  </div>
+
+  <!-- Sign-up: name -->
+  <div class="auth-step" id="auth-step-signup-name">
+    <h1>איך קוראים לך?</h1>
+    <input type="text" class="form-input" id="signup-name" placeholder="השם שלך" maxlength="30"/>
+    <div class="auth-error" id="signup-name-error"></div>
+    <button class="btn-primary" onclick="signupNameNext()">המשך ←</button>
+    <button class="btn-back" onclick="goToAuthStep('gate')">חזרה</button>
+  </div>
+
+  <!-- Sign-up: phone -->
+  <div class="auth-step" id="auth-step-signup-phone">
+    <h1>מספר טלפון</h1>
+    <p>ישמש לזיהוי וליצירת קשר עם משתמשים אחרים</p>
+    <input type="tel" class="form-input" id="signup-phone" placeholder="05XXXXXXXX" maxlength="10" inputmode="numeric" style="direction:ltr;"/>
+    <div class="auth-error" id="signup-phone-error"></div>
+    <button class="btn-primary" onclick="signupPhoneNext()">המשך ←</button>
+    <button class="btn-back" onclick="goToAuthStep('signup-name')">חזרה</button>
+  </div>
+
+  <!-- Sign-up: email -->
+  <div class="auth-step" id="auth-step-signup-email">
+    <h1>כתובת אימייל</h1>
+    <p>נשלח קוד אימות — נדרש גם לשחזור חשבון בעתיד</p>
+    <input type="email" class="form-input" id="signup-email" placeholder="your@email.com" style="direction:ltr;"/>
+    <div class="auth-error" id="signup-email-error"></div>
+    <button class="btn-primary" onclick="signupEmailNext()">שלח קוד אימות ←</button>
+    <button class="btn-back" onclick="goToAuthStep('signup-phone')">חזרה</button>
+  </div>
+
+  <!-- Sign-up: email verification code -->
+  <div class="auth-step" id="auth-step-signup-code">
+    <h1>אימות אימייל</h1>
+    <p>שלחנו קוד בן 6 ספרות ל-<span id="signup-code-email-display" style="direction:ltr; display:inline-block;"></span></p>
+    <input type="text" class="form-input" id="signup-code" placeholder="123456" maxlength="6" inputmode="numeric" style="direction:ltr; text-align:center; letter-spacing:6px; font-size:20px;"/>
+    <div class="auth-error" id="signup-code-error"></div>
+    <button class="btn-primary" onclick="signupCodeNext()">אמת קוד ←</button>
+    <button class="btn-back" onclick="goToAuthStep('signup-email')">שלח קוד אחר</button>
+  </div>
+
+  <!-- Sign-up: password -->
+  <div class="auth-step" id="auth-step-signup-password">
+    <h1>בחר/י סיסמה</h1>
+    <input type="password" class="form-input" id="signup-password" placeholder="סיסמה (לפחות 6 תווים)" style="direction:ltr;"/>
+    <input type="password" class="form-input" id="signup-password2" placeholder="הקלד/י שוב את הסיסמה" style="direction:ltr;"/>
+    <div class="auth-error" id="signup-password-error"></div>
+    <button class="btn-primary" onclick="signupPasswordNext()">המשך ←</button>
+    <button class="btn-back" onclick="goToAuthStep('signup-code')">חזרה</button>
+  </div>
+
+  <!-- Sign-up: radius (final step) -->
+  <div class="auth-step" id="auth-step-signup-radius">
+    <h1>רדיוס חיפוש</h1>
+    <p>באיזה רדיוס תרצה לראות פריטים?</p>
+    <div id="signup-radius-display">5 ק"מ</div>
+    <div class="radius-row">
+      <input type="range" id="signup-radius" min="1" max="100" value="5"/>
+      <div class="radius-arrows">
+        <button type="button" class="radius-arrow" onclick="adjustSignupRadius(1)">←</button>
+        <button type="button" class="radius-arrow" onclick="adjustSignupRadius(-1)">→</button>
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">מספר טלפון *</label>
-      <input type="tel" class="form-input" id="setup-phone" placeholder="05XXXXXXXX" maxlength="10" inputmode="numeric" style="direction:ltr;"/>
-    </div>
-    <div class="form-group">
-      <label class="form-label">אימייל (אופציונלי — לעדכונים)</label>
-      <input type="email" class="form-input" id="setup-email" placeholder="your@email.com" style="direction:ltr;"/>
-    </div>
-    <button class="btn-primary" onclick="completeSetup()">בואו נתחיל ←</button>
+    <div class="auth-error" id="signup-final-error"></div>
+    <button class="btn-primary" id="signup-final-btn" onclick="completeSignup()">בואו נתחיל ←</button>
+    <button class="btn-back" onclick="goToAuthStep('signup-password')">חזרה</button>
   </div>
+
+  <!-- Login -->
+  <div class="auth-step" id="auth-step-login">
+    <h1>התחברות</h1>
+    <input type="email" class="form-input" id="login-email" placeholder="your@email.com" style="direction:ltr;"/>
+    <input type="password" class="form-input" id="login-password" placeholder="סיסמה" style="direction:ltr;"/>
+    <div class="auth-error" id="login-error"></div>
+    <button class="btn-primary" onclick="doLogin()">התחבר/י ←</button>
+    <div class="auth-link" onclick="goToAuthStep('forgot-email')">שכחת סיסמה?</div>
+    <button class="btn-back" onclick="goToAuthStep('gate')">חזרה</button>
+  </div>
+
+  <!-- Forgot password: request code -->
+  <div class="auth-step" id="auth-step-forgot-email">
+    <h1>שחזור סיסמה</h1>
+    <input type="email" class="form-input" id="forgot-email" placeholder="your@email.com" style="direction:ltr;"/>
+    <div class="auth-error" id="forgot-email-error"></div>
+    <button class="btn-primary" onclick="forgotEmailNext()">שלח קוד איפוס ←</button>
+    <button class="btn-back" onclick="goToAuthStep('login')">חזרה</button>
+  </div>
+
+  <!-- Forgot password: enter code + new password -->
+  <div class="auth-step" id="auth-step-forgot-reset">
+    <h1>איפוס סיסמה</h1>
+    <p>שלחנו קוד ל-<span id="forgot-reset-email-display" style="direction:ltr; display:inline-block;"></span></p>
+    <input type="text" class="form-input" id="forgot-code" placeholder="קוד בן 6 ספרות" maxlength="6" inputmode="numeric" style="direction:ltr; text-align:center; letter-spacing:6px;"/>
+    <input type="password" class="form-input" id="forgot-new-password" placeholder="סיסמה חדשה" style="direction:ltr;"/>
+    <input type="password" class="form-input" id="forgot-new-password2" placeholder="הקלד/י שוב" style="direction:ltr;"/>
+    <div class="auth-error" id="forgot-reset-error"></div>
+    <button class="btn-primary" onclick="submitPasswordReset()">אפס סיסמה ←</button>
+    <button class="btn-back" onclick="goToAuthStep('forgot-email')">שלח קוד אחר</button>
+  </div>
+
 </div>
 
 <div id="header">
@@ -578,6 +678,7 @@
   <div class="menu-item" onclick="openSettings()">הגדרות</div>
   <div class="menu-item" onclick="openHistory()">היסטוריה</div>
   <div class="menu-item" onclick="openPrivacy()">מדיניות פרטיות</div>
+  <div class="menu-item" onclick="signOut()">התנתק</div>
   <div class="menu-item menu-item-danger" onclick="deleteAccount()">מחק חשבון</div>
 </div>
 
@@ -903,6 +1004,11 @@ if (!deviceId) {
 }
 
 async function initDeviceId() {
+  // If the user logged into an account, we deliberately overrode deviceId with
+  // that account's ORIGINAL device_id. Don't let the native hardware ID stomp
+  // that back on the next launch.
+  if (localStorage.getItem('ineed_using_adopted_id') === '1') return;
+
   if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.Device) {
     try {
       const info = await window.Capacitor.Plugins.Device.getId();
@@ -1675,7 +1781,7 @@ async function saveSettings() {
 
   if (!res.ok || !data.ok) {
     if (data.detail === 'Phone number already registered') showToast('מספר הטלפון הזה כבר רשום במערכת');
-    else if (data.detail === 'Username already taken') showToast('הכינוי הזה כבר תפוס — נסה כינוי אחר');
+    else if (data.detail === 'Email already registered') showToast('כתובת האימייל הזו כבר רשומה במערכת');
     else showToast('שגיאה — נסה שוב');
     return;
   }
@@ -1687,22 +1793,247 @@ async function saveSettings() {
   loadItems(); // radius may have changed — re-apply the filter right away
 }
 
-// ── Setup ──────────────────────────────────────────────
-function updateSetupRadiusDisplay() {
-  const el = document.getElementById('setup-radius');
-  document.getElementById('radius-display').textContent = el.value + ' ק"מ';
-}
-document.getElementById('setup-radius').addEventListener('input', updateSetupRadiusDisplay);
-document.getElementById('setup-radius').addEventListener('change', updateSetupRadiusDisplay);
-updateSetupRadiusDisplay();
+// ── Auth flow ────────────────────────────────────────────
+let signupData = { name: '', phone: '', email: '', password: '' };
+let forgotEmail = '';
 
-function adjustSetupRadius(delta) {
-  const el = document.getElementById('setup-radius');
+function goToAuthStep(step) {
+  document.querySelectorAll('.auth-step').forEach(el => el.style.display = 'none');
+  document.getElementById('auth-step-' + step).style.display = 'flex';
+}
+
+function authError(id, msg) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = msg || '';
+}
+
+function signupNameNext() {
+  const name = document.getElementById('signup-name').value.trim();
+  authError('signup-name-error', '');
+  if (!name) { authError('signup-name-error', 'נא להזין שם'); return; }
+  signupData.name = name;
+  goToAuthStep('signup-phone');
+}
+
+async function signupPhoneNext() {
+  const phone = document.getElementById('signup-phone').value.trim();
+  authError('signup-phone-error', '');
+  if (!/^05\d{8}$/.test(phone)) { authError('signup-phone-error', 'מספר טלפון חייב להיות 10 ספרות ולהתחיל ב-05'); return; }
+
+  const btn = document.querySelector('#auth-step-signup-phone .btn-primary');
+  btn.disabled = true; btn.textContent = 'בודק...';
+  try {
+    const res = await fetch(`${API_BASE}/check-phone`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ phone })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      authError('signup-phone-error', data.detail === 'Phone number already registered'
+        ? 'מספר הטלפון הזה כבר רשום במערכת' : 'שגיאה — נסה שוב');
+      return;
+    }
+    signupData.phone = phone;
+    goToAuthStep('signup-email');
+  } catch(e) {
+    authError('signup-phone-error', 'שגיאת חיבור — נסה שוב');
+  } finally {
+    btn.disabled = false; btn.textContent = 'המשך ←';
+  }
+}
+
+async function signupEmailNext() {
+  const email = document.getElementById('signup-email').value.trim();
+  authError('signup-email-error', '');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { authError('signup-email-error', 'כתובת אימייל לא תקינה'); return; }
+
+  const btn = document.querySelector('#auth-step-signup-email .btn-primary');
+  btn.disabled = true; btn.textContent = 'שולח...';
+  try {
+    const res = await fetch(`${API_BASE}/send-email-code`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      authError('signup-email-error', data.detail === 'Email already registered'
+        ? 'כתובת האימייל הזו כבר רשומה במערכת' : 'שגיאה בשליחת הקוד — נסה שוב');
+      return;
+    }
+    signupData.email = email;
+    document.getElementById('signup-code-email-display').textContent = email;
+    goToAuthStep('signup-code');
+  } catch(e) {
+    authError('signup-email-error', 'שגיאת חיבור — נסה שוב');
+  } finally {
+    btn.disabled = false; btn.textContent = 'שלח קוד אימות ←';
+  }
+}
+
+async function signupCodeNext() {
+  const code = document.getElementById('signup-code').value.trim();
+  authError('signup-code-error', '');
+  if (!/^\d{6}$/.test(code)) { authError('signup-code-error', 'הקוד צריך להיות 6 ספרות'); return; }
+
+  const btn = document.querySelector('#auth-step-signup-code .btn-primary');
+  btn.disabled = true; btn.textContent = 'מאמת...';
+  try {
+    const res = await fetch(`${API_BASE}/verify-email-code`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email: signupData.email, code })
+    });
+    if (!res.ok) { authError('signup-code-error', 'קוד שגוי או שפג תוקפו'); return; }
+    goToAuthStep('signup-password');
+  } catch(e) {
+    authError('signup-code-error', 'שגיאת חיבור — נסה שוב');
+  } finally {
+    btn.disabled = false; btn.textContent = 'אמת קוד ←';
+  }
+}
+
+function signupPasswordNext() {
+  const p1 = document.getElementById('signup-password').value;
+  const p2 = document.getElementById('signup-password2').value;
+  authError('signup-password-error', '');
+  if (p1.length < 6) { authError('signup-password-error', 'הסיסמה חייבת להיות באורך 6 תווים לפחות'); return; }
+  if (p1 !== p2) { authError('signup-password-error', 'הסיסמאות אינן תואמות'); return; }
+  signupData.password = p1;
+  goToAuthStep('signup-radius');
+}
+
+function updateSignupRadiusDisplay() {
+  const el = document.getElementById('signup-radius');
+  document.getElementById('signup-radius-display').textContent = el.value + ' ק"מ';
+}
+document.getElementById('signup-radius').addEventListener('input', updateSignupRadiusDisplay);
+document.getElementById('signup-radius').addEventListener('change', updateSignupRadiusDisplay);
+
+function adjustSignupRadius(delta) {
+  const el = document.getElementById('signup-radius');
   const min = parseInt(el.min), max = parseInt(el.max);
   let val = parseInt(el.value) + delta;
-  val = Math.max(min, Math.min(max, val)); // clamp within slider bounds
+  val = Math.max(min, Math.min(max, val));
   el.value = val;
-  updateSetupRadiusDisplay();
+  updateSignupRadiusDisplay();
+}
+
+async function completeSignup() {
+  const radius = parseInt(document.getElementById('signup-radius').value);
+  authError('signup-final-error', '');
+  const btn = document.getElementById('signup-final-btn');
+  btn.disabled = true; btn.textContent = 'טוען...';
+  try {
+    const res = await fetch(`${API_BASE}/signup`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        device_id: deviceId, nickname: signupData.name, phone: signupData.phone,
+        email: signupData.email, password: signupData.password, radius_km: radius
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      authError('signup-final-error', data.detail || 'שגיאה — נסה שוב');
+      return;
+    }
+    currentUser = { device_id: deviceId, nickname: signupData.name, radius_km: radius, email: signupData.email, phone: signupData.phone };
+    localStorage.setItem('ineed_user', JSON.stringify(currentUser));
+    document.getElementById('auth-screen').style.display = 'none';
+    startApp();
+  } catch(e) {
+    authError('signup-final-error', 'שגיאת חיבור — נסה שוב');
+  } finally {
+    btn.disabled = false; btn.textContent = 'בואו נתחיל ←';
+  }
+}
+
+// ── Login ────────────────────────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  authError('login-error', '');
+  if (!email || !password) { authError('login-error', 'נא למלא אימייל וסיסמה'); return; }
+
+  const btn = document.querySelector('#auth-step-login .btn-primary');
+  btn.disabled = true; btn.textContent = 'מתחבר...';
+  try {
+    const res = await fetch(`${API_BASE}/login`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) { authError('login-error', 'אימייל או סיסמה שגויים'); return; }
+
+    // Adopt this account's original device_id on this physical device, so
+    // every future request from here acts as that account.
+    deviceId = data.device_id;
+    localStorage.setItem('ineed_device_id', deviceId);
+    localStorage.setItem('ineed_using_adopted_id', '1');
+
+    const userRes = await fetch(`${API_BASE}/user/${deviceId}`);
+    if (userRes.ok) {
+      currentUser = await userRes.json();
+      localStorage.setItem('ineed_user', JSON.stringify(currentUser));
+    }
+    document.getElementById('auth-screen').style.display = 'none';
+    await syncMyRequests();
+    startApp();
+  } catch(e) {
+    authError('login-error', 'שגיאת חיבור — נסה שוב');
+  } finally {
+    btn.disabled = false; btn.textContent = 'התחבר/י ←';
+  }
+}
+
+// ── Forgot password ──────────────────────────────────────
+async function forgotEmailNext() {
+  const email = document.getElementById('forgot-email').value.trim();
+  authError('forgot-email-error', '');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { authError('forgot-email-error', 'כתובת אימייל לא תקינה'); return; }
+
+  const btn = document.querySelector('#auth-step-forgot-email .btn-primary');
+  btn.disabled = true; btn.textContent = 'שולח...';
+  try {
+    await fetch(`${API_BASE}/forgot-password`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email })
+    });
+    // Always proceed to the next step — the backend deliberately doesn't
+    // reveal whether this email is actually registered.
+    forgotEmail = email;
+    document.getElementById('forgot-reset-email-display').textContent = email;
+    goToAuthStep('forgot-reset');
+  } catch(e) {
+    authError('forgot-email-error', 'שגיאת חיבור — נסה שוב');
+  } finally {
+    btn.disabled = false; btn.textContent = 'שלח קוד איפוס ←';
+  }
+}
+
+async function submitPasswordReset() {
+  const code = document.getElementById('forgot-code').value.trim();
+  const p1 = document.getElementById('forgot-new-password').value;
+  const p2 = document.getElementById('forgot-new-password2').value;
+  authError('forgot-reset-error', '');
+  if (!/^\d{6}$/.test(code)) { authError('forgot-reset-error', 'הקוד צריך להיות 6 ספרות'); return; }
+  if (p1.length < 6) { authError('forgot-reset-error', 'הסיסמה חייבת להיות באורך 6 תווים לפחות'); return; }
+  if (p1 !== p2) { authError('forgot-reset-error', 'הסיסמאות אינן תואמות'); return; }
+
+  const btn = document.querySelector('#auth-step-forgot-reset .btn-primary');
+  btn.disabled = true; btn.textContent = 'מאפס...';
+  try {
+    const res = await fetch(`${API_BASE}/reset-password`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email: forgotEmail, code, new_password: p1 })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) { authError('forgot-reset-error', 'קוד שגוי או שפג תוקפו'); return; }
+    showToast('הסיסמה אופסה בהצלחה — כעת ניתן להתחבר');
+    goToAuthStep('login');
+  } catch(e) {
+    authError('forgot-reset-error', 'שגיאת חיבור — נסה שוב');
+  } finally {
+    btn.disabled = false; btn.textContent = 'אפס סיסמה ←';
+  }
 }
 
 function updateSettingsRadiusDisplay() {
@@ -1719,54 +2050,6 @@ function adjustRadius(delta) {
   val = Math.max(min, Math.min(max, val)); // clamp within slider bounds
   el.value = val;
   updateSettingsRadiusDisplay();
-}
-
-async function completeSetup() {
-  const nickname = document.getElementById('setup-nickname').value.trim();
-  const radius = parseInt(document.getElementById('setup-radius').value);
-  const email = document.getElementById('setup-email').value.trim();
-  const phone = document.getElementById('setup-phone').value.trim();
-
-  if (!nickname) { showToast('נא להזין כינוי'); return; }
-  // Phone: exactly 10 digits, must start with 05.
-  if (!/^05\d{8}$/.test(phone)) { showToast('מספר טלפון חייב להיות 10 ספרות ולהתחיל ב-05'); return; }
-
-  const btn = document.querySelector('#setup-screen .btn-primary');
-  btn.textContent = 'טוען...';
-  btn.disabled = true;
-
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-    
-    const res = await fetch(`${API_BASE}/user/setup`, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ device_id: deviceId, nickname, radius_km: radius, email: email || null, phone }),
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-
-    const data = await res.json();
-    if (res.ok && data.ok) {
-      currentUser = { device_id: deviceId, nickname, radius_km: radius, email, phone };
-      localStorage.setItem('ineed_user', JSON.stringify(currentUser));
-      document.getElementById('setup-screen').style.display = 'none';
-      startApp();
-    } else if (data.detail === 'Phone number already registered') {
-      showToast('מספר הטלפון הזה כבר רשום במערכת');
-    } else if (data.detail === 'Username already taken') {
-      showToast('הכינוי הזה כבר תפוס — נסה כינוי אחר');
-    } else {
-      showToast('שגיאה — נסה שוב');
-    }
-  } catch(e) {
-    showToast('לא ניתן להתחבר לשרת — בדוק את החיבור לאינטרנט');
-    console.error('Setup error:', e);
-  } finally {
-    btn.textContent = 'בואו נתחיל ←';
-    btn.disabled = false;
-  }
 }
 
 // ── Location ───────────────────────────────────────────
@@ -1956,6 +2239,12 @@ function openMenu() { document.getElementById('side-menu').classList.add('open')
 function closeMenu() { document.getElementById('side-menu').classList.remove('open'); document.getElementById('menu-overlay').classList.remove('open'); }
 
 // ── Delete account ─────────────────────────────────────
+function signOut() {
+  localStorage.removeItem('ineed_user');
+  localStorage.removeItem('ineed_using_adopted_id');
+  location.reload();
+}
+
 async function deleteAccount() {
   closeMenu();
   // Two-step confirmation — this is irreversible.
@@ -2382,17 +2671,17 @@ async function init() {
       }
     } catch(e) {}
   }
-  // New user — show setup
+  // No account on this device — show the auth gate (sign-up / log-in)
   document.getElementById('loading').remove();
-  document.getElementById('setup-screen').style.display = 'flex';
+  document.getElementById('auth-screen').style.display = 'flex';
 }
 
 initDeviceId().then(init).catch(e => {
   console.error('Init error:', e);
   const loadingEl = document.getElementById('loading');
   if (loadingEl) loadingEl.remove();
-  const setup = document.getElementById('setup-screen');
-  if (!localStorage.getItem('ineed_user') && setup) setup.style.display = 'flex';
+  const auth = document.getElementById('auth-screen');
+  if (!localStorage.getItem('ineed_user') && auth) auth.style.display = 'flex';
 });
 </script>
 </body>
