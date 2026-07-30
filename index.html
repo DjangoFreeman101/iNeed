@@ -1068,8 +1068,8 @@ const catColors = {
   'אחר': '#607d8b',
 };
 
-function makeItemIcon(category) {
-  const color = catColors[category] || '#607d8b';
+function makeItemIcon(item) {
+  const color = isTakePost(item) ? '#27ae60' /* green — need */ : '#e74c3c' /* red — give */;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
     <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22S28 24.5 28 14C28 6.27 21.73 0 14 0z" fill="${color}"/>
     <circle cx="14" cy="14" r="7" fill="white"/>
@@ -1158,7 +1158,7 @@ async function loadItems() {
     if (itemMarkers[item.id]) {
       itemMarkers[item.id].setPopupContent(popupHTML);
     } else {
-      const m = L.marker([item.lat, item.lon], { icon: makeItemIcon(item.category) })
+      const m = L.marker([item.lat, item.lon], { icon: makeItemIcon(item) })
         .bindPopup(popupHTML, { maxWidth: 260 });
       itemMarkers[item.id] = m;
       clusterGroup.addLayer(m);
@@ -2400,7 +2400,7 @@ function goToItemPin(item) {
     let marker = itemMarkers[item.id];
     if (!marker) {
       const popupHTML = buildItemPopup(item);
-      marker = L.marker([item.lat, item.lon], { icon: makeItemIcon(item.category) })
+      marker = L.marker([item.lat, item.lon], { icon: makeItemIcon(item) })
         .bindPopup(popupHTML, { maxWidth: 260 });
       itemMarkers[item.id] = marker;
       clusterGroup.addLayer(marker);
