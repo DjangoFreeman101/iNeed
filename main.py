@@ -581,6 +581,7 @@ def delete_item(item_id: int, device_id: str):
     # Remove dependent rows first so the foreign key constraints don't block deletion
     cur.execute("DELETE FROM requests WHERE item_id = %s", (item_id,))
     cur.execute("DELETE FROM image_reports WHERE item_id = %s", (item_id,))
+    cur.execute("DELETE FROM matches WHERE give_item_id = %s OR take_item_id = %s", (item_id, item_id))
     cur.execute("DELETE FROM items WHERE id = %s", (item_id,))
     conn.commit()
     cur.close()
