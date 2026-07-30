@@ -197,13 +197,7 @@
     }
 
     /* ── Photo upload ── */
-    #photo-upload-area {
-      border:2px dashed #ddd; border-radius:12px;
-      padding:24px; text-align:center; cursor:pointer;
-      color:var(--gray); font-size:14px;
-      transition:border-color 0.2s;
-    }
-    #photo-upload-area:hover { border-color:var(--dark); }
+    #photo-upload-area > div:hover { border-color:var(--dark); }
     #photo-preview { width:100%; border-radius:10px; max-height:200px; object-fit:cover; display:none; margin-top:10px; }
 
     /* ── Item card (my items) ── */
@@ -748,10 +742,16 @@
   <div id="post-step-3" class="panel-body" style="display:none;">
     <p id="photo-hint" style="font-size:14px; color:#444; margin-bottom:16px; line-height:1.7;"></p>
     <div class="form-group">
-      <div id="photo-upload-area" onclick="document.getElementById('photo-input').click()" style="border:2px dashed #ddd;border-radius:12px;padding:24px;text-align:center;cursor:pointer;color:var(--gray);font-size:14px;">
-        לחץ להוספת תמונה
+      <div id="photo-upload-area" style="display:flex; gap:10px;">
+        <div onclick="document.getElementById('photo-input').click()" style="flex:1; border:2px dashed #ddd;border-radius:12px;padding:20px 10px;text-align:center;cursor:pointer;color:var(--gray);font-size:13px;">
+          📁<br/>מהגלריה
+        </div>
+        <div onclick="document.getElementById('photo-camera-input').click()" style="flex:1; border:2px dashed #ddd;border-radius:12px;padding:20px 10px;text-align:center;cursor:pointer;color:var(--gray);font-size:13px;">
+          📷<br/>צלם תמונה
+        </div>
       </div>
       <input type="file" id="photo-input" accept="image/*" style="display:none" onchange="previewPhoto(this)"/>
+      <input type="file" id="photo-camera-input" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto(this)"/>
       <div id="photo-preview-container" style="display:none; position:relative; margin-top:10px;">
         <img id="photo-preview" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover;display:block;"/>
         <button onclick="removePhoto()" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.65);color:white;border:none;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:Heebo,sans-serif;">הסר תמונה</button>
@@ -1300,9 +1300,10 @@ async function submitReport() {
 // ── Post item ──────────────────────────────────────────
 function removePhoto() {
   document.getElementById('photo-input').value = '';
+  document.getElementById('photo-camera-input').value = '';
   document.getElementById('photo-preview').src = '';
   document.getElementById('photo-preview-container').style.display = 'none';
-  document.getElementById('photo-upload-area').style.display = 'block';
+  document.getElementById('photo-upload-area').style.display = 'flex';
 }
 
 function previewPhoto(input) {
@@ -1367,7 +1368,7 @@ async function submitItem() {
     document.getElementById('post-desc').value = '';
     document.getElementById('photo-input').value = '';
     const pc = document.getElementById('photo-preview-container'); if(pc) pc.style.display = 'none';
-    document.getElementById('photo-upload-area').style.display = 'block';
+    document.getElementById('photo-upload-area').style.display = 'flex';
     selectedPostType = null;
     document.getElementById('btn-give').className = 'type-btn';
     document.getElementById('btn-take').className = 'type-btn';
@@ -2226,8 +2227,9 @@ function openPostPanel() {
   document.getElementById('post-desc').value = '';
   document.getElementById('post-address').value = '';
   document.getElementById('photo-input').value = '';
+  document.getElementById('photo-camera-input').value = '';
   const pc = document.getElementById('photo-preview-container'); if(pc) pc.style.display = 'none';
-  document.getElementById('photo-upload-area').style.display = 'block';
+  document.getElementById('photo-upload-area').style.display = 'flex';
   selectLocationMode('current');
   showPostStep(1);
   openPanel('post-panel');
