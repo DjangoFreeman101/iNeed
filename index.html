@@ -1323,10 +1323,13 @@ async function submitItem() {
   const category = document.getElementById('post-category').value;
   const desc = document.getElementById('post-desc').value.trim();
   const photoInput = document.getElementById('photo-input');
+  const photoCameraInput = document.getElementById('photo-camera-input');
 
   if (!selectedPostType) { showToast('נא לבחור למסור או לקחת'); return; }
   if (!title || !category) { showToast('נא למלא כותרת וקטגוריה'); return; }
   if (itemLat === null || itemLon === null) { showToast('נא להגדיר מיקום לפריט'); return; }
+
+  const photoFile = (photoInput.files[0]) || (photoCameraInput.files[0]) || null;
 
   const form = new FormData();
   form.append('device_id', deviceId);
@@ -1336,7 +1339,7 @@ async function submitItem() {
   form.append('category', category);
   form.append('lat', itemLat);
   form.append('lon', itemLon);
-  if (photoInput.files[0]) form.append('image', photoInput.files[0]);
+  if (photoFile) form.append('image', photoFile);
 
   const btn = document.querySelector('#post-panel .btn-primary');
   btn.textContent = 'מפרסם...';
