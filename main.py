@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-import psycopg2, psycopg2.extras, time, os, cloudinary, cloudinary.uploader, requests, re, math, bcrypt, random, string
+import psycopg2, psycopg2.extras, time, os, cloudinary, cloudinary.uploader, requests, re, math, bcrypt, random, string, secrets, threading
 
 app = FastAPI()
 
@@ -149,6 +149,25 @@ def init_db():
     # Nullable so existing rows stay blank rather than needing a backfill.
     cur.execute("""
         ALTER TABLE items ADD COLUMN IF NOT EXISTS condition TEXT
+    """)
+
+    # Post-approval exchange reminders — one row per party per approved request.
+    # Stage 1 goes out 30 min after approval; stage 2 only if they clicked
+    # "I'll give/take", 24h after that click. Then the row is done for good.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS exchange_reminders (
+            id SERIAL PRIMARY KEY,
+            request_id INTEGER NOT NULL REFERENCES requests(id),
+            device_id TEXT NOT NULL,
+            role TEXT NOT NULL,               -- 'give' or 'take'
+            token TEXT NOT NULL UNIQUE,
+            approved_at DOUBLE PRECISION NOT NULL,
+            stage1_sent_at DOUBLE PRECISION,
+            intent_at DOUBLE PRECISION,       -- clicked "I'll give/take"
+            stage2_sent_at DOUBLE PRECISION,
+            done BOOLEAN NOT NULL DEFAULT FALSE,
+            UNIQUE(request_id, device_id)
+        )
     """)
 
     conn.commit()
@@ -596,6 +615,10 @@ def delete_item(item_id: int, device_id: str):
         conn.close()
         raise HTTPException(status_code=403, detail="Not your item")
     # Remove dependent rows first so the foreign key constraints don't block deletion
+    cur.execute("""
+        DELETE FROM exchange_reminders
+        WHERE request_id IN (SELECT id FROM requests WHERE item_id = %s)
+    """, (item_id,))
     cur.execute("DELETE FROM requests WHERE item_id = %s", (item_id,))
     cur.execute("DELETE FROM image_reports WHERE item_id = %s", (item_id,))
     cur.execute("DELETE FROM matches WHERE give_item_id = %s OR take_item_id = %s", (item_id, item_id))
@@ -1026,7 +1049,234 @@ def approve_request(request_id: int, device_id: str):
     conn.commit()
     cur.close()
     conn.close()
+    create_exchange_reminders(request_id)
     return {"ok": True}
+
+# ── Exchange reminders (post-approval, email-based) ──────
+# Push can't reliably carry a 30min/24h delay on Android (exact-alarm permission
+# plus OEM battery killers), so these go out by email instead. Each party gets a
+# single-use token; clicking a link runs the same flow as acting in the app.
+
+REMINDER_STAGE1_DELAY = 30 * 60        # 30 minutes after approval
+REMINDER_STAGE2_DELAY = 24 * 60 * 60   # 24 hours after "I'll give/take"
+
+def app_base_url():
+    return os.environ.get("APP_BASE_URL", "https://ineed-0otk.onrender.com").rstrip("/")
+
+def create_exchange_reminders(request_id):
+    """Called when a giver approves a taker. Arms one reminder row for each
+    side. Idempotent — re-approving won't duplicate or reset the clock."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT r.device_id AS taker_device_id, i.device_id AS giver_device_id
+        FROM requests r JOIN items i ON i.id = r.item_id
+        WHERE r.id = %s
+    """, (request_id,))
+    row = cur.fetchone()
+    if not row:
+        cur.close(); conn.close()
+        return
+
+    now = time.time()
+    for device_id, role in ((row["giver_device_id"], "give"), (row["taker_device_id"], "take")):
+        try:
+            cur.execute("""
+                INSERT INTO exchange_reminders (request_id, device_id, role, token, approved_at)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (request_id, device_id) DO NOTHING
+            """, (request_id, device_id, role, secrets.token_urlsafe(24), now))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print("Reminder create failed:", e)
+    cur.close()
+    conn.close()
+
+def finish_reminders(cur, request_id, device_id):
+    """Stop reminding this person about this request — they've confirmed,
+    whether from the email link or inside the app."""
+    cur.execute("""
+        UPDATE exchange_reminders SET done = TRUE
+        WHERE request_id = %s AND device_id = %s
+    """, (request_id, device_id))
+
+def send_reminder_email(rem, stage):
+    """stage 1 = 'did you meet?' with both buttons. stage 2 = 24h nudge."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT i.title, i.image_url,
+               me.email AS my_email, me.nickname AS my_nickname,
+               other.nickname AS other_nickname
+        FROM requests r
+        JOIN items i ON i.id = r.item_id
+        JOIN users me ON me.device_id = %s
+        JOIN users other ON other.device_id = CASE
+            WHEN %s = 'give' THEN r.device_id ELSE i.device_id END
+        WHERE r.id = %s
+    """, (rem["device_id"], rem["role"], rem["request_id"]))
+    info = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not info or not info["my_email"]:
+        return False
+
+    is_give = rem["role"] == "give"
+    verb_past = "מסרת" if is_give else "לקחת"
+    verb_future = "אמסור" if is_give else "אקח"
+    direction = "למסור" if is_give else "לקחת"
+    base = app_base_url()
+    confirm_url = f"{base}/r/{rem['token']}/confirm"
+    intent_url = f"{base}/r/{rem['token']}/intent"
+
+    if stage == 1:
+        lead = (f"ראינו שהתאמת עם {info['other_nickname']} כדי {direction} "
+                f"\"{info['title']}\". נפגשתם?")
+    else:
+        lead = (f"תזכורת: סימנת ש{verb_future} את \"{info['title']}\" "
+                f"עם {info['other_nickname']}. כבר קרה?")
+
+    btn = ("display:inline-block;padding:12px 22px;border-radius:8px;"
+           "text-decoration:none;font-weight:bold;margin:6px 4px;")
+    buttons = f"""
+      <a href="{confirm_url}" style="{btn}background:#27ae60;color:#fff;">כן, {verb_past}</a>
+      <a href="{intent_url}" style="{btn}background:#eee;color:#333;">עוד לא — {verb_future} בקרוב</a>
+    """ if stage == 1 else f"""
+      <a href="{confirm_url}" style="{btn}background:#27ae60;color:#fff;">כן, {verb_past}</a>
+    """
+
+    body = f"""
+    <div dir="rtl" style="font-family:Arial,sans-serif;">
+      <h2>iNeed</h2>
+      <p>שלום {info['my_nickname'] or ''},</p>
+      <p>{lead}</p>
+      {f'<p><img src="{info["image_url"]}" alt="" style="max-width:280px;border-radius:8px;"/></p>' if info["image_url"] else ''}
+      <p>{buttons}</p>
+      <hr/>
+      <p style="font-size:12px;color:#777;">אפשר לסמן גם ישירות באפליקציה.</p>
+    </div>
+    """
+    return send_simple_email(info["my_email"], f"[iNeed] {info['title']} — נפגשתם?", body)
+
+def process_due_reminders():
+    """One sweep: send whatever is due right now."""
+    now = time.time()
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    # Stage 1 — 30 min after approval, if they haven't already confirmed.
+    cur.execute("""
+        SELECT * FROM exchange_reminders
+        WHERE done = FALSE AND stage1_sent_at IS NULL AND approved_at <= %s
+    """, (now - REMINDER_STAGE1_DELAY,))
+    stage1 = [dict(r) for r in cur.fetchall()]
+
+    # Stage 2 — 24h after they said "I'll give/take". Final message either way.
+    cur.execute("""
+        SELECT * FROM exchange_reminders
+        WHERE done = FALSE AND intent_at IS NOT NULL
+          AND stage2_sent_at IS NULL AND intent_at <= %s
+    """, (now - REMINDER_STAGE2_DELAY,))
+    stage2 = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+
+    for rem in stage1:
+        try:
+            send_reminder_email(rem, 1)
+        except Exception as e:
+            print("Stage1 reminder failed:", e)
+        c = get_db(); cc = c.cursor()
+        cc.execute("UPDATE exchange_reminders SET stage1_sent_at = %s WHERE id = %s", (now, rem["id"]))
+        c.commit(); cc.close(); c.close()
+
+    for rem in stage2:
+        try:
+            send_reminder_email(rem, 2)
+        except Exception as e:
+            print("Stage2 reminder failed:", e)
+        # Nothing further is ever sent for this pair after the 24h nudge.
+        c = get_db(); cc = c.cursor()
+        cc.execute("UPDATE exchange_reminders SET stage2_sent_at = %s, done = TRUE WHERE id = %s",
+                   (now, rem["id"]))
+        c.commit(); cc.close(); c.close()
+
+def reminder_loop():
+    while True:
+        try:
+            process_due_reminders()
+        except Exception as e:
+            print("Reminder loop error:", e)
+        time.sleep(120)
+
+def _reminder_page(msg):
+    return HTMLResponse(f"""
+    <html><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1"></head>
+    <body dir="rtl" style="font-family:Arial,sans-serif;text-align:center;padding:60px 20px;">
+      <h1 style="color:#e74c3c;">iNeed</h1>
+      <p style="font-size:18px;">{msg}</p>
+    </body></html>
+    """)
+
+@app.get("/r/{token}/intent")
+def reminder_intent(token: str):
+    """'Not yet — I'll give/take it soon.' Arms the 24h follow-up."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM exchange_reminders WHERE token = %s", (token,))
+    rem = cur.fetchone()
+    if not rem:
+        cur.close(); conn.close()
+        return _reminder_page("הקישור אינו תקין.")
+    if rem["done"]:
+        cur.close(); conn.close()
+        return _reminder_page("כבר סימנת שההעברה בוצעה.")
+    cur.execute("UPDATE exchange_reminders SET intent_at = %s WHERE id = %s", (time.time(), rem["id"]))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return _reminder_page("תודה! נזכיר לך שוב מחר.")
+
+@app.get("/r/{token}/confirm")
+def reminder_confirm(token: str):
+    """'Yes, I gave/took it.' Runs exactly the same flow as confirming in the
+    app: the owner marks the item exchanged, the requester marks it taken."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM exchange_reminders WHERE token = %s", (token,))
+    rem = cur.fetchone()
+    if not rem:
+        cur.close(); conn.close()
+        return _reminder_page("הקישור אינו תקין.")
+    if rem["done"]:
+        cur.close(); conn.close()
+        return _reminder_page("כבר סימנת שההעברה בוצעה.")
+
+    cur.execute("SELECT item_id FROM requests WHERE id = %s", (rem["request_id"],))
+    req = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not req:
+        return _reminder_page("הבקשה לא נמצאה.")
+
+    try:
+        if rem["role"] == "give":
+            mark_item_exchanged(req["item_id"], rem["device_id"])
+        else:
+            mark_request_taken(rem["request_id"], rem["device_id"])
+    except HTTPException as e:
+        # Most likely already marked in-app — treat as success, just stop nagging.
+        print("Reminder confirm skipped:", e.detail)
+
+    conn = get_db()
+    cur = conn.cursor()
+    finish_reminders(cur, rem["request_id"], rem["device_id"])
+    conn.commit()
+    cur.close()
+    conn.close()
+    return _reminder_page("תודה! ההעברה נרשמה והפריט עבר להיסטוריה.")
 
 @app.get("/my-outgoing-requests/{device_id}")
 def get_my_outgoing_requests(device_id: str):
@@ -1057,6 +1307,59 @@ def get_my_outgoing_requests(device_id: str):
     conn.close()
     return rows
 
+def send_transaction_email(to_addr, nickname, item, role, when_ts):
+    """Personal record of an exchange the user just confirmed. role is 'gave' or
+    'took'. Deliberately worded as *this user's* record — the other side may not
+    have confirmed yet, so this is not a mutual certification."""
+    if not to_addr:
+        return False
+
+    when = time.strftime("%d/%m/%Y %H:%M", time.localtime(when_ts))
+    action = "מסרת" if role == "gave" else "לקחת"
+    title = item.get("title") or ""
+    category = item.get("category") or ""
+    description = item.get("description") or ""
+    image_url = item.get("image_url")
+    condition = item.get("condition")
+    condition_he = {"new": "חדש", "like_new": "כמו חדש",
+                    "used": "משומש", "bad": "מצב גרוע"}.get(condition or "", "")
+
+    rows = [f"<p><b>פריט:</b> {title}</p>"]
+    if category:
+        rows.append(f"<p><b>קטגוריה:</b> {category}</p>")
+    if condition_he:
+        rows.append(f"<p><b>מצב הפריט:</b> {condition_he}</p>")
+    if description:
+        rows.append(f"<p><b>תיאור:</b> {description}</p>")
+    rows.append(f"<p><b>תאריך:</b> {when}</p>")
+    if image_url:
+        rows.append(f'<p><img src="{image_url}" alt="" style="max-width:320px;border-radius:8px;"/></p>')
+
+    body = f"""
+    <div dir="rtl" style="font-family:Arial,sans-serif;">
+      <h2>iNeed</h2>
+      <p>שלום {nickname or ''},</p>
+      <p>סימנת שה{action} את הפריט הבא:</p>
+      {''.join(rows)}
+      <hr/>
+      <p style="font-size:12px;color:#777;">
+        זהו תיעוד אישי של הסימון שביצעת באפליקציה. ייתכן שהצד השני טרם סימן מצידו.
+      </p>
+    </div>
+    """
+    return send_simple_email(to_addr, f"[iNeed] תיעוד: {action} את \"{title}\"", body)
+
+def fetch_item_and_user(cur, item_id, device_id):
+    """Look up the item plus the acting user's email/nickname, for the receipt."""
+    cur.execute("""
+        SELECT title, description, category, condition, image_url
+        FROM items WHERE id = %s
+    """, (item_id,))
+    item = cur.fetchone()
+    cur.execute("SELECT email, nickname FROM users WHERE device_id = %s", (device_id,))
+    user = cur.fetchone()
+    return (dict(item) if item else None), (dict(user) if user else None)
+
 @app.post("/request/{request_id}/take")
 def mark_request_taken(request_id: int, device_id: str):
     """Taker swipes 'לקחתי' on their awaiting-list request. Only allowed if the
@@ -1074,9 +1377,22 @@ def mark_request_taken(request_id: int, device_id: str):
     if row["status"] != "approved":
         cur.close(); conn.close()
         raise HTTPException(status_code=400, detail="Request not approved yet")
+    now = time.time()
     cur.execute("UPDATE requests SET taken = TRUE, taken_at = %s WHERE id = %s",
-                (time.time(), request_id))
+                (now, request_id))
+    finish_reminders(cur, request_id, device_id)
     conn.commit()
+
+    # Receipt for the taker. Best-effort — never block the confirmation on email.
+    try:
+        cur.execute("SELECT item_id FROM requests WHERE id = %s", (request_id,))
+        item_id = cur.fetchone()["item_id"]
+        item, user = fetch_item_and_user(cur, item_id, device_id)
+        if item and user:
+            send_transaction_email(user.get("email"), user.get("nickname"), item, "took", now)
+    except Exception as e:
+        print("Transaction email failed (take):", e)
+
     cur.close()
     conn.close()
     return {"ok": True}
@@ -1101,9 +1417,27 @@ def mark_item_exchanged(item_id: int, device_id: str):
     if cur.fetchone()["n"] == 0:
         cur.close(); conn.close()
         raise HTTPException(status_code=400, detail="No approved request on this item")
+    now = time.time()
     cur.execute("UPDATE items SET status = 'exchanged', exchanged_at = %s WHERE id = %s",
-                (time.time(), item_id))
+                (now, item_id))
+    cur.execute("""
+        UPDATE exchange_reminders SET done = TRUE
+        WHERE device_id = %s AND request_id IN (SELECT id FROM requests WHERE item_id = %s)
+    """, (device_id, item_id))
     conn.commit()
+
+    # Receipt for the owner. A 'give' item means they gave it; a 'take' item
+    # means they were looking for it and received it. Best-effort.
+    try:
+        cur.execute("SELECT post_type FROM items WHERE id = %s", (item_id,))
+        post_type = cur.fetchone()["post_type"]
+        item, user = fetch_item_and_user(cur, item_id, device_id)
+        if item and user:
+            role = "gave" if post_type == "give" else "took"
+            send_transaction_email(user.get("email"), user.get("nickname"), item, role, now)
+    except Exception as e:
+        print("Transaction email failed (exchange):", e)
+
     cur.close()
     conn.close()
     return {"ok": True}
@@ -1186,6 +1520,10 @@ def get_my_requests(device_id: str):
 def cancel_request(item_id: int, device_id: str):
     conn = get_db()
     cur = conn.cursor()
+    cur.execute("""
+        DELETE FROM exchange_reminders
+        WHERE request_id IN (SELECT id FROM requests WHERE item_id = %s AND device_id = %s)
+    """, (item_id, device_id))
     cur.execute("DELETE FROM requests WHERE item_id = %s AND device_id = %s", (item_id, device_id))
     conn.commit()
     cur.close()
@@ -1221,23 +1559,39 @@ def delete_account(device_id: str):
     conn = get_db()
     cur = conn.cursor()
     try:
-        # 1. This user's own requests (interest they expressed on others' items)
+        # 1. Reminders tied to any request this user is on either side of
+        cur.execute("""
+            DELETE FROM exchange_reminders
+            WHERE device_id = %s
+               OR request_id IN (
+                   SELECT id FROM requests
+                   WHERE device_id = %s
+                      OR item_id IN (SELECT id FROM items WHERE device_id = %s)
+               )
+        """, (device_id, device_id, device_id))
+        # 2. This user's own requests (interest they expressed on others' items)
         cur.execute("DELETE FROM requests WHERE device_id = %s", (device_id,))
-        # 2. Others' requests pointing at THIS user's items
+        # 3. Others' requests pointing at THIS user's items
         cur.execute("""
             DELETE FROM requests
             WHERE item_id IN (SELECT id FROM items WHERE device_id = %s)
         """, (device_id,))
-        # 3. Image reports on this user's items
+        # 4. Matches referencing this user's items (either side of the pair)
+        cur.execute("""
+            DELETE FROM matches
+            WHERE give_item_id IN (SELECT id FROM items WHERE device_id = %s)
+               OR take_item_id IN (SELECT id FROM items WHERE device_id = %s)
+        """, (device_id, device_id))
+        # 5. Image reports on this user's items
         cur.execute("""
             DELETE FROM image_reports
             WHERE item_id IN (SELECT id FROM items WHERE device_id = %s)
         """, (device_id,))
-        # 4. Reports this user filed on any item (no FK, but tidy up)
+        # 6. Reports this user filed on any item (no FK, but tidy up)
         cur.execute("DELETE FROM image_reports WHERE reporter_device_id = %s", (device_id,))
-        # 5. This user's items
+        # 7. This user's items
         cur.execute("DELETE FROM items WHERE device_id = %s", (device_id,))
-        # 6. The user row itself
+        # 8. The user row itself
         cur.execute("DELETE FROM users WHERE device_id = %s", (device_id,))
         conn.commit()
     except Exception as e:
@@ -1248,3 +1602,8 @@ def delete_account(device_id: str):
     cur.close()
     conn.close()
     return {"ok": True}
+
+# ── Background reminder sweep ────────────────────────────
+# Started last, once every function above is defined. Daemon thread so it never
+# blocks shutdown; Render keeps the web service alive so this ticks steadily.
+threading.Thread(target=reminder_loop, daemon=True).start()
