@@ -200,6 +200,24 @@
     #photo-upload-area > div:hover { border-color:var(--dark); }
     #photo-preview { width:100%; border-radius:10px; max-height:200px; object-fit:cover; display:none; margin-top:10px; }
 
+    /* ── User location dot ── */
+    .user-location-dot {
+      width:16px; height:16px; border-radius:50%;
+      background:#4285F4; border:3px solid white;
+      box-shadow:0 0 0 2px rgba(66,133,244,0.35), 0 1px 4px rgba(0,0,0,0.4);
+      position:relative;
+    }
+    .user-location-dot::after {
+      content:''; position:absolute; top:50%; left:50%;
+      width:36px; height:36px; margin:-18px 0 0 -18px;
+      border-radius:50%; background:rgba(66,133,244,0.25);
+      animation:user-dot-pulse 2s infinite;
+    }
+    @keyframes user-dot-pulse {
+      0% { transform:scale(0.4); opacity:0.8; }
+      100% { transform:scale(1); opacity:0; }
+    }
+
     /* ── Photo lightbox (enlarge a tapped photo) ── */
     #photo-lightbox {
       display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85);
@@ -738,6 +756,16 @@
         <option>אחר</option>
       </select>
     </div>
+    <div class="form-group" id="post-condition-group" style="display:none;">
+      <label class="form-label">מצב הפריט *</label>
+      <select class="form-select" id="post-condition">
+        <option value="">בחר מצב</option>
+        <option value="new">חדש</option>
+        <option value="like_new">כמו חדש</option>
+        <option value="used">משומש</option>
+        <option value="bad">מצב גרוע</option>
+      </select>
+    </div>
     <div class="form-group">
       <label class="form-label">תיאור</label>
       <textarea class="form-textarea" id="post-desc" placeholder="פרט על הפריט..."></textarea>
@@ -1182,6 +1210,9 @@ function interestCancelLabel(item) { return isTakePost(item) ? 'מציע — ל�
 function interestCountLabel(item) { return isTakePost(item) ? 'מציעים' : 'מתעניינים'; }
 function requestersPanelLabel(item) { return isTakePost(item) ? 'מי מציע' : 'מי רוצה'; }
 
+const conditionLabels = { new: 'חדש', like_new: 'כמו חדש', used: 'משומש', bad: 'מצב גרוע' };
+function conditionLabel(item) { return conditionLabels[item.condition] || ''; }
+
 function buildItemPopup(item) {
   const myRequests = JSON.parse(localStorage.getItem('my_requests') || '{}');
   const requested = myRequests[item.id];
@@ -1195,6 +1226,7 @@ function buildItemPopup(item) {
       ${item.image_url ? `<img src="${item.image_url}" class="item-popup-img" style="cursor:pointer;" onclick="openPhotoLightbox('${item.image_url}')"/>` : ''}
       <div class="item-popup-title">${item.title}</div>
       <div class="item-popup-cat">${item.category}</div>
+      ${!isTakePost(item) && conditionLabel(item) ? `<div class="item-popup-cat">מצב: ${conditionLabel(item)}</div>` : ''}
       ${item.description ? `<div class="item-popup-desc">${item.description}</div>` : ''}
       <div class="item-popup-by">מאת: ${item.nickname}</div>
       <div class="item-popup-interest">${item.request_count} ${interestCountLabel(item)}</div>
@@ -1350,12 +1382,14 @@ function previewPhoto(input) {
 async function submitItem() {
   const title = document.getElementById('post-title').value.trim();
   const category = document.getElementById('post-category').value;
+  const condition = document.getElementById('post-condition').value;
   const desc = document.getElementById('post-desc').value.trim();
   const photoInput = document.getElementById('photo-input');
   const photoCameraInput = document.getElementById('photo-camera-input');
 
   if (!selectedPostType) { showToast('נא לבחור למסור או לקחת'); return; }
   if (!title || !category) { showToast('נא למלא כותרת וקטגוריה'); return; }
+  if (selectedPostType === 'give' && !condition) { showToast('נא לבחור את מצב הפריט'); return; }
   if (itemLat === null || itemLon === null) { showToast('נא להגדיר מיקום לפריט'); return; }
 
   const photoFile = (photoInput.files[0]) || (photoCameraInput.files[0]) || null;
@@ -1366,6 +1400,7 @@ async function submitItem() {
   form.append('title', title);
   form.append('description', desc);
   form.append('category', category);
+  if (selectedPostType === 'give') form.append('condition', condition);
   form.append('lat', itemLat);
   form.append('lon', itemLon);
   if (photoFile) form.append('image', photoFile);
@@ -1397,6 +1432,8 @@ async function submitItem() {
     // Reset form
     document.getElementById('post-title').value = '';
     document.getElementById('post-category').value = '';
+    document.getElementById('post-condition').value = '';
+    document.getElementById('post-condition-group').style.display = 'none';
     document.getElementById('post-desc').value = '';
     document.getElementById('photo-input').value = '';
     const pc = document.getElementById('photo-preview-container'); if(pc) pc.style.display = 'none';
@@ -2087,6 +2124,23 @@ function adjustRadius(delta) {
 
 // ── Location ───────────────────────────────────────────
 let centeredOnUser = false;
+let userLocationMarker = null;
+
+function updateUserLocationDot() {
+  if (userLat === null || userLon === null) return;
+  if (userLocationMarker) {
+    userLocationMarker.setLatLng([userLat, userLon]);
+  } else {
+    const dotIcon = L.divIcon({
+      className: '',
+      html: '<div class="user-location-dot"></div>',
+      iconSize: [18, 18],
+      iconAnchor: [9, 9]
+    });
+    userLocationMarker = L.marker([userLat, userLon], { icon: dotIcon, zIndexOffset: 1000, interactive: false }).addTo(map);
+  }
+}
+
 async function startLocation() {
   // Request location permission on native Android
   if (window.Capacitor && window.Capacitor.isNativePlatform()) {
@@ -2104,6 +2158,7 @@ async function startLocation() {
   navigator.geolocation.watchPosition(pos => {
     userLat = pos.coords.latitude;
     userLon = pos.coords.longitude;
+    updateUserLocationDot();
     if (!centeredOnUser) {
       centeredOnUser = true;
       map.setView([userLat, userLon], 14);
@@ -2120,6 +2175,7 @@ function centerOnUser() {
     navigator.geolocation.getCurrentPosition(pos => {
       userLat = pos.coords.latitude;
       userLon = pos.coords.longitude;
+      updateUserLocationDot();
       map.flyTo([userLat, userLon], 15);
     });
   } else {
@@ -2139,6 +2195,7 @@ function selectPostType(type) {
   selectedPostType = type;
   document.getElementById('btn-give').className = 'type-btn' + (type === 'give' ? ' give-active' : '');
   document.getElementById('btn-take').className = 'type-btn' + (type === 'take' ? ' take-active' : '');
+  document.getElementById('post-condition-group').style.display = (type === 'give') ? 'block' : 'none';
   setTimeout(() => postStepNext(), 300);
 }
 
@@ -2256,6 +2313,8 @@ function openPostPanel() {
   if (document.getElementById('btn-take')) document.getElementById('btn-take').className = 'type-btn';
   document.getElementById('post-title').value = '';
   document.getElementById('post-category').value = '';
+  document.getElementById('post-condition').value = '';
+  document.getElementById('post-condition-group').style.display = 'none';
   document.getElementById('post-desc').value = '';
   document.getElementById('post-address').value = '';
   document.getElementById('photo-input').value = '';

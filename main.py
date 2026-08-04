@@ -145,6 +145,12 @@ def init_db():
         )
     """)
 
+    # Item condition (only meaningful for "give" posts) — new/like-new/used/bad.
+    # Nullable so existing rows stay blank rather than needing a backfill.
+    cur.execute("""
+        ALTER TABLE items ADD COLUMN IF NOT EXISTS condition TEXT
+    """)
+
     conn.commit()
     cur.close()
     conn.close()
@@ -411,6 +417,8 @@ def update_settings(settings: UserSettings):
 
 # ── Items ────────────────────────────────────────────────
 
+CONDITION_OPTIONS = {"new", "like_new", "used", "bad"}
+
 @app.post("/item")
 async def post_item(
     device_id: str = Form(...),
@@ -418,10 +426,19 @@ async def post_item(
     title: str = Form(...),
     description: str = Form(""),
     category: str = Form(...),
+    condition: Optional[str] = Form(None),
     lat: float = Form(...),
     lon: float = Form(...),
     image: Optional[UploadFile] = File(None)
 ):
+    # Condition is only meaningful (and required) for "give" posts — a "take"
+    # post has no physical item yet, so there's nothing to describe the state of.
+    if post_type == "give":
+        if not condition or condition not in CONDITION_OPTIONS:
+            raise HTTPException(status_code=400, detail="Condition is required for give items")
+    else:
+        condition = None
+
     image_url = None
     if image and image.filename:
         data = await image.read()
@@ -431,10 +448,10 @@ async def post_item(
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        INSERT INTO items (device_id, post_type, title, description, category, image_url, lat, lon, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO items (device_id, post_type, title, description, category, condition, image_url, lat, lon, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
-    """, (device_id, post_type, title, description, category, image_url, lat, lon, time.time()))
+    """, (device_id, post_type, title, description, category, condition, image_url, lat, lon, time.time()))
     item_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
