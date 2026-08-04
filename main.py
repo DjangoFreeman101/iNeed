@@ -348,6 +348,12 @@ def manifest():
 def icon():
     return FileResponse("icon.png", media_type="image/png")
 
+@app.get("/email-banner.png")
+def email_banner():
+    """Banner shown at the top of every outgoing email. Must be publicly
+    reachable — mail clients fetch it over HTTP, they can't read local files."""
+    return FileResponse("email-banner.png", media_type="image/png")
+
 @app.get("/sw.js")
 def service_worker():
     return FileResponse("sw.js", media_type="application/javascript")
@@ -735,7 +741,7 @@ def send_report_email(item, report):
             "from": from_addr,
             "to": [to_addr],
             "subject": f"[iNeed] Image reported — item #{report.item_id}",
-            "html": body,
+            "html": email_shell(body, rtl=False),
         },
         timeout=10,
     )
@@ -756,10 +762,32 @@ def check_password(pw: str, hashed: str) -> bool:
 def gen_code() -> str:
     return "".join(random.choices(string.digits, k=6))
 
-def send_simple_email(to_addr, subject, html):
+def email_shell(inner_html, rtl=True):
+    """Wraps message content in the standard iNeed email frame: banner on top,
+    content in a centered card. The banner is sized to sit comfortably above
+    body text rather than dominate the message."""
+    direction = "rtl" if rtl else "ltr"
+    banner_url = f"{app_base_url()}/email-banner.png"
+    return f"""
+    <div style="background:#f4f4f5;padding:24px 12px;">
+      <div dir="{direction}" style="max-width:560px;margin:0 auto;background:#fff;
+                  border-radius:12px;overflow:hidden;font-family:Arial,sans-serif;">
+        <div style="text-align:center;background:#F4433620;padding:16px 12px 8px;">
+          <img src="{banner_url}" alt="iNeed" width="380"
+               style="display:inline-block;width:100%;max-width:380px;height:auto;
+                      border:0;border-radius:8px;"/>
+        </div>
+        <div style="padding:24px;color:#222;line-height:1.6;">
+          {inner_html}
+        </div>
+      </div>
+    </div>
+    """
+
+def send_simple_email(to_addr, subject, html, rtl=True):
     """Generic Resend sender for verification/reset codes. Best-effort: returns
     False (and logs) rather than raising, so callers can turn that into a
-    clean HTTP error."""
+    clean HTTP error. Content is wrapped in the standard banner frame."""
     api_key = os.environ.get("RESEND_API_KEY", "")
     from_addr = os.environ.get("REPORT_EMAIL_FROM", "onboarding@resend.dev")
     if not api_key or not to_addr:
@@ -768,7 +796,8 @@ def send_simple_email(to_addr, subject, html):
     resp = requests.post(
         "https://api.resend.com/emails",
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={"from": from_addr, "to": [to_addr], "subject": subject, "html": html},
+        json={"from": from_addr, "to": [to_addr], "subject": subject,
+              "html": email_shell(html, rtl=rtl)},
         timeout=10,
     )
     if resp.status_code >= 300:
@@ -823,7 +852,7 @@ def send_email_code(body: EmailCodeRequest):
     sent = send_simple_email(
         email,
         "קוד האימות שלך ל-iNeed",
-        f"<h2>iNeed</h2><p>קוד האימות שלך הוא:</p><h1 style='letter-spacing:4px;'>{code}</h1><p>הקוד בתוקף ל-15 דקות.</p>"
+        f"<p>קוד האימות שלך הוא:</p><h1 style='letter-spacing:4px;'>{code}</h1><p>הקוד בתוקף ל-15 דקות.</p>"
     )
     if not sent:
         raise HTTPException(status_code=500, detail="Failed to send verification email")
@@ -953,7 +982,7 @@ def forgot_password(body: ForgotPasswordBody):
         send_simple_email(
             email,
             "איפוס סיסמה — iNeed",
-            f"<h2>iNeed</h2><p>קוד לאיפוס הסיסמה שלך:</p><h1 style='letter-spacing:4px;'>{code}</h1><p>הקוד בתוקף ל-30 דקות.</p>"
+            f"<p>קוד לאיפוס הסיסמה שלך:</p><h1 style='letter-spacing:4px;'>{code}</h1><p>הקוד בתוקף ל-30 דקות.</p>"
         )
     # Always return ok whether or not the email is registered — avoids
     # leaking to a caller which emails exist in the system.
@@ -1147,15 +1176,12 @@ def send_reminder_email(rem, stage):
     """
 
     body = f"""
-    <div dir="rtl" style="font-family:Arial,sans-serif;">
-      <h2>iNeed</h2>
       <p>שלום {info['my_nickname'] or ''},</p>
       <p>{lead}</p>
       {f'<p><img src="{info["image_url"]}" alt="" style="max-width:280px;border-radius:8px;"/></p>' if info["image_url"] else ''}
       <p>{buttons}</p>
-      <hr/>
+      <hr style="border:none;border-top:1px solid #eee;margin:20px 0;"/>
       <p style="font-size:12px;color:#777;">אפשר לסמן גם ישירות באפליקציה.</p>
-    </div>
     """
     return send_simple_email(info["my_email"], f"[iNeed] {info['title']} — נפגשתם?", body)
 
@@ -1336,16 +1362,13 @@ def send_transaction_email(to_addr, nickname, item, role, when_ts):
         rows.append(f'<p><img src="{image_url}" alt="" style="max-width:320px;border-radius:8px;"/></p>')
 
     body = f"""
-    <div dir="rtl" style="font-family:Arial,sans-serif;">
-      <h2>iNeed</h2>
       <p>שלום {nickname or ''},</p>
       <p>סימנת שה{action} את הפריט הבא:</p>
       {''.join(rows)}
-      <hr/>
+      <hr style="border:none;border-top:1px solid #eee;margin:20px 0;"/>
       <p style="font-size:12px;color:#777;">
         זהו תיעוד אישי של הסימון שביצעת באפליקציה. ייתכן שהצד השני טרם סימן מצידו.
       </p>
-    </div>
     """
     return send_simple_email(to_addr, f"[iNeed] תיעוד: {action} את \"{title}\"", body)
 
