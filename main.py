@@ -1092,6 +1092,8 @@ REMINDER_STAGE2_DELAY = 24 * 60 * 60   # 24 hours after "I'll give/take"
 def app_base_url():
     return os.environ.get("APP_BASE_URL", "https://ineed-0otk.onrender.com").rstrip("/")
 
+PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.djangofreeman.ineed"
+
 def create_exchange_reminders(request_id):
     """Called when a giver approves a taker. Arms one reminder row for each
     side. Idempotent — re-approving won't duplicate or reset the clock."""
@@ -1154,14 +1156,12 @@ def send_reminder_email(rem, stage):
     is_give = rem["role"] == "give"
     verb_past = "מסרת" if is_give else "לקחת"
     verb_future = "אמסור" if is_give else "אקח"
-    direction = "למסור" if is_give else "לקחת"
     base = app_base_url()
     confirm_url = f"{base}/r/{rem['token']}/confirm"
     intent_url = f"{base}/r/{rem['token']}/intent"
 
     if stage == 1:
-        lead = (f"ראינו שהתאמת עם {info['other_nickname']} כדי {direction} "
-                f"\"{info['title']}\". נפגשתם?")
+        lead = f"האם {verb_past} את \"{info['title']}\"?"
     else:
         lead = (f"תזכורת: סימנת ש{verb_future} את \"{info['title']}\" "
                 f"עם {info['other_nickname']}. כבר קרה?")
@@ -1181,9 +1181,12 @@ def send_reminder_email(rem, stage):
       {f'<p><img src="{info["image_url"]}" alt="" style="max-width:280px;border-radius:8px;"/></p>' if info["image_url"] else ''}
       <p>{buttons}</p>
       <hr style="border:none;border-top:1px solid #eee;margin:20px 0;"/>
+      <p><a href="{PLAY_STORE_URL}" style="{btn}background:#e74c3c;color:#fff;">פתח את האפליקציה</a></p>
       <p style="font-size:12px;color:#777;">אפשר לסמן גם ישירות באפליקציה.</p>
     """
-    return send_simple_email(info["my_email"], f"[iNeed] {info['title']} — נפגשתם?", body)
+    subject = (f"[iNeed] האם {verb_past} את \"{info['title']}\"?" if stage == 1
+               else f"[iNeed] תזכורת: {info['title']}")
+    return send_simple_email(info["my_email"], subject, body)
 
 def process_due_reminders():
     """One sweep: send whatever is due right now."""

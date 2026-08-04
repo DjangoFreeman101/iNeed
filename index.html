@@ -2651,51 +2651,13 @@ async function checkForApprovals() {
 
 // ── Reminder: approved but not yet swiped as gave/took ──
 async function checkPendingExchanges() {
+  // Only lights the quiet "My Items" dot. The actual nudge to confirm is the
+  // 30-minute reminder email sent from the backend — no banner, no push.
   try {
     const res = await fetch(`${API_BASE}/pending-exchanges/${deviceId}`);
     if (!res.ok) return;
     const rows = await res.json();
-    if (!rows || rows.length === 0) {
-      setPendingExchangeDot(false);
-      return;
-    }
-    // There are items awaiting my confirmation — light the dot.
-    setPendingExchangeDot(true);
-
-    const storedRaw = localStorage.getItem('ineed_reminded_exchange_ids');
-    const isFirstRun = storedRaw === null;
-    const remindedSet = new Set(JSON.parse(storedRaw || '[]'));
-
-    if (isFirstRun) {
-      rows.forEach(r => remindedSet.add(r.item_id));
-      localStorage.setItem('ineed_reminded_exchange_ids', JSON.stringify(Array.from(remindedSet)));
-      return; // dot is shown, but don't fire a notification retroactively
-    }
-
-    const newOnes = rows.filter(r => !remindedSet.has(r.item_id));
-    if (newOnes.length === 0) return;
-    newOnes.forEach(r => remindedSet.add(r.item_id));
-    localStorage.setItem('ineed_reminded_exchange_ids', JSON.stringify(Array.from(remindedSet)));
-
-    const single = newOnes[0];
-    const gaveOrTook = single.post_type === 'give' ? 'מסרת' : 'לקחת';
-    const message = newOnes.length === 1
-      ? `האם ${gaveOrTook} את "${single.title}"? החלק ימינה כדי לאשר`
-      : `יש ${newOnes.length} פריטים שממתינים לאישור מסירה/קבלה`;
-    showInterestBanner(message, 'my-items');
-
-    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
-      try {
-        await window.Capacitor.Plugins.LocalNotifications.schedule({
-          notifications: [{
-            id: Math.floor((Date.now() + 2) % 2147483647),
-            title: 'אישור מסירה/קבלה',
-            body: message,
-            schedule: { at: new Date(Date.now() + 1000) }
-          }]
-        });
-      } catch(e) {}
-    }
+    setPendingExchangeDot(!!(rows && rows.length));
   } catch(e) {
     console.log('Pending-exchange check failed:', e);
   }
