@@ -1629,6 +1629,8 @@ function renderMyItemsList(items) {
             ${item.status === 'available' ? 'סמן כנלקח' : 'החזר לזמין'}
           </button>
         </div>
+        <button class="item-card-btn" style="width:100%;margin-top:6px;background:var(--dark);color:white;"
+          onclick="event.stopPropagation(); goToMyItemPin(${item.id})">מעבר לפרסום במפה</button>
       </div>`;
     if (!swipeable) return cardInner;
     return `
@@ -1643,6 +1645,14 @@ function renderMyItemsList(items) {
     const itemId = Number(wrap.getAttribute('data-item-id'));
     attachSwipe(wrap, () => exchangeItem(itemId));
   });
+}
+
+function goToMyItemPin(itemId) {
+  const item = (myItemsData || []).find(i => i.id === itemId);
+  if (!item) return;
+  // Close any open panels so the map is visible, then fly to the pin.
+  document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
+  goToItemPin(item);
 }
 
 async function exchangeItem(itemId) {
