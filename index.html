@@ -651,7 +651,7 @@
 
 <div id="header">
   <div style="display:flex; align-items:center; gap:8px;">
-    <img id="header-logo" src="/header-logo.png?v=2" alt="iNeed" style="height:28px; width:auto;"/>
+    <img id="header-logo" alt="iNeed" style="height:28px; width:auto;"/>
     <button class="header-btn" onclick="refreshItems()" style="font-size:18px; font-weight:bold;">↺</button>
   </div>
   <div id="header-actions">
@@ -1035,6 +1035,14 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
 const API_BASE = 'https://ineed-0otk.onrender.com';
+
+// The header logo must load from the API origin, not the webview's local origin
+// (in the Capacitor app a root-relative "/header-logo.png" resolves against
+// capacitor://localhost and 404s). Setting it from API_BASE fixes that.
+(function() {
+  const logo = document.getElementById('header-logo');
+  if (logo) logo.src = `${API_BASE}/header-logo.png?v=3`;
+})();
 
 // ── Swipe-to-action helper ─────────────────────────────
 // Attaches to a wrapper that contains a .swipe-reveal (behind) and a
