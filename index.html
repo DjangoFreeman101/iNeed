@@ -652,6 +652,10 @@
 <div id="header">
   <div style="display:flex; align-items:center; gap:8px;">
     <div id="header-title">iNeed</div>
+    <button class="header-btn" onclick="openFilterPanel()" style="position:relative;" title="סינון">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+      <span id="filter-active-dot" style="display:none; position:absolute; top:2px; right:2px; width:8px; height:8px; background:#e74c3c; border-radius:50%; border:1.5px solid white;"></span>
+    </button>
     <button class="header-btn" onclick="refreshItems()" style="font-size:18px; font-weight:bold;">↺</button>
   </div>
   <div id="header-actions">
@@ -987,6 +991,46 @@
   </div>
 </div>
 
+<div id="filter-panel" class="panel">
+  <div class="panel-header">
+    <button class="panel-back" onclick="closePanel('filter-panel')">←</button>
+    <span class="panel-title">סינון</span>
+  </div>
+  <div class="panel-body">
+    <div class="form-group">
+      <label class="form-label">קטגוריה</label>
+      <select class="form-select" id="filter-category">
+        <option value="">הכל</option>
+        <option>ריהוט</option>
+        <option>אלקטרוניקה</option>
+        <option>ביגוד והנעלה</option>
+        <option>ספרים ולימוד</option>
+        <option>מטבח וכלי בית</option>
+        <option>צעצועים וילדים</option>
+        <option>ספורט ופנאי</option>
+        <option>גינה וכלי עבודה</option>
+        <option>אחר</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">שם הפריט מכיל</label>
+      <input type="text" class="form-input" id="filter-name" placeholder="לדוגמה: כיסא"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">מצב הפריט</label>
+      <select class="form-select" id="filter-condition">
+        <option value="">הכל</option>
+        <option value="new">חדש</option>
+        <option value="like_new">כמו חדש</option>
+        <option value="used">משומש</option>
+        <option value="bad">מצב גרוע</option>
+      </select>
+    </div>
+    <button class="btn-primary" onclick="applyFilters()">החל סינון</button>
+    <button class="btn-primary" id="clear-filter-btn" onclick="clearFilters()" style="display:none; background:#888; margin-top:10px;">בטל סינון</button>
+  </div>
+</div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
@@ -1134,6 +1178,23 @@ function filterByRadius(items) {
   return items.filter(i => distanceKm(userLat, userLon, i.lat, i.lon) <= radius);
 }
 
+// Active map filter. null in each slot means "no constraint on this field".
+let activeFilter = { category: '', name: '', condition: '' };
+function isFilterActive() {
+  return !!(activeFilter.category || activeFilter.name || activeFilter.condition);
+}
+
+function applyItemFilters(items) {
+  if (!isFilterActive()) return items;
+  const nameNeedle = activeFilter.name.trim().toLowerCase();
+  return items.filter(i => {
+    if (activeFilter.category && i.category !== activeFilter.category) return false;
+    if (activeFilter.condition && i.condition !== activeFilter.condition) return false;
+    if (nameNeedle && !(i.title || '').toLowerCase().includes(nameNeedle)) return false;
+    return true;
+  });
+}
+
 async function loadItems() {
   if (map.getZoom() < MIN_ZOOM) {
     clusterGroup.clearLayers();
@@ -1157,7 +1218,9 @@ async function loadItems() {
   const allItems = await res.json();
 
   // Only show items within the user's chosen radius.
-  const items = filterByRadius(allItems);
+  const radiusItems = filterByRadius(allItems);
+  // Then apply any active category/name/condition filter.
+  const items = applyItemFilters(radiusItems);
 
   // Hide loading after first load
   const loadingEl = document.getElementById('loading');
@@ -1255,6 +1318,48 @@ function closePhotoLightbox() {
 function refreshItems() {
   loadItems();
   showToast('מרענן...');
+}
+
+// ── Filter ───────────────────────────────────────────────
+function openFilterPanel() {
+  // Reflect the current active filter back into the controls.
+  document.getElementById('filter-category').value = activeFilter.category;
+  document.getElementById('filter-name').value = activeFilter.name;
+  document.getElementById('filter-condition').value = activeFilter.condition;
+  // Show "clear filter" only when a filter is currently applied.
+  document.getElementById('clear-filter-btn').style.display = isFilterActive() ? 'block' : 'none';
+  openPanel('filter-panel');
+}
+
+function syncFilterIndicator() {
+  document.getElementById('filter-active-dot').style.display = isFilterActive() ? 'block' : 'none';
+}
+
+function reloadMapFromScratch() {
+  // Wipe all markers so a tightened filter can't leave stale pins behind, then
+  // reload against the current filter.
+  clusterGroup.clearLayers();
+  Object.keys(itemMarkers).forEach(id => delete itemMarkers[id]);
+  itemsData = [];
+  loadItems();
+}
+
+function applyFilters() {
+  activeFilter.category = document.getElementById('filter-category').value;
+  activeFilter.name = document.getElementById('filter-name').value;
+  activeFilter.condition = document.getElementById('filter-condition').value;
+  syncFilterIndicator();
+  closePanel('filter-panel');
+  reloadMapFromScratch();
+  showToast(isFilterActive() ? 'הסינון הוחל' : 'לא נבחר סינון');
+}
+
+function clearFilters() {
+  activeFilter = { category: '', name: '', condition: '' };
+  syncFilterIndicator();
+  closePanel('filter-panel');
+  reloadMapFromScratch();
+  showToast('הסינון בוטל');
 }
 
 // ── Item info modal ─────────────────────────────────────
