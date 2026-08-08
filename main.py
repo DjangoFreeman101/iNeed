@@ -354,6 +354,10 @@ def email_banner():
     reachable — mail clients fetch it over HTTP, they can't read local files."""
     return FileResponse("email-banner.png", media_type="image/png")
 
+@app.get("/header-logo.png")
+def header_logo():
+    return FileResponse("header-logo.png", media_type="image/png")
+
 @app.get("/sw.js")
 def service_worker():
     return FileResponse("sw.js", media_type="application/javascript")
