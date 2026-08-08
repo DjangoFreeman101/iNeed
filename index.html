@@ -159,7 +159,13 @@
       align-items:center; gap:12px;
       position:sticky; top:0; z-index:1;
     }
-    .panel-back { background:none; border:none; color:white; font-size:18px; cursor:pointer; }
+    .panel-back {
+      background:none; border:none; cursor:pointer;
+      width:28px; height:28px; padding:0;
+      display:inline-flex; align-items:center; justify-content:center;
+      color:white;
+    }
+    .panel-back svg { width:22px; height:22px; }
     .panel-title { font-size:17px; font-weight:700; }
     .panel-body { padding:20px 16px; flex:1; }
 
@@ -720,7 +726,7 @@
 <!-- Post item panel (multi-step) -->
 <div id="post-panel" class="panel">
   <div class="panel-header">
-    <button class="panel-back" id="post-back-btn" onclick="postStepBack()">←</button>
+    <button class="panel-back" id="post-back-btn" onclick="postStepBack()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
     <span class="panel-title" id="post-panel-title">פרסם פריט</span>
   </div>
   <div id="post-progress">
@@ -815,7 +821,7 @@
 <!-- My items panel -->
 <div id="my-items-panel" class="panel">
   <div class="panel-header">
-    <button class="panel-back" onclick="closePanel('my-items-panel')">←</button>
+    <button class="panel-back" onclick="closePanel('my-items-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
     <span class="panel-title">הפריטים שלי</span>
   </div>
   <div class="panel-body" id="my-items-body">
@@ -826,7 +832,7 @@
 <!-- My requests panel (items I asked for) -->
 <div id="my-requests-panel" class="panel">
   <div class="panel-header">
-    <button class="panel-back" onclick="closePanel('my-requests-panel')">←</button>
+    <button class="panel-back" onclick="closePanel('my-requests-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
     <span class="panel-title">הבקשות שלי</span>
   </div>
   <div class="panel-body" id="my-requests-body">
@@ -837,7 +843,7 @@
 <!-- History panel -->
 <div id="history-panel" class="panel">
   <div class="panel-header">
-    <button class="panel-back" onclick="closePanel('history-panel')">←</button>
+    <button class="panel-back" onclick="closePanel('history-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
     <span class="panel-title">היסטוריה</span>
   </div>
   <div class="panel-body" id="history-body">
@@ -848,7 +854,7 @@
 <!-- Privacy policy panel -->
 <div id="privacy-panel" class="panel">
   <div class="panel-header">
-    <button class="panel-back" onclick="closePanel('privacy-panel')">←</button>
+    <button class="panel-back" onclick="closePanel('privacy-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
     <span class="panel-title">מדיניות פרטיות</span>
   </div>
   <div class="panel-body privacy-body">
@@ -897,7 +903,7 @@
 <!-- Requesters panel -->
 <div id="requesters-panel" class="panel">
   <div class="panel-header">
-    <button class="panel-back" onclick="closePanel('requesters-panel')">←</button>
+    <button class="panel-back" onclick="closePanel('requesters-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
     <span class="panel-title" id="requesters-title">מי רוצה את הפריט?</span>
   </div>
   <div class="panel-body" id="requesters-body"></div>
@@ -906,7 +912,7 @@
 <!-- Item info panel -->
 <div id="item-info-panel" class="panel">
   <div class="panel-header">
-    <button class="panel-back" onclick="closePanel('item-info-panel')">←</button>
+    <button class="panel-back" onclick="closePanel('item-info-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
     <span class="panel-title">פרטי הפריט</span>
   </div>
   <div class="panel-body" id="item-info-body"></div>
@@ -915,7 +921,7 @@
 <!-- Edit item panel -->
 <div id="edit-item-panel" class="panel">
   <div class="panel-header">
-    <button class="panel-back" onclick="closePanel('edit-item-panel')">←</button>
+    <button class="panel-back" onclick="closePanel('edit-item-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
     <span class="panel-title">ערוך פריט</span>
   </div>
   <div class="panel-body">
@@ -960,7 +966,7 @@
 <!-- Settings panel -->
 <div id="settings-panel" class="panel">
   <div class="panel-header">
-    <button class="panel-back" onclick="closePanel('settings-panel')">←</button>
+    <button class="panel-back" onclick="closePanel('settings-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
     <span class="panel-title">הגדרות</span>
   </div>
   <div class="panel-body">
@@ -993,7 +999,7 @@
 
 <div id="filter-panel" class="panel">
   <div class="panel-header">
-    <button class="panel-back" onclick="closePanel('filter-panel')">←</button>
+    <button class="panel-back" onclick="closePanel('filter-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
     <span class="panel-title">סינון</span>
   </div>
   <div class="panel-body">
