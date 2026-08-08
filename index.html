@@ -651,15 +651,15 @@
 
 <div id="header">
   <div style="display:flex; align-items:center; gap:8px;">
-    <div id="header-title">iNeed</div>
-    <button class="header-btn" onclick="openFilterPanel()" style="position:relative;" title="סינון">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-      <span id="filter-active-dot" style="display:none; position:absolute; top:2px; right:2px; width:8px; height:8px; background:#e74c3c; border-radius:50%; border:1.5px solid white;"></span>
-    </button>
+    <img id="header-logo" src="/icon.png" alt="iNeed" style="height:32px; width:auto; border-radius:6px;"/>
     <button class="header-btn" onclick="refreshItems()" style="font-size:18px; font-weight:bold;">↺</button>
   </div>
   <div id="header-actions">
     <button class="header-btn" onclick="openMenu()">☰</button>
+    <button class="header-btn" onclick="openFilterPanel()" style="position:relative;" title="סינון">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+      <span id="filter-active-dot" style="display:none; position:absolute; top:2px; right:2px; width:8px; height:8px; background:#e74c3c; border-radius:50%; border:1.5px solid white;"></span>
+    </button>
   </div>
 </div>
 
