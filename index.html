@@ -581,7 +581,8 @@
     }
     html[dir="ltr"] #post-step-label,
     html[dir="ltr"] #photo-hint,
-    html[dir="ltr"] #loc-status {
+    html[dir="ltr"] #loc-status,
+    html[dir="ltr"] #interest-banner {
       text-align:left;
     }
   </style>
@@ -590,7 +591,7 @@
 
 <div id="loading">
   <div id="loading-logo">iNeed</div>
-  <div id="loading-sub">תן וקח</div>
+  <div id="loading-sub" data-i18n="loading_sub">תן וקח</div>
   <div id="loading-spinner"></div>
 </div>
 <script>
@@ -1257,7 +1258,35 @@ const I18N = {
     toast_geocode_first: 'נא לאתר כתובת לפני שממשיכים',
     toast_enter_address: 'נא להזין כתובת',
     toast_posted: 'הפריט פורסם בהצלחה!',
-    toast_error: 'שגיאה — נסה שוב'
+    toast_error: 'שגיאה — נסה שוב',
+    toast_refreshing: 'מרענן...',
+    loading_sub: 'תן וקח',
+    badge_need: 'צריך',
+    badge_give: 'מוסר',
+    pop_condition: 'מצב',
+    pop_by: 'מאת',
+    pop_approved: 'אושר!',
+    pop_report: 'דווח על תמונה',
+    pop_your_item: 'זה הפריט שלך',
+    pop_i_have: 'יש לי את זה!',
+    pop_i_want: 'אני רוצה את זה!',
+    pop_offering_cancel: 'מציע — לחץ לביטול',
+    pop_interested_cancel: 'מעוניין — לחץ לביטול',
+    pop_offerers: 'מציעים',
+    pop_interested: 'מתעניינים',
+    pop_who_offers: 'מי מציע',
+    pop_who_wants: 'מי רוצה',
+    notif_has_for_you: 'ל{name} יש "{item}" בשבילך',
+    notif_interested_in: '{name} מעוניין ב"{item}"',
+    notif_multi_updates: 'יש {n} עדכונים חדשים על הפריטים שלך',
+    notif_found_title: 'מישהו מצא את מה שחיפשת!',
+    notif_interested_title: 'מישהו מעוניין בפריט שלך!',
+    notif_match_single: 'נמצאה התאמה! {name} — "{item}"',
+    notif_match_multi: 'נמצאו {n} התאמות חדשות',
+    notif_match_title: 'נמצאה התאמה!',
+    notif_approved_single: '{name} אישר את הבקשה שלך ל"{item}"',
+    notif_approved_multi: '{n} מהבקשות שלך אושרו',
+    notif_approved_title: 'הבקשה שלך אושרה!'
   },
   en: {
     gate_signup: 'Sign up',
@@ -1393,7 +1422,35 @@ const I18N = {
     toast_geocode_first: 'Please find an address before continuing',
     toast_enter_address: 'Please enter an address',
     toast_posted: 'Item posted successfully!',
-    toast_error: 'Error — please try again'
+    toast_error: 'Error — please try again',
+    toast_refreshing: 'Refreshing...',
+    loading_sub: 'Give & Take',
+    badge_need: 'Need',
+    badge_give: 'Give',
+    pop_condition: 'Condition',
+    pop_by: 'By',
+    pop_approved: 'Approved!',
+    pop_report: 'Report photo',
+    pop_your_item: 'This is your item',
+    pop_i_have: 'I have this!',
+    pop_i_want: 'I want this!',
+    pop_offering_cancel: 'Offering — tap to cancel',
+    pop_interested_cancel: 'Interested — tap to cancel',
+    pop_offerers: 'offering',
+    pop_interested: 'interested',
+    pop_who_offers: 'Who offers',
+    pop_who_wants: 'Who wants',
+    notif_has_for_you: '{name} has "{item}" for you',
+    notif_interested_in: '{name} is interested in "{item}"',
+    notif_multi_updates: 'You have {n} new updates on your items',
+    notif_found_title: 'Someone found what you were looking for!',
+    notif_interested_title: 'Someone is interested in your item!',
+    notif_match_single: 'Match found! {name} — "{item}"',
+    notif_match_multi: '{n} new matches found',
+    notif_match_title: 'Match found!',
+    notif_approved_single: '{name} approved your request for "{item}"',
+    notif_approved_multi: '{n} of your requests were approved',
+    notif_approved_title: 'Your request was approved!'
   }
 };
 
@@ -1700,13 +1757,15 @@ function waLink(phone) {
   const intl = digits.replace(/^0/, '972');              // 05... -> 9725...
   return `https://wa.me/${intl}`;
 }
-function interestActionLabel(item) { return isTakePost(item) ? 'יש לי את זה!' : 'אני רוצה את זה!'; }
-function interestCancelLabel(item) { return isTakePost(item) ? 'מציע — לחץ לביטול' : 'מעוניין — לחץ לביטול'; }
-function interestCountLabel(item) { return isTakePost(item) ? 'מציעים' : 'מתעניינים'; }
-function requestersPanelLabel(item) { return isTakePost(item) ? 'מי מציע' : 'מי רוצה'; }
+function interestActionLabel(item) { return isTakePost(item) ? t('pop_i_have') : t('pop_i_want'); }
+function interestCancelLabel(item) { return isTakePost(item) ? t('pop_offering_cancel') : t('pop_interested_cancel'); }
+function interestCountLabel(item) { return isTakePost(item) ? t('pop_offerers') : t('pop_interested'); }
+function requestersPanelLabel(item) { return isTakePost(item) ? t('pop_who_offers') : t('pop_who_wants'); }
 
-const conditionLabels = { new: 'חדש', like_new: 'כמו חדש', used: 'משומש', bad: 'מצב גרוע' };
-function conditionLabel(item) { return conditionLabels[item.condition] || ''; }
+function conditionLabel(item) {
+  const map = { new: t('cond_new'), like_new: t('cond_like_new'), used: t('cond_used'), bad: t('cond_bad') };
+  return map[item.condition] || '';
+}
 
 function buildItemPopup(item) {
   const myRequests = JSON.parse(localStorage.getItem('my_requests') || '{}');
@@ -1715,24 +1774,26 @@ function buildItemPopup(item) {
   // If I'm a taker whose request on this item was approved, show the giver phone.
   const approvals = JSON.parse(localStorage.getItem('ineed_my_approvals') || '{}');
   const approvedPhone = approvals[item.id];
+  const dir = currentLang === 'he' ? 'rtl' : 'ltr';
+  const align = currentLang === 'he' ? 'right' : 'left';
   return `
-    <div class="item-popup">
-      <div class="item-popup-top"><span class="item-badge ${isTakePost(item) ? 'take' : 'give'}">${isTakePost(item) ? 'צריך' : 'מוסר'}</span></div>
+    <div class="item-popup" style="direction:${dir}; text-align:${align};">
+      <div class="item-popup-top"><span class="item-badge ${isTakePost(item) ? 'take' : 'give'}">${isTakePost(item) ? t('badge_need') : t('badge_give')}</span></div>
       ${item.image_url ? `<img src="${item.image_url}" class="item-popup-img" style="cursor:pointer;" onclick="openPhotoLightbox('${item.image_url}')"/>` : ''}
       <div class="item-popup-title">${item.title}</div>
       <div class="item-popup-cat">${item.category}</div>
-      ${!isTakePost(item) && conditionLabel(item) ? `<div class="item-popup-cat">מצב: ${conditionLabel(item)}</div>` : ''}
+      ${!isTakePost(item) && conditionLabel(item) ? `<div class="item-popup-cat">${t('pop_condition')}: ${conditionLabel(item)}</div>` : ''}
       ${item.description ? `<div class="item-popup-desc">${item.description}</div>` : ''}
-      <div class="item-popup-by">מאת: ${item.nickname}</div>
+      <div class="item-popup-by">${t('pop_by')}: ${item.nickname}</div>
       <div class="item-popup-interest">${item.request_count} ${interestCountLabel(item)}</div>
-      ${approvedPhone ? `<div class="item-popup-approved">אושר! <a href="${waLink(approvedPhone)}" target="_blank" style="direction:ltr;">💬 ${approvedPhone}</a></div>` : ''}
+      ${approvedPhone ? `<div class="item-popup-approved">${t('pop_approved')} <a href="${waLink(approvedPhone)}" target="_blank" style="direction:ltr;">💬 ${approvedPhone}</a></div>` : ''}
       ${!isMyItem ? `
         <button class="item-popup-btn ${requested ? 'requested' : ''}"
           onclick="${requested ? `cancelInterest(${item.id})` : `expressInterest(${item.id})`}">
           ${requested ? interestCancelLabel(item) : interestActionLabel(item)}
         </button>
-        <button class="item-popup-report" onclick="reportImage(${item.id})"> דווח על תמונה</button>
-      ` : `<div style="font-size:12px;color:var(--gray);text-align:center;padding:8px;">זה הפריט שלך</div>`}
+        <button class="item-popup-report" onclick="reportImage(${item.id})"> ${t('pop_report')}</button>
+      ` : `<div style="font-size:12px;color:var(--gray);text-align:center;padding:8px;">${t('pop_your_item')}</div>`}
     </div>`;
 }
 
@@ -1749,7 +1810,7 @@ function closePhotoLightbox() {
 // ── Refresh ──────────────────────────────────────────────
 function refreshItems() {
   loadItems();
-  showToast('מרענן...');
+  showToast(t('toast_refreshing'));
 }
 
 // ── Filter ───────────────────────────────────────────────
@@ -3070,14 +3131,14 @@ async function checkForNewInterest() {
     const singleIsTake = isTakePost(single);
     const message = newRows.length === 1
       ? (singleIsTake
-          ? `ל${single.requester_name} יש "${single.item_title}" בשבילך`
-          : `${single.requester_name} מעוניין ב"${single.item_title}"`)
-      : `יש ${newRows.length} עדכונים חדשים על הפריטים שלך`;
+          ? t('notif_has_for_you').replace('{name}', single.requester_name).replace('{item}', single.item_title)
+          : t('notif_interested_in').replace('{name}', single.requester_name).replace('{item}', single.item_title))
+      : t('notif_multi_updates').replace('{n}', newRows.length);
     showInterestBanner(message, 'my-items');
 
     const notifTitle = newRows.length === 1 && singleIsTake
-      ? 'מישהו מצא את מה שחיפשת!'
-      : 'מישהו מעוניין בפריט שלך!';
+      ? t('notif_found_title')
+      : t('notif_interested_title');
 
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
       try {
@@ -3135,8 +3196,8 @@ async function checkForMatches() {
     };
 
     const message = newRows.length === 1
-      ? `נמצאה התאמה! ${single.other_nickname} — "${single.my_item_title}"`
-      : `נמצאו ${newRows.length} התאמות חדשות`;
+      ? t('notif_match_single').replace('{name}', single.other_nickname).replace('{item}', single.my_item_title)
+      : t('notif_match_multi').replace('{n}', newRows.length);
 
     showInterestBanner(message, 'map-pin', null, newRows.length === 1 ? otherItem : null);
 
@@ -3145,7 +3206,7 @@ async function checkForMatches() {
         await window.Capacitor.Plugins.LocalNotifications.schedule({
           notifications: [{
             id: Math.floor((Date.now() + 3) % 2147483647),
-            title: 'נמצאה התאמה!',
+            title: t('notif_match_title'),
             body: message,
             schedule: { at: new Date(Date.now() + 1000) }
           }]
@@ -3191,8 +3252,8 @@ async function checkForApprovals() {
 
     const single = newlyApproved[0];
     const message = newlyApproved.length === 1
-      ? `${single.giver_name} אישר את הבקשה שלך ל"${single.item_title}"`
-      : `${newlyApproved.length} מהבקשות שלך אושרו`;
+      ? t('notif_approved_single').replace('{name}', single.giver_name).replace('{item}', single.item_title)
+      : t('notif_approved_multi').replace('{n}', newlyApproved.length);
     showInterestBanner(message, 'my-requests', newlyApproved.length === 1 ? single.item_id : null);
 
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
@@ -3200,7 +3261,7 @@ async function checkForApprovals() {
         await window.Capacitor.Plugins.LocalNotifications.schedule({
           notifications: [{
             id: Math.floor((Date.now() + 1) % 2147483647),
-            title: 'הבקשה שלך אושרה!',
+            title: t('notif_approved_title'),
             body: message,
             schedule: { at: new Date(Date.now() + 1000) }
           }]
