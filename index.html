@@ -579,7 +579,11 @@
     html[dir="ltr"] .privacy-body ul {
       padding-left:20px; padding-right:0;
     }
-    html[dir="ltr"] .panel-title { }
+    html[dir="ltr"] #post-step-label,
+    html[dir="ltr"] #photo-hint,
+    html[dir="ltr"] #loc-status {
+      text-align:left;
+    }
   </style>
 </head>
 <body>
@@ -799,7 +803,7 @@
 <div id="post-panel" class="panel">
   <div class="panel-header">
     <button class="panel-back" id="post-back-btn" onclick="postStepBack()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
-    <span class="panel-title" id="post-panel-title">פרסם פריט</span>
+    <span class="panel-title" id="post-panel-title" data-i18n="post_title">פרסם פריט</span>
   </div>
   <div id="post-progress">
     <div class="progress-step" id="ps1"></div>
@@ -811,8 +815,8 @@
   <!-- Step 1: Give or Take -->
   <div id="post-step-1" class="panel-body">
     <div class="type-toggle">
-      <button class="type-btn" id="btn-give" onclick="selectPostType('give')">למסור</button>
-      <button class="type-btn" id="btn-take" onclick="selectPostType('take')">לקחת</button>
+      <button class="type-btn" id="btn-give" data-i18n="post_give" onclick="selectPostType('give')">למסור</button>
+      <button class="type-btn" id="btn-take" data-i18n="post_take" onclick="selectPostType('take')">לקחת</button>
     </div>
     
   </div>
@@ -820,51 +824,51 @@
   <!-- Step 2: Details -->
   <div id="post-step-2" class="panel-body" style="display:none;">
     <div class="form-group">
-      <label class="form-label">כותרת *</label>
-      <input type="text" class="form-input" id="post-title" placeholder="מה אתה נותן / מחפש?" maxlength="80"/>
+      <label class="form-label" data-i18n="post_title_label">כותרת *</label>
+      <input type="text" class="form-input" id="post-title" data-i18n-ph="post_title_ph" placeholder="מה אתה נותן / מחפש?" maxlength="80"/>
     </div>
     <div class="form-group">
-      <label class="form-label">קטגוריה *</label>
+      <label class="form-label" data-i18n="post_category_label">קטגוריה *</label>
       <select class="form-select" id="post-category">
-        <option value="">בחר קטגוריה</option>
-        <option>ריהוט</option>
-        <option>אלקטרוניקה</option>
-        <option>ביגוד והנעלה</option>
-        <option>ספרים ולימוד</option>
-        <option>מטבח וכלי בית</option>
-        <option>צעצועים וילדים</option>
-        <option>ספורט ופנאי</option>
-        <option>גינה וכלי עבודה</option>
-        <option>אחר</option>
+        <option value="" data-i18n="post_category_ph">בחר קטגוריה</option>
+        <option value="ריהוט" data-i18n="cat_furniture">ריהוט</option>
+        <option value="אלקטרוניקה" data-i18n="cat_electronics">אלקטרוניקה</option>
+        <option value="ביגוד והנעלה" data-i18n="cat_clothing">ביגוד והנעלה</option>
+        <option value="ספרים ולימוד" data-i18n="cat_books">ספרים ולימוד</option>
+        <option value="מטבח וכלי בית" data-i18n="cat_kitchen">מטבח וכלי בית</option>
+        <option value="צעצועים וילדים" data-i18n="cat_toys">צעצועים וילדים</option>
+        <option value="ספורט ופנאי" data-i18n="cat_sports">ספורט ופנאי</option>
+        <option value="גינה וכלי עבודה" data-i18n="cat_garden">גינה וכלי עבודה</option>
+        <option value="אחר" data-i18n="cat_other">אחר</option>
       </select>
     </div>
     <div class="form-group" id="post-condition-group" style="display:none;">
-      <label class="form-label">מצב הפריט *</label>
+      <label class="form-label" data-i18n="post_condition_label">מצב הפריט *</label>
       <select class="form-select" id="post-condition">
-        <option value="">בחר מצב</option>
-        <option value="new">חדש</option>
-        <option value="like_new">כמו חדש</option>
-        <option value="used">משומש</option>
-        <option value="bad">מצב גרוע</option>
+        <option value="" data-i18n="post_condition_ph">בחר מצב</option>
+        <option value="new" data-i18n="cond_new">חדש</option>
+        <option value="like_new" data-i18n="cond_like_new">כמו חדש</option>
+        <option value="used" data-i18n="cond_used">משומש</option>
+        <option value="bad" data-i18n="cond_bad">מצב גרוע</option>
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">תיאור</label>
-      <textarea class="form-textarea" id="post-desc" placeholder="פרט על הפריט..."></textarea>
+      <label class="form-label" data-i18n="post_desc_label">תיאור</label>
+      <textarea class="form-textarea" id="post-desc" data-i18n-ph="post_desc_ph" placeholder="פרט על הפריט..."></textarea>
     </div>
     <div class="form-group">
-      <label class="form-label">מיקום *</label>
+      <label class="form-label" data-i18n="post_location_label">מיקום *</label>
       <div class="type-toggle">
-        <button type="button" class="type-btn take-active" id="loc-current-btn" onclick="selectLocationMode('current')">המיקום הנוכחי שלי</button>
-        <button type="button" class="type-btn" id="loc-address-btn" onclick="selectLocationMode('address')">הזן כתובת</button>
+        <button type="button" class="type-btn take-active" id="loc-current-btn" data-i18n="post_loc_current" onclick="selectLocationMode('current')">המיקום הנוכחי שלי</button>
+        <button type="button" class="type-btn" id="loc-address-btn" data-i18n="post_loc_address" onclick="selectLocationMode('address')">הזן כתובת</button>
       </div>
       <div id="loc-address-row" style="display:none; flex-direction:column; margin-top:10px; gap:8px;">
-        <input type="text" class="form-input" id="post-address" placeholder="לדוגמה: הרצל 10, תל אביב"/>
-        <button type="button" class="btn-secondary" style="margin-top:8px;" onclick="geocodeAddress()">אתר כתובת על המפה</button>
+        <input type="text" class="form-input" id="post-address" data-i18n-ph="post_address_ph" placeholder="לדוגמה: הרצל 10, תל אביב"/>
+        <button type="button" class="btn-secondary" style="margin-top:8px;" data-i18n="post_geocode" onclick="geocodeAddress()">אתר כתובת על המפה</button>
       </div>
       <div id="loc-status" style="font-size:13px; color:var(--gray); margin-top:8px;"></div>
     </div>
-    <button class="btn-primary" onclick="postStepNext()">המשך ←</button>
+    <button class="btn-primary" data-i18n="btn_next" onclick="postStepNext()">המשך ←</button>
   </div>
 
   <!-- Step 3: Photo -->
@@ -873,19 +877,19 @@
     <div class="form-group">
       <div id="photo-upload-area" style="display:flex; gap:10px;">
         <div onclick="document.getElementById('photo-input').click()" style="flex:1; border:2px dashed #ddd;border-radius:12px;padding:20px 10px;text-align:center;cursor:pointer;color:var(--gray);font-size:13px;">
-          📁<br/>מהגלריה
+          📁<br/><span data-i18n="post_photo_gallery">מהגלריה</span>
         </div>
         <div onclick="document.getElementById('photo-camera-input').click()" style="flex:1; border:2px dashed #ddd;border-radius:12px;padding:20px 10px;text-align:center;cursor:pointer;color:var(--gray);font-size:13px;">
-          📷<br/>צלם תמונה
+          📷<br/><span data-i18n="post_photo_camera">צלם תמונה</span>
         </div>
       </div>
       <input type="file" id="photo-input" accept="image/*" style="display:none" onchange="previewPhoto(this)"/>
       <input type="file" id="photo-camera-input" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto(this)"/>
       <div id="photo-preview-container" style="display:none; position:relative; margin-top:10px;">
         <img id="photo-preview" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover;display:block;"/>
-        <button onclick="removePhoto()" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.65);color:white;border:none;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:Heebo,sans-serif;">הסר תמונה</button>
+        <button onclick="removePhoto()" data-i18n="post_photo_remove" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.65);color:white;border:none;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:Heebo,sans-serif;">הסר תמונה</button>
       </div>
-      <button class="btn-primary" onclick="submitItem()">פרסם פריט</button>
+      <button class="btn-primary" data-i18n="post_submit" onclick="submitItem()">פרסם פריט</button>
   </div>
 </div>
 </div>
@@ -1213,7 +1217,47 @@ const I18N = {
     privacy_children_p: 'האפליקציה אינה מיועדת לילדים מתחת לגיל 13, ואיננו אוספים ביודעין מידע מהם.',
     privacy_changes_h: 'שינויים',
     privacy_changes_p: 'אנו עשויים לעדכן מדיניות זו מעת לעת. עדכונים יפורסמו במסך זה.',
-    privacy_contact_h: 'יצירת קשר'
+    privacy_contact_h: 'יצירת קשר',
+    post_title: 'פרסם פריט',
+    post_give: 'למסור',
+    post_take: 'לקחת',
+    post_step1: 'שלב 1: למסור או לקחת',
+    post_step2: 'שלב 2: פרטי הפריט',
+    post_step3: 'שלב 3: תמונה',
+    post_title_label: 'כותרת *',
+    post_title_ph: 'מה אתה נותן / מחפש?',
+    post_category_label: 'קטגוריה *',
+    post_category_ph: 'בחר קטגוריה',
+    post_condition_label: 'מצב הפריט *',
+    post_condition_ph: 'בחר מצב',
+    post_desc_label: 'תיאור',
+    post_desc_ph: 'פרט על הפריט...',
+    post_location_label: 'מיקום *',
+    post_loc_current: 'המיקום הנוכחי שלי',
+    post_loc_address: 'הזן כתובת',
+    post_address_ph: 'לדוגמה: הרצל 10, תל אביב',
+    post_geocode: 'אתר כתובת על המפה',
+    post_photo_gallery: 'מהגלריה',
+    post_photo_camera: 'צלם תמונה',
+    post_photo_remove: 'הסר תמונה',
+    post_submit: 'פרסם פריט',
+    photo_hint_give: 'תמונה של הפריט מגדילה משמעותית את הסיכוי למצוא מישהו שירצה אותו. מומלץ מאוד!',
+    photo_hint_take: 'תמונה של מה שאתה מחפש עוזרת לאחרים להבין בדיוק מה אתה צריך.',
+    loc_current_selected: 'המיקום הנוכחי שלך נבחר.',
+    loc_locating: 'עדיין מאתר את מיקומך... נסה שוב בעוד רגע, או הזן כתובת.',
+    loc_geocoding: 'מאתר כתובת...',
+    loc_found: 'נמצא:',
+    loc_not_found: 'לא נמצאה כתובת מתאימה. נסה לנסח אחרת.',
+    loc_geocode_error: 'שגיאה באיתור הכתובת. בדוק את החיבור לאינטרנט ונסה שוב.',
+    toast_pick_type: 'נא לבחור למסור או לקחת',
+    toast_title_cat: 'נא למלא כותרת וקטגוריה',
+    toast_pick_condition: 'נא לבחור את מצב הפריט',
+    toast_set_location: 'נא להגדיר מיקום לפריט',
+    toast_locating: 'עדיין מאתר את מיקומך, נסה שוב או הזן כתובת',
+    toast_geocode_first: 'נא לאתר כתובת לפני שממשיכים',
+    toast_enter_address: 'נא להזין כתובת',
+    toast_posted: 'הפריט פורסם בהצלחה!',
+    toast_error: 'שגיאה — נסה שוב'
   },
   en: {
     gate_signup: 'Sign up',
@@ -1309,7 +1353,47 @@ const I18N = {
     privacy_children_p: 'The app is not intended for children under 13, and we do not knowingly collect information from them.',
     privacy_changes_h: 'Changes',
     privacy_changes_p: 'We may update this policy from time to time. Updates will be posted on this screen.',
-    privacy_contact_h: 'Contact'
+    privacy_contact_h: 'Contact',
+    post_title: 'Post an item',
+    post_give: 'Give',
+    post_take: 'Need',
+    post_step1: 'Step 1: Give or Need',
+    post_step2: 'Step 2: Item details',
+    post_step3: 'Step 3: Photo',
+    post_title_label: 'Title *',
+    post_title_ph: 'What are you giving / looking for?',
+    post_category_label: 'Category *',
+    post_category_ph: 'Choose a category',
+    post_condition_label: 'Item condition *',
+    post_condition_ph: 'Choose condition',
+    post_desc_label: 'Description',
+    post_desc_ph: 'Describe the item...',
+    post_location_label: 'Location *',
+    post_loc_current: 'My current location',
+    post_loc_address: 'Enter an address',
+    post_address_ph: 'e.g. 10 Herzl St, Tel Aviv',
+    post_geocode: 'Find address on map',
+    post_photo_gallery: 'From gallery',
+    post_photo_camera: 'Take a photo',
+    post_photo_remove: 'Remove photo',
+    post_submit: 'Post item',
+    photo_hint_give: 'A photo of the item significantly increases the chance of finding someone who wants it. Highly recommended!',
+    photo_hint_take: 'A photo of the item you are looking for helps others understand exactly what you need.',
+    loc_current_selected: 'Your current location has been selected.',
+    loc_locating: 'Still finding your location... try again in a moment, or enter an address.',
+    loc_geocoding: 'Finding address...',
+    loc_found: 'Found:',
+    loc_not_found: 'No matching address found. Try rephrasing.',
+    loc_geocode_error: 'Error finding the address. Check your internet connection and try again.',
+    toast_pick_type: 'Please choose give or need',
+    toast_title_cat: 'Please fill in title and category',
+    toast_pick_condition: 'Please choose the item condition',
+    toast_set_location: 'Please set a location for the item',
+    toast_locating: 'Still finding your location, try again or enter an address',
+    toast_geocode_first: 'Please find an address before continuing',
+    toast_enter_address: 'Please enter an address',
+    toast_posted: 'Item posted successfully!',
+    toast_error: 'Error — please try again'
   }
 };
 
@@ -1840,10 +1924,10 @@ async function submitItem() {
   const photoInput = document.getElementById('photo-input');
   const photoCameraInput = document.getElementById('photo-camera-input');
 
-  if (!selectedPostType) { showToast('נא לבחור למסור או לקחת'); return; }
-  if (!title || !category) { showToast('נא למלא כותרת וקטגוריה'); return; }
-  if (selectedPostType === 'give' && !condition) { showToast('נא לבחור את מצב הפריט'); return; }
-  if (itemLat === null || itemLon === null) { showToast('נא להגדיר מיקום לפריט'); return; }
+  if (!selectedPostType) { showToast(t('toast_pick_type')); return; }
+  if (!title || !category) { showToast(t('toast_title_cat')); return; }
+  if (selectedPostType === 'give' && !condition) { showToast(t('toast_pick_condition')); return; }
+  if (itemLat === null || itemLon === null) { showToast(t('toast_set_location')); return; }
 
   const photoFile = (photoInput.files[0]) || (photoCameraInput.files[0]) || null;
 
@@ -1881,7 +1965,7 @@ async function submitItem() {
 
   if (data.ok) {
     vibrateOnce();
-    showToast('הפריט פורסם בהצלחה!');
+    showToast(t('toast_posted'));
     closePanel('post-panel');
     // Reset form
     document.getElementById('post-title').value = '';
@@ -1897,7 +1981,7 @@ async function submitItem() {
     document.getElementById('btn-take').className = 'type-btn';
     loadItems();
   } else {
-    showToast('שגיאה — נסה שוב');
+    showToast(t('toast_error'));
   }
 }
 
@@ -1977,7 +2061,7 @@ function renderMyRequestsList(rows) {
 async function takeRequest(requestId) {
   try {
     const res = await fetch(`${API_BASE}/request/${requestId}/take?device_id=${encodeURIComponent(deviceId)}`, { method: 'POST' });
-    if (!res.ok) { showToast('שגיאה — נסה שוב'); openMyRequests(); return; }
+    if (!res.ok) { showToast(t('toast_error')); openMyRequests(); return; }
     showToast('נוסף להיסטוריה!');
     openMyRequests();
   } catch (e) {
@@ -2112,7 +2196,7 @@ function goToMyItemPin(itemId) {
 async function exchangeItem(itemId) {
   try {
     const res = await fetch(`${API_BASE}/item/${itemId}/exchange?device_id=${encodeURIComponent(deviceId)}`, { method: 'POST' });
-    if (!res.ok) { showToast('שגיאה — נסה שוב'); openMyItems(); return; }
+    if (!res.ok) { showToast(t('toast_error')); openMyItems(); return; }
     showToast('נוסף להיסטוריה!');
     openMyItems();
     loadItems();
@@ -2273,7 +2357,7 @@ async function submitEditItem() {
       openMyItems();
       loadItems();
     } else {
-      showToast('שגיאה — נסה שוב');
+      showToast(t('toast_error'));
     }
   } catch (e) {
     showToast('שגיאה בשמירה — בדוק את החיבור לאינטרנט');
@@ -2316,7 +2400,7 @@ async function saveSettings() {
   if (!res.ok || !data.ok) {
     if (data.detail === 'Phone number already registered') showToast('מספר הטלפון הזה כבר רשום במערכת');
     else if (data.detail === 'Email already registered') showToast('כתובת האימייל הזו כבר רשומה במערכת');
-    else showToast('שגיאה — נסה שוב');
+    else showToast(t('toast_error'));
     return;
   }
 
@@ -2671,7 +2755,7 @@ function updateProgressBar(step) {
     else if (i === step) el.className = 'progress-step active';
     else el.className = 'progress-step';
   }
-  const labels = ['שלב 1: למסור או לקחת', 'שלב 2: פרטי הפריט', 'שלב 3: תמונה'];
+  const labels = [t('post_step1'), t('post_step2'), t('post_step3')];
   const lbl = document.getElementById('post-step-label');
   if (lbl) lbl.textContent = labels[step - 1];
 }
@@ -2687,24 +2771,24 @@ function showPostStep(step) {
 
 function postStepNext() {
   if (currentPostStep === 1) {
-    if (!selectedPostType) { showToast('נא לבחור למסור או לקחת'); return; }
+    if (!selectedPostType) { showToast(t('toast_pick_type')); return; }
     showPostStep(2);
   } else if (currentPostStep === 2) {
     const title = document.getElementById('post-title').value.trim();
     const category = document.getElementById('post-category').value;
-    if (!title || !category) { showToast('נא למלא כותרת וקטגוריה'); return; }
+    if (!title || !category) { showToast(t('toast_title_cat')); return; }
     if (locationMode === 'current' && userLat !== null && userLon !== null) {
       itemLat = userLat;
       itemLon = userLon;
     }
     if (itemLat === null || itemLon === null) {
-      showToast(locationMode === 'current' ? 'עדיין מאתר את מיקומך, נסה שוב או הזן כתובת' : 'נא לאתר כתובת לפני שממשיכים');
+      showToast(locationMode === 'current' ? t('toast_locating') : t('toast_geocode_first'));
       return;
     }
     const hint = document.getElementById('photo-hint');
     if (hint) hint.textContent = selectedPostType === 'give'
-      ? 'תמונה של הפריט מגדילה משמעותית את הסיכוי למצוא מישהו שירצה אותו. מומלץ מאוד!'
-      : 'תמונה של מה שאתה מחפש עוזרת לאחרים להבין בדיוק מה אתה צריך.';
+      ? t('photo_hint_give')
+      : t('photo_hint_take');
     showPostStep(3);
   }
 }
@@ -2733,11 +2817,11 @@ function selectLocationMode(mode) {
     if (userLat !== null && userLon !== null) {
       itemLat = userLat;
       itemLon = userLon;
-      status.textContent = 'המיקום הנוכחי שלך נבחר.';
+      status.textContent = t('loc_current_selected');
     } else {
       itemLat = null;
       itemLon = null;
-      status.textContent = 'עדיין מאתר את מיקומך... נסה שוב בעוד רגע, או הזן כתובת.';
+      status.textContent = t('loc_locating');
     }
   } else {
     itemLat = null;
@@ -2748,9 +2832,9 @@ function selectLocationMode(mode) {
 async function geocodeAddress() {
   const address = document.getElementById('post-address').value.trim();
   const status = document.getElementById('loc-status');
-  if (!address) { showToast('נא להזין כתובת'); return; }
+  if (!address) { showToast(t('toast_enter_address')); return; }
 
-  status.textContent = 'מאתר כתובת...';
+  status.textContent = t('loc_geocoding');
   itemLat = null;
   itemLon = null;
 
@@ -2761,12 +2845,12 @@ async function geocodeAddress() {
     if (results && results.length > 0) {
       itemLat = parseFloat(results[0].lat);
       itemLon = parseFloat(results[0].lon);
-      status.textContent = `נמצא: ${results[0].display_name}`;
+      status.textContent = t('loc_found') + ' ' + results[0].display_name;
     } else {
-      status.textContent = 'לא נמצאה כתובת מתאימה. נסה לנסח אחרת.';
+      status.textContent = t('loc_not_found');
     }
   } catch (e) {
-    status.textContent = 'שגיאה באיתור הכתובת. בדוק את החיבור לאינטרנט ונסה שוב.';
+    status.textContent = t('loc_geocode_error');
   }
 }
 
