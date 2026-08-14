@@ -582,9 +582,14 @@
     html[dir="ltr"] #post-step-label,
     html[dir="ltr"] #photo-hint,
     html[dir="ltr"] #loc-status,
-    html[dir="ltr"] #interest-banner {
+    html[dir="ltr"] #interest-banner,
+    html[dir="ltr"] #report-title,
+    html[dir="ltr"] #report-other-text,
+    html[dir="ltr"] #edit-photo-upload-area {
       text-align:left;
     }
+    html[dir="ltr"] #report-modal { direction:ltr; }
+    html[dir="ltr"] .report-option { flex-direction:row; text-align:left; }
   </style>
 </head>
 <body>
@@ -773,18 +778,18 @@
 
 <div id="report-overlay" onclick="if(event.target===this) closeReportModal()">
   <div id="report-modal">
-    <div id="report-title">מה לא בסדר בתמונה הזו, לדעתך?</div>
-    <label class="report-option"><input type="checkbox" value="תוכן פוגעני או לא הולם"/> תוכן פוגעני או לא הולם</label>
-    <label class="report-option"><input type="checkbox" value="תוכן מיני"/> תוכן מיני</label>
-    <label class="report-option"><input type="checkbox" value="אלימות"/> אלימות</label>
-    <label class="report-option"><input type="checkbox" value="ספאם או הונאה"/> ספאם או הונאה</label>
-    <label class="report-option"><input type="checkbox" value="התמונה אינה קשורה לפריט"/> התמונה אינה קשורה לפריט</label>
-    <label class="report-option"><input type="checkbox" value="מידע מטעה"/> מידע מטעה</label>
-    <label class="report-option"><input type="checkbox" id="report-other-check" value="אחר" onchange="toggleReportOther()"/> אחר</label>
-    <textarea id="report-other-text" placeholder="פרט/י..." style="display:none;"></textarea>
+    <div id="report-title" data-i18n="report_title">מה לא בסדר בתמונה הזו, לדעתך?</div>
+    <label class="report-option"><input type="checkbox" value="תוכן פוגעני או לא הולם"/> <span data-i18n="report_offensive">תוכן פוגעני או לא הולם</span></label>
+    <label class="report-option"><input type="checkbox" value="תוכן מיני"/> <span data-i18n="report_sexual">תוכן מיני</span></label>
+    <label class="report-option"><input type="checkbox" value="אלימות"/> <span data-i18n="report_violence">אלימות</span></label>
+    <label class="report-option"><input type="checkbox" value="ספאם או הונאה"/> <span data-i18n="report_spam">ספאם או הונאה</span></label>
+    <label class="report-option"><input type="checkbox" value="התמונה אינה קשורה לפריט"/> <span data-i18n="report_unrelated">התמונה אינה קשורה לפריט</span></label>
+    <label class="report-option"><input type="checkbox" value="מידע מטעה"/> <span data-i18n="report_misleading">מידע מטעה</span></label>
+    <label class="report-option"><input type="checkbox" id="report-other-check" value="אחר" onchange="toggleReportOther()"/> <span data-i18n="report_other">אחר</span></label>
+    <textarea id="report-other-text" data-i18n-ph="report_other_ph" placeholder="פרט/י..." style="display:none;"></textarea>
     <div id="report-actions">
-      <button id="report-cancel" onclick="closeReportModal()">ביטול</button>
-      <button id="report-send" onclick="submitReport()">שלח דיווח</button>
+      <button id="report-cancel" data-i18n="report_cancel" onclick="closeReportModal()">ביטול</button>
+      <button id="report-send" data-i18n="report_send" onclick="submitReport()">שלח דיווח</button>
     </div>
   </div>
 </div>
@@ -899,10 +904,10 @@
 <div id="my-items-panel" class="panel">
   <div class="panel-header">
     <button class="panel-back" onclick="closePanel('my-items-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
-    <span class="panel-title">הפריטים שלי</span>
+    <span class="panel-title" data-i18n="myitems_title">הפריטים שלי</span>
   </div>
   <div class="panel-body" id="my-items-body">
-    <p style="color:var(--gray); text-align:center;">טוען...</p>
+    <p style="color:var(--gray); text-align:center;" data-i18n="loading">טוען...</p>
   </div>
 </div>
 
@@ -910,10 +915,10 @@
 <div id="my-requests-panel" class="panel">
   <div class="panel-header">
     <button class="panel-back" onclick="closePanel('my-requests-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
-    <span class="panel-title">הבקשות שלי</span>
+    <span class="panel-title" data-i18n="myrequests_title">הבקשות שלי</span>
   </div>
   <div class="panel-body" id="my-requests-body">
-    <p style="color:var(--gray); text-align:center;">טוען...</p>
+    <p style="color:var(--gray); text-align:center;" data-i18n="loading">טוען...</p>
   </div>
 </div>
 
@@ -999,44 +1004,44 @@
 <div id="edit-item-panel" class="panel">
   <div class="panel-header">
     <button class="panel-back" onclick="closePanel('edit-item-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
-    <span class="panel-title">ערוך פריט</span>
+    <span class="panel-title" data-i18n="edit_title">ערוך פריט</span>
   </div>
   <div class="panel-body">
     <div class="form-group">
-      <label class="form-label">כותרת *</label>
+      <label class="form-label" data-i18n="post_title_label">כותרת *</label>
       <input type="text" class="form-input" id="edit-title" maxlength="80"/>
     </div>
     <div class="form-group">
-      <label class="form-label">קטגוריה *</label>
+      <label class="form-label" data-i18n="post_category_label">קטגוריה *</label>
       <select class="form-select" id="edit-category">
-        <option value="">בחר קטגוריה</option>
-        <option>ריהוט</option>
-        <option>אלקטרוניקה</option>
-        <option>ביגוד והנעלה</option>
-        <option>ספרים ולימוד</option>
-        <option>מטבח וכלי בית</option>
-        <option>צעצועים וילדים</option>
-        <option>ספורט ופנאי</option>
-        <option>גינה וכלי עבודה</option>
-        <option>אחר</option>
+        <option value="" data-i18n="post_category_ph">בחר קטגוריה</option>
+        <option value="ריהוט" data-i18n="cat_furniture">ריהוט</option>
+        <option value="אלקטרוניקה" data-i18n="cat_electronics">אלקטרוניקה</option>
+        <option value="ביגוד והנעלה" data-i18n="cat_clothing">ביגוד והנעלה</option>
+        <option value="ספרים ולימוד" data-i18n="cat_books">ספרים ולימוד</option>
+        <option value="מטבח וכלי בית" data-i18n="cat_kitchen">מטבח וכלי בית</option>
+        <option value="צעצועים וילדים" data-i18n="cat_toys">צעצועים וילדים</option>
+        <option value="ספורט ופנאי" data-i18n="cat_sports">ספורט ופנאי</option>
+        <option value="גינה וכלי עבודה" data-i18n="cat_garden">גינה וכלי עבודה</option>
+        <option value="אחר" data-i18n="cat_other">אחר</option>
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">תיאור</label>
+      <label class="form-label" data-i18n="post_desc_label">תיאור</label>
       <textarea class="form-textarea" id="edit-desc"></textarea>
     </div>
     <div class="form-group">
-      <label class="form-label">תמונה</label>
+      <label class="form-label" data-i18n="edit_photo_label">תמונה</label>
       <div id="edit-photo-upload-area" onclick="document.getElementById('edit-photo-input').click()" style="border:2px dashed #ddd;border-radius:12px;padding:24px;text-align:center;cursor:pointer;color:var(--gray);font-size:14px;">
-        לחץ להוספת תמונה
+        <span data-i18n="edit_photo_add">לחץ להוספת תמונה</span>
       </div>
       <input type="file" id="edit-photo-input" accept="image/*" style="display:none" onchange="previewEditPhoto(this)"/>
       <div id="edit-photo-preview-container" style="display:none; position:relative; margin-top:10px;">
         <img id="edit-photo-preview" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover;display:block;"/>
-        <button type="button" onclick="removeEditPhoto()" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.65);color:white;border:none;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:Heebo,sans-serif;">הסר תמונה</button>
+        <button type="button" onclick="removeEditPhoto()" data-i18n="post_photo_remove" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.65);color:white;border:none;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:Heebo,sans-serif;">הסר תמונה</button>
       </div>
     </div>
-    <button class="btn-primary" onclick="submitEditItem()">שמור שינויים</button>
+    <button class="btn-primary" data-i18n="edit_save" onclick="submitEditItem()">שמור שינויים</button>
   </div>
 </div>
 
@@ -1286,7 +1291,33 @@ const I18N = {
     notif_match_title: 'נמצאה התאמה!',
     notif_approved_single: '{name} אישר את הבקשה שלך ל"{item}"',
     notif_approved_multi: '{n} מהבקשות שלך אושרו',
-    notif_approved_title: 'הבקשה שלך אושרה!'
+    notif_approved_title: 'הבקשה שלך אושרה!',
+    loading: 'טוען...',
+    report_title: 'מה לא בסדר בתמונה הזו, לדעתך?',
+    report_offensive: 'תוכן פוגעני או לא הולם',
+    report_sexual: 'תוכן מיני',
+    report_violence: 'אלימות',
+    report_spam: 'ספאם או הונאה',
+    report_unrelated: 'התמונה אינה קשורה לפריט',
+    report_misleading: 'מידע מטעה',
+    report_other: 'אחר',
+    report_other_ph: 'פרט/י...',
+    report_cancel: 'ביטול',
+    report_send: 'שלח דיווח',
+    edit_title: 'ערוך פריט',
+    edit_photo_label: 'תמונה',
+    edit_photo_add: 'לחץ להוספת תמונה',
+    edit_save: 'שמור שינויים',
+    myitems_title: 'הפריטים שלי',
+    myrequests_title: 'הבקשות שלי',
+    mycard_i_need: 'אני צריך',
+    mycard_i_give: 'אני מוסר',
+    mycard_delete: 'מחק',
+    mycard_available: 'זמין',
+    mycard_taken: 'נלקח',
+    mycard_mark_taken: 'סמן כנלקח',
+    mycard_mark_available: 'החזר לזמין',
+    mycard_goto_pin: 'מעבר לפרסום במפה'
   },
   en: {
     gate_signup: 'Sign up',
@@ -1450,7 +1481,33 @@ const I18N = {
     notif_match_title: 'Match found!',
     notif_approved_single: '{name} approved your request for "{item}"',
     notif_approved_multi: '{n} of your requests were approved',
-    notif_approved_title: 'Your request was approved!'
+    notif_approved_title: 'Your request was approved!',
+    loading: 'Loading...',
+    report_title: 'What do you think is wrong with this photo?',
+    report_offensive: 'Offensive or inappropriate content',
+    report_sexual: 'Sexual content',
+    report_violence: 'Violence',
+    report_spam: 'Spam or fraud',
+    report_unrelated: 'The photo is unrelated to the item',
+    report_misleading: 'Misleading information',
+    report_other: 'Other',
+    report_other_ph: 'Please specify...',
+    report_cancel: 'Cancel',
+    report_send: 'Send report',
+    edit_title: 'Edit item',
+    edit_photo_label: 'Photo',
+    edit_photo_add: 'Tap to add a photo',
+    edit_save: 'Save changes',
+    myitems_title: 'My items',
+    myrequests_title: 'My requests',
+    mycard_i_need: 'I need',
+    mycard_i_give: 'I give',
+    mycard_delete: 'Delete',
+    mycard_available: 'available',
+    mycard_taken: 'taken',
+    mycard_mark_taken: 'Mark as taken',
+    mycard_mark_available: 'Mark available',
+    mycard_goto_pin: 'Go to posting on map'
   }
 };
 
@@ -2214,22 +2271,22 @@ function renderMyItemsList(items) {
     const cardInner = `
       <div class="item-card" onclick="openEditItem(${item.id})">
         <div class="item-card-top">
-          <span class="item-badge ${isTakePost(item) ? 'take' : 'give'}">${isTakePost(item) ? 'אני צריך' : 'אני מוסר'}</span>
-          <button class="item-delete-x" title="מחק" onclick="event.stopPropagation(); deleteItem(${item.id})">✕</button>
+          <span class="item-badge ${isTakePost(item) ? 'take' : 'give'}">${isTakePost(item) ? t('mycard_i_need') : t('mycard_i_give')}</span>
+          <button class="item-delete-x" title="${t('mycard_delete')}" onclick="event.stopPropagation(); deleteItem(${item.id})">✕</button>
         </div>
         ${item.image_url ? `<img src="${item.image_url}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;"/>` : ''}
         <div class="item-card-title">${item.title}${unreadItemIds.has(item.id) ? '<span class="item-unread-dot"></span>' : ''}</div>
-        <div class="item-card-meta">${item.category} · ${item.request_count} ${interestCountLabel(item)} · ${item.status === 'available' ? 'זמין' : 'נלקח'}</div>
+        <div class="item-card-meta">${item.category} · ${item.request_count} ${interestCountLabel(item)} · ${item.status === 'available' ? t('mycard_available') : t('mycard_taken')}</div>
         <div class="item-card-actions">
           <button class="item-card-btn" style="background:#f0f0f0;color:var(--dark);"
             onclick="event.stopPropagation(); viewRequesters(${item.id})">${requestersPanelLabel(item)}?</button>
           <button class="item-card-btn" style="background:${item.status==='available'?'var(--green)':'var(--gray)'};color:white;"
             onclick="event.stopPropagation(); toggleItemStatus(${item.id}, '${item.status}')">
-            ${item.status === 'available' ? 'סמן כנלקח' : 'החזר לזמין'}
+            ${item.status === 'available' ? t('mycard_mark_taken') : t('mycard_mark_available')}
           </button>
         </div>
         <button class="item-card-btn" style="width:100%;margin-top:6px;background:var(--dark);color:white;"
-          onclick="event.stopPropagation(); goToMyItemPin(${item.id})">מעבר לפרסום במפה</button>
+          onclick="event.stopPropagation(); goToMyItemPin(${item.id})">${t('mycard_goto_pin')}</button>
       </div>`;
     if (!swipeable) return cardInner;
     return `
