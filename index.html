@@ -523,6 +523,27 @@
     }
     #report-cancel { background:#f0f0f0; color:var(--dark); }
     #report-send { background:var(--accent); color:white; }
+
+    /* ── Language flags ── */
+    #auth-lang-picker {
+      position:absolute; bottom:24px; left:0; right:0;
+      display:flex; justify-content:center; gap:16px; z-index:2;
+    }
+    .lang-flag {
+      background:rgba(255,255,255,0.1); border:1.5px solid rgba(255,255,255,0.18);
+      border-radius:999px; font-size:24px; line-height:1;
+      width:52px; height:40px; cursor:pointer; padding:0;
+      display:inline-flex; align-items:center; justify-content:center;
+      transition:transform 0.12s, background 0.15s;
+    }
+    .lang-flag:active { transform:scale(0.9); }
+    .lang-flag.active { background:rgba(255,255,255,0.28); border-color:rgba(255,255,255,0.55); }
+    #header-lang-btn {
+      background:none; border:none; cursor:pointer; padding:4px;
+      font-size:20px; line-height:1; border-radius:8px;
+      display:inline-flex; align-items:center; justify-content:center;
+    }
+    #header-lang-btn:active { transform:scale(0.88); }
   </style>
 </head>
 <body>
@@ -550,64 +571,64 @@
   <!-- Step: gate -->
   <div class="auth-step" id="auth-step-gate" style="display:flex;">
     <h1>iNeed</h1>
-    <p>תן וקח בשכונה שלך</p>
-    <button class="btn-primary" onclick="goToAuthStep('signup-name')">הרשמה</button>
-    <button class="btn-secondary" onclick="goToAuthStep('login')">התחברות</button>
+    <p data-i18n="gate_tagline">תן וקח בשכונה שלך</p>
+    <button class="btn-primary" data-i18n="gate_signup" onclick="goToAuthStep('signup-name')">הרשמה</button>
+    <button class="btn-secondary" data-i18n="gate_login" onclick="goToAuthStep('login')">התחברות</button>
   </div>
 
   <!-- Sign-up: name -->
   <div class="auth-step" id="auth-step-signup-name">
-    <h1>איך קוראים לך?</h1>
-    <input type="text" class="form-input" id="signup-name" placeholder="השם שלך" maxlength="30"/>
+    <h1 data-i18n="signup_name_title">איך קוראים לך?</h1>
+    <input type="text" class="form-input" id="signup-name" data-i18n-ph="signup_name_ph" placeholder="השם שלך" maxlength="30"/>
     <div class="auth-error" id="signup-name-error"></div>
-    <button class="btn-primary" onclick="signupNameNext()">המשך ←</button>
-    <button class="btn-back" onclick="goToAuthStep('gate')">חזרה</button>
+    <button class="btn-primary" data-i18n="btn_next" onclick="signupNameNext()">המשך ←</button>
+    <button class="btn-back" data-i18n="btn_back" onclick="goToAuthStep('gate')">חזרה</button>
   </div>
 
   <!-- Sign-up: phone -->
   <div class="auth-step" id="auth-step-signup-phone">
-    <h1>מספר טלפון</h1>
-    <p>ישמש לזיהוי וליצירת קשר עם משתמשים אחרים</p>
+    <h1 data-i18n="signup_phone_title">מספר טלפון</h1>
+    <p data-i18n="signup_phone_sub">ישמש לזיהוי וליצירת קשר עם משתמשים אחרים</p>
     <input type="tel" class="form-input" id="signup-phone" placeholder="05XXXXXXXX" maxlength="10" inputmode="numeric" style="direction:ltr;"/>
     <div class="auth-error" id="signup-phone-error"></div>
-    <button class="btn-primary" onclick="signupPhoneNext()">המשך ←</button>
-    <button class="btn-back" onclick="goToAuthStep('signup-name')">חזרה</button>
+    <button class="btn-primary" data-i18n="btn_next" onclick="signupPhoneNext()">המשך ←</button>
+    <button class="btn-back" data-i18n="btn_back" onclick="goToAuthStep('signup-name')">חזרה</button>
   </div>
 
   <!-- Sign-up: email -->
   <div class="auth-step" id="auth-step-signup-email">
-    <h1>כתובת אימייל</h1>
-    <p>נשלח קוד אימות — נדרש גם לשחזור חשבון בעתיד</p>
+    <h1 data-i18n="signup_email_title">כתובת אימייל</h1>
+    <p data-i18n="signup_email_sub">נשלח קוד אימות — נדרש גם לשחזור חשבון בעתיד</p>
     <input type="email" class="form-input" id="signup-email" placeholder="your@email.com" style="direction:ltr;"/>
     <div class="auth-error" id="signup-email-error"></div>
-    <button class="btn-primary" onclick="signupEmailNext()">שלח קוד אימות ←</button>
-    <button class="btn-back" onclick="goToAuthStep('signup-phone')">חזרה</button>
+    <button class="btn-primary" data-i18n="signup_email_btn" onclick="signupEmailNext()">שלח קוד אימות ←</button>
+    <button class="btn-back" data-i18n="btn_back" onclick="goToAuthStep('signup-phone')">חזרה</button>
   </div>
 
   <!-- Sign-up: email verification code -->
   <div class="auth-step" id="auth-step-signup-code">
-    <h1>אימות אימייל</h1>
-    <p>שלחנו קוד בן 6 ספרות ל-<span id="signup-code-email-display" style="direction:ltr; display:inline-block;"></span></p>
+    <h1 data-i18n="signup_code_title">אימות אימייל</h1>
+    <p><span data-i18n="signup_code_sub">שלחנו קוד בן 6 ספרות ל-</span><span id="signup-code-email-display" style="direction:ltr; display:inline-block;"></span></p>
     <input type="text" class="form-input" id="signup-code" placeholder="123456" maxlength="6" inputmode="numeric" style="direction:ltr; text-align:center; letter-spacing:6px; font-size:20px;"/>
     <div class="auth-error" id="signup-code-error"></div>
-    <button class="btn-primary" onclick="signupCodeNext()">אמת קוד ←</button>
-    <button class="btn-back" onclick="goToAuthStep('signup-email')">שלח קוד אחר</button>
+    <button class="btn-primary" data-i18n="signup_code_btn" onclick="signupCodeNext()">אמת קוד ←</button>
+    <button class="btn-back" data-i18n="signup_code_resend" onclick="goToAuthStep('signup-email')">שלח קוד אחר</button>
   </div>
 
   <!-- Sign-up: password -->
   <div class="auth-step" id="auth-step-signup-password">
-    <h1>בחר/י סיסמה</h1>
-    <input type="password" class="form-input" id="signup-password" placeholder="סיסמה (לפחות 6 תווים)" style="direction:ltr;"/>
-    <input type="password" class="form-input" id="signup-password2" placeholder="הקלד/י שוב את הסיסמה" style="direction:ltr;"/>
+    <h1 data-i18n="signup_pw_title">בחר/י סיסמה</h1>
+    <input type="password" class="form-input" id="signup-password" data-i18n-ph="signup_pw_ph1" placeholder="סיסמה (לפחות 6 תווים)" style="direction:ltr;"/>
+    <input type="password" class="form-input" id="signup-password2" data-i18n-ph="signup_pw_ph2" placeholder="הקלד/י שוב את הסיסמה" style="direction:ltr;"/>
     <div class="auth-error" id="signup-password-error"></div>
-    <button class="btn-primary" onclick="signupPasswordNext()">המשך ←</button>
-    <button class="btn-back" onclick="goToAuthStep('signup-code')">חזרה</button>
+    <button class="btn-primary" data-i18n="btn_next" onclick="signupPasswordNext()">המשך ←</button>
+    <button class="btn-back" data-i18n="btn_back" onclick="goToAuthStep('signup-code')">חזרה</button>
   </div>
 
   <!-- Sign-up: radius (final step) -->
   <div class="auth-step" id="auth-step-signup-radius">
-    <h1>רדיוס חיפוש</h1>
-    <p>באיזה רדיוס תרצה לראות פריטים?</p>
+    <h1 data-i18n="signup_radius_title">רדיוס חיפוש</h1>
+    <p data-i18n="signup_radius_sub">באיזה רדיוס תרצה לראות פריטים?</p>
     <div id="signup-radius-display">5 ק"מ</div>
     <div class="radius-row">
       <input type="range" id="signup-radius" min="1" max="100" value="5"/>
@@ -617,40 +638,46 @@
       </div>
     </div>
     <div class="auth-error" id="signup-final-error"></div>
-    <button class="btn-primary" id="signup-final-btn" onclick="completeSignup()">בואו נתחיל ←</button>
-    <button class="btn-back" onclick="goToAuthStep('signup-password')">חזרה</button>
+    <button class="btn-primary" id="signup-final-btn" data-i18n="signup_radius_btn" onclick="completeSignup()">בואו נתחיל ←</button>
+    <button class="btn-back" data-i18n="btn_back" onclick="goToAuthStep('signup-password')">חזרה</button>
   </div>
 
   <!-- Login -->
   <div class="auth-step" id="auth-step-login">
-    <h1>התחברות</h1>
-    <input type="text" class="form-input" id="login-identifier" placeholder="אימייל או מספר טלפון" style="direction:ltr;"/>
-    <input type="password" class="form-input" id="login-password" placeholder="סיסמה" style="direction:ltr;"/>
+    <h1 data-i18n="login_title">התחברות</h1>
+    <input type="text" class="form-input" id="login-identifier" data-i18n-ph="login_id_ph" placeholder="אימייל או מספר טלפון" style="direction:ltr;"/>
+    <input type="password" class="form-input" id="login-password" data-i18n-ph="login_pw_ph" placeholder="סיסמה" style="direction:ltr;"/>
     <div class="auth-error" id="login-error"></div>
-    <button class="btn-primary" onclick="doLogin()">התחבר/י ←</button>
-    <div class="auth-link" onclick="goToAuthStep('forgot-email')">שכחת סיסמה?</div>
-    <button class="btn-back" onclick="goToAuthStep('gate')">חזרה</button>
+    <button class="btn-primary" data-i18n="login_btn" onclick="doLogin()">התחבר/י ←</button>
+    <div class="auth-link" data-i18n="login_forgot" onclick="goToAuthStep('forgot-email')">שכחת סיסמה?</div>
+    <button class="btn-back" data-i18n="btn_back" onclick="goToAuthStep('gate')">חזרה</button>
   </div>
 
   <!-- Forgot password: request code -->
   <div class="auth-step" id="auth-step-forgot-email">
-    <h1>שחזור סיסמה</h1>
+    <h1 data-i18n="forgot_title">שחזור סיסמה</h1>
     <input type="email" class="form-input" id="forgot-email" placeholder="your@email.com" style="direction:ltr;"/>
     <div class="auth-error" id="forgot-email-error"></div>
-    <button class="btn-primary" onclick="forgotEmailNext()">שלח קוד איפוס ←</button>
-    <button class="btn-back" onclick="goToAuthStep('login')">חזרה</button>
+    <button class="btn-primary" data-i18n="forgot_btn" onclick="forgotEmailNext()">שלח קוד איפוס ←</button>
+    <button class="btn-back" data-i18n="btn_back" onclick="goToAuthStep('login')">חזרה</button>
   </div>
 
   <!-- Forgot password: enter code + new password -->
   <div class="auth-step" id="auth-step-forgot-reset">
-    <h1>איפוס סיסמה</h1>
-    <p>שלחנו קוד ל-<span id="forgot-reset-email-display" style="direction:ltr; display:inline-block;"></span></p>
-    <input type="text" class="form-input" id="forgot-code" placeholder="קוד בן 6 ספרות" maxlength="6" inputmode="numeric" style="direction:ltr; text-align:center; letter-spacing:6px;"/>
-    <input type="password" class="form-input" id="forgot-new-password" placeholder="סיסמה חדשה" style="direction:ltr;"/>
-    <input type="password" class="form-input" id="forgot-new-password2" placeholder="הקלד/י שוב" style="direction:ltr;"/>
+    <h1 data-i18n="reset_title">איפוס סיסמה</h1>
+    <p><span data-i18n="reset_sub">שלחנו קוד ל-</span><span id="forgot-reset-email-display" style="direction:ltr; display:inline-block;"></span></p>
+    <input type="text" class="form-input" id="forgot-code" data-i18n-ph="reset_code_ph" placeholder="קוד בן 6 ספרות" maxlength="6" inputmode="numeric" style="direction:ltr; text-align:center; letter-spacing:6px;"/>
+    <input type="password" class="form-input" id="forgot-new-password" data-i18n-ph="reset_pw_ph1" placeholder="סיסמה חדשה" style="direction:ltr;"/>
+    <input type="password" class="form-input" id="forgot-new-password2" data-i18n-ph="reset_pw_ph2" placeholder="הקלד/י שוב" style="direction:ltr;"/>
     <div class="auth-error" id="forgot-reset-error"></div>
-    <button class="btn-primary" onclick="submitPasswordReset()">אפס סיסמה ←</button>
-    <button class="btn-back" onclick="goToAuthStep('forgot-email')">שלח קוד אחר</button>
+    <button class="btn-primary" data-i18n="reset_btn" onclick="submitPasswordReset()">אפס סיסמה ←</button>
+    <button class="btn-back" data-i18n="signup_code_resend" onclick="goToAuthStep('forgot-email')">שלח קוד אחר</button>
+  </div>
+
+  <!-- Language picker (auth screens) -->
+  <div id="auth-lang-picker">
+    <button class="lang-flag" id="lang-flag-he" onclick="setLanguage('he')" title="עברית">🇮🇱</button>
+    <button class="lang-flag" id="lang-flag-en" onclick="setLanguage('en')" title="English">🇺🇸</button>
   </div>
 
 </div>
@@ -667,6 +694,7 @@
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
       <span id="filter-active-dot" style="display:none; position:absolute; top:2px; right:2px; width:8px; height:8px; background:#e74c3c; border-radius:50%; border:1.5px solid white;"></span>
     </button>
+    <button id="header-lang-btn" onclick="toggleLanguage()" title="Language / שפה">🇮🇱</button>
     <button class="header-btn" onclick="openMenu()">☰</button>
   </div>
 </div>
@@ -1043,6 +1071,128 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
 const API_BASE = 'https://ineed-0otk.onrender.com';
+
+// ── i18n (Stage 1: auth screens) ─────────────────────────
+// Dictionary of UI strings. Each screen element carries data-i18n="key"
+// (or data-i18n-ph for input placeholders); applyLanguage() fills them in.
+const I18N = {
+  he: {
+    gate_tagline: 'תן וקח בשכונה שלך',
+    gate_signup: 'הרשמה',
+    gate_login: 'התחברות',
+    signup_name_title: 'איך קוראים לך?',
+    signup_name_ph: 'השם שלך',
+    btn_next: 'המשך ←',
+    btn_back: 'חזרה',
+    signup_phone_title: 'מספר טלפון',
+    signup_phone_sub: 'ישמש לזיהוי וליצירת קשר עם משתמשים אחרים',
+    signup_email_title: 'כתובת אימייל',
+    signup_email_sub: 'נשלח קוד אימות — נדרש גם לשחזור חשבון בעתיד',
+    signup_email_btn: 'שלח קוד אימות ←',
+    signup_code_title: 'אימות אימייל',
+    signup_code_sub: 'שלחנו קוד בן 6 ספרות ל-',
+    signup_code_btn: 'אמת קוד ←',
+    signup_code_resend: 'שלח קוד אחר',
+    signup_pw_title: 'בחר/י סיסמה',
+    signup_pw_ph1: 'סיסמה (לפחות 6 תווים)',
+    signup_pw_ph2: 'הקלד/י שוב את הסיסמה',
+    signup_radius_title: 'רדיוס חיפוש',
+    signup_radius_sub: 'באיזה רדיוס תרצה לראות פריטים?',
+    signup_radius_btn: 'בואו נתחיל ←',
+    login_title: 'התחברות',
+    login_id_ph: 'אימייל או מספר טלפון',
+    login_pw_ph: 'סיסמה',
+    login_btn: 'התחבר/י ←',
+    login_forgot: 'שכחת סיסמה?',
+    forgot_title: 'שחזור סיסמה',
+    forgot_btn: 'שלח קוד איפוס ←',
+    reset_title: 'איפוס סיסמה',
+    reset_sub: 'שלחנו קוד ל-',
+    reset_code_ph: 'קוד בן 6 ספרות',
+    reset_pw_ph1: 'סיסמה חדשה',
+    reset_pw_ph2: 'הקלד/י שוב',
+    reset_btn: 'אפס סיסמה ←'
+  },
+  en: {
+    gate_tagline: 'Give and take in your neighborhood',
+    gate_signup: 'Sign up',
+    gate_login: 'Log in',
+    signup_name_title: "What's your name?",
+    signup_name_ph: 'Your name',
+    btn_next: 'Continue →',
+    btn_back: 'Back',
+    signup_phone_title: 'Phone number',
+    signup_phone_sub: 'Used to identify you and connect with other users',
+    signup_email_title: 'Email address',
+    signup_email_sub: "We'll send a verification code — also needed for account recovery",
+    signup_email_btn: 'Send verification code →',
+    signup_code_title: 'Email verification',
+    signup_code_sub: 'We sent a 6-digit code to ',
+    signup_code_btn: 'Verify code →',
+    signup_code_resend: 'Send another code',
+    signup_pw_title: 'Choose a password',
+    signup_pw_ph1: 'Password (at least 6 characters)',
+    signup_pw_ph2: 'Re-enter your password',
+    signup_radius_title: 'Search radius',
+    signup_radius_sub: 'Within what radius would you like to see items?',
+    signup_radius_btn: "Let's start →",
+    login_title: 'Log in',
+    login_id_ph: 'Email or phone number',
+    login_pw_ph: 'Password',
+    login_btn: 'Log in →',
+    login_forgot: 'Forgot password?',
+    forgot_title: 'Password recovery',
+    forgot_btn: 'Send reset code →',
+    reset_title: 'Reset password',
+    reset_sub: 'We sent a code to ',
+    reset_code_ph: '6-digit code',
+    reset_pw_ph1: 'New password',
+    reset_pw_ph2: 'Re-enter',
+    reset_btn: 'Reset password →'
+  }
+};
+
+let currentLang = localStorage.getItem('ineed_lang') || 'he';
+
+function t(key) {
+  return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.he[key]) || key;
+}
+
+function applyLanguage() {
+  // Fill text content
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.getAttribute('data-i18n'));
+  });
+  // Fill placeholders
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+    el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph')));
+  });
+  // Document direction: Hebrew is RTL, English LTR
+  document.documentElement.setAttribute('dir', currentLang === 'he' ? 'rtl' : 'ltr');
+  document.documentElement.setAttribute('lang', currentLang);
+  // Ribbon flag shows the CURRENT language's flag
+  const hb = document.getElementById('header-lang-btn');
+  if (hb) hb.textContent = currentLang === 'he' ? '🇮🇱' : '🇺🇸';
+  // Auth flag picker: highlight active
+  const fhe = document.getElementById('lang-flag-he');
+  const fen = document.getElementById('lang-flag-en');
+  if (fhe) fhe.classList.toggle('active', currentLang === 'he');
+  if (fen) fen.classList.toggle('active', currentLang === 'en');
+}
+
+function setLanguage(lang) {
+  if (lang !== 'he' && lang !== 'en') return;
+  currentLang = lang;
+  localStorage.setItem('ineed_lang', lang);
+  applyLanguage();
+}
+
+function toggleLanguage() {
+  setLanguage(currentLang === 'he' ? 'en' : 'he');
+}
+
+// Apply saved language as early as possible.
+applyLanguage();
 
 // The header logo must load from the API origin, not the webview's local origin
 // (in the Capacitor app a root-relative "/header-logo.png" resolves against
