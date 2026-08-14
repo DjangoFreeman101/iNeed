@@ -557,6 +557,29 @@
       color:var(--dark); white-space:nowrap;
     }
     .lang-dd-item:hover { background:#f5f5f5; }
+
+    /* ── LTR (English) alignment overrides ── */
+    /* Hebrew stays RTL/right-aligned; English flips content to left-aligned.
+       Keyed off the dir attribute so it applies app-wide in one place. */
+    html[dir="ltr"] .panel-body,
+    html[dir="ltr"] .form-label,
+    html[dir="ltr"] .privacy-body,
+    html[dir="ltr"] .privacy-body p,
+    html[dir="ltr"] .privacy-body li,
+    html[dir="ltr"] .menu-item,
+    html[dir="ltr"] .item-card,
+    html[dir="ltr"] .history-card {
+      text-align:left; direction:ltr;
+    }
+    html[dir="ltr"] .form-input,
+    html[dir="ltr"] .form-select,
+    html[dir="ltr"] .form-textarea {
+      direction:ltr; text-align:left;
+    }
+    html[dir="ltr"] .privacy-body ul {
+      padding-left:20px; padding-right:0;
+    }
+    html[dir="ltr"] .panel-title { }
   </style>
 </head>
 <body>
@@ -904,47 +927,47 @@
 <div id="privacy-panel" class="panel">
   <div class="panel-header">
     <button class="panel-back" onclick="closePanel('privacy-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
-    <span class="panel-title">מדיניות פרטיות</span>
+    <span class="panel-title" data-i18n="privacy_title">מדיניות פרטיות</span>
   </div>
   <div class="panel-body privacy-body">
-    <p class="privacy-updated">עודכן לאחרונה: יולי 2026</p>
-    <p>אפליקציית iNeed מאפשרת למשתמשים לפרסם פריטים למסירה או לבקש פריטים באזור מגוריהם, ולראות אותם על גבי מפה. מדיניות זו מסבירה איזה מידע אנו אוספים, כיצד אנו משתמשים בו, ומהן זכויותיך.</p>
+    <p class="privacy-updated" data-i18n="privacy_updated">עודכן לאחרונה: יולי 2026</p>
+    <p data-i18n="privacy_intro">אפליקציית iNeed מאפשרת למשתמשים לפרסם פריטים למסירה או לבקש פריטים באזור מגוריהם, ולראות אותם על גבי מפה. מדיניות זו מסבירה איזה מידע אנו אוספים, כיצד אנו משתמשים בו, ומהן זכויותיך.</p>
 
-    <h3>המידע שאנו אוספים</h3>
+    <h3 data-i18n="privacy_collect_h">המידע שאנו אוספים</h3>
     <ul>
-      <li><strong>מזהה מכשיר:</strong> מזהה ייחודי לזיהוי החשבון ללא שם משתמש וסיסמה.</li>
-      <li><strong>כינוי:</strong> השם שבחרת להצגה למשתמשים אחרים.</li>
-      <li><strong>מספר טלפון:</strong> לצורך יצירת קשר בין נותן למקבל. נחשף לצד השני אך ורק לאחר אישור בקשה, ואינו מוצג בפומבי על המפה.</li>
-      <li><strong>דוא"ל (אופציונלי):</strong> אם סופק, לצורך עדכונים.</li>
-      <li><strong>מיקום:</strong> להצגת פריטים בקרבתך ולמיקום פריטים שאתה מפרסם. ניתן להזין כתובת ידנית במקום מיקום נוכחי.</li>
-      <li><strong>תמונות:</strong> תמונות שאתה מעלה עבור פריטים.</li>
-      <li><strong>פעילות:</strong> פריטים שפרסמת, בקשות שהבעת בהן עניין, אישורים, ופריטים שסומנו כנמסרו/נלקחו.</li>
+      <li data-i18n-html="privacy_collect_device">‏<strong>מזהה מכשיר:</strong> מזהה ייחודי לזיהוי החשבון ללא שם משתמש וסיסמה.</li>
+      <li data-i18n-html="privacy_collect_nick">‏<strong>כינוי:</strong> השם שבחרת להצגה למשתמשים אחרים.</li>
+      <li data-i18n-html="privacy_collect_phone">‏<strong>מספר טלפון:</strong> לצורך יצירת קשר בין נותן למקבל. נחשף לצד השני אך ורק לאחר אישור בקשה, ואינו מוצג בפומבי על המפה.</li>
+      <li data-i18n-html="privacy_collect_email">‏<strong>דוא"ל (אופציונלי):</strong> אם סופק, לצורך עדכונים.</li>
+      <li data-i18n-html="privacy_collect_location">‏<strong>מיקום:</strong> להצגת פריטים בקרבתך ולמיקום פריטים שאתה מפרסם. ניתן להזין כתובת ידנית במקום מיקום נוכחי.</li>
+      <li data-i18n-html="privacy_collect_photos">‏<strong>תמונות:</strong> תמונות שאתה מעלה עבור פריטים.</li>
+      <li data-i18n-html="privacy_collect_activity">‏<strong>פעילות:</strong> פריטים שפרסמת, בקשות שהבעת בהן עניין, אישורים, ופריטים שסומנו כנמסרו/נלקחו.</li>
     </ul>
 
-    <h3>כיצד אנו משתמשים במידע</h3>
+    <h3 data-i18n="privacy_use_h">כיצד אנו משתמשים במידע</h3>
     <ul>
-      <li>הצגת פריטים רלוונטיים בקרבתך על המפה.</li>
-      <li>יצירת קשר בין נותן למקבל לאחר אישור בקשה.</li>
-      <li>שליחת התראות על עניין בפריטים שלך ועל אישור בקשות.</li>
-      <li>תפעול ושיפור האפליקציה.</li>
+      <li data-i18n="privacy_use_1">הצגת פריטים רלוונטיים בקרבתך על המפה.</li>
+      <li data-i18n="privacy_use_2">יצירת קשר בין נותן למקבל לאחר אישור בקשה.</li>
+      <li data-i18n="privacy_use_3">שליחת התראות על עניין בפריטים שלך ועל אישור בקשות.</li>
+      <li data-i18n="privacy_use_4">תפעול ושיפור האפליקציה.</li>
     </ul>
 
-    <h3>שיתוף עם צדדים שלישיים</h3>
-    <p>איננו מוכרים את המידע שלך. אנו משתמשים בספקי שירות לצורך תפעול: Cloudinary (אחסון תמונות), OpenStreetMap (מפה ואיתור כתובות), ו-Render (אירוח השרת). מספר הטלפון והכינוי שלך משותפים עם משתמש אחר רק כאשר בקשה מאושרת, לצורך תיאום המסירה.</p>
+    <h3 data-i18n="privacy_share_h">שיתוף עם צדדים שלישיים</h3>
+    <p data-i18n="privacy_share_p">איננו מוכרים את המידע שלך. אנו משתמשים בספקי שירות לצורך תפעול: Cloudinary (אחסון תמונות), OpenStreetMap (מפה ואיתור כתובות), ו-Render (אירוח השרת). מספר הטלפון והכינוי שלך משותפים עם משתמש אחר רק כאשר בקשה מאושרת, לצורך תיאום המסירה.</p>
 
-    <h3>שמירה ומחיקה</h3>
-    <p>אנו שומרים את המידע כל עוד החשבון פעיל. ניתן למחוק את החשבון בכל עת דרך "מחק חשבון" בתפריט. מחיקה מסירה לצמיתות את פרטי המשתמש, הפריטים והבקשות ממסד הנתונים.</p>
+    <h3 data-i18n="privacy_retention_h">שמירה ומחיקה</h3>
+    <p data-i18n="privacy_retention_p">אנו שומרים את המידע כל עוד החשבון פעיל. ניתן למחוק את החשבון בכל עת דרך "מחק חשבון" בתפריט. מחיקה מסירה לצמיתות את פרטי המשתמש, הפריטים והבקשות ממסד הנתונים.</p>
 
-    <h3>אבטחה</h3>
-    <p>אנו נוקטים באמצעים סבירים להגנה על המידע. עם זאת, אף שיטה אינה מאובטחת ב-100% ואיננו יכולים להבטיח אבטחה מוחלטת.</p>
+    <h3 data-i18n="privacy_security_h">אבטחה</h3>
+    <p data-i18n="privacy_security_p">אנו נוקטים באמצעים סבירים להגנה על המידע. עם זאת, אף שיטה אינה מאובטחת ב-100% ואיננו יכולים להבטיח אבטחה מוחלטת.</p>
 
-    <h3>ילדים</h3>
-    <p>האפליקציה אינה מיועדת לילדים מתחת לגיל 13, ואיננו אוספים ביודעין מידע מהם.</p>
+    <h3 data-i18n="privacy_children_h">ילדים</h3>
+    <p data-i18n="privacy_children_p">האפליקציה אינה מיועדת לילדים מתחת לגיל 13, ואיננו אוספים ביודעין מידע מהם.</p>
 
-    <h3>שינויים</h3>
-    <p>אנו עשויים לעדכן מדיניות זו מעת לעת. עדכונים יפורסמו במסך זה.</p>
+    <h3 data-i18n="privacy_changes_h">שינויים</h3>
+    <p data-i18n="privacy_changes_p">אנו עשויים לעדכן מדיניות זו מעת לעת. עדכונים יפורסמו במסך זה.</p>
 
-    <h3>יצירת קשר</h3>
+    <h3 data-i18n="privacy_contact_h">יצירת קשר</h3>
     <p style="direction:ltr; text-align:right;">ybg1998@gmail.com</p>
   </div>
 </div>
@@ -1016,15 +1039,15 @@
 <div id="settings-panel" class="panel">
   <div class="panel-header">
     <button class="panel-back" onclick="closePanel('settings-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
-    <span class="panel-title">הגדרות</span>
+    <span class="panel-title" data-i18n="settings_title">הגדרות</span>
   </div>
   <div class="panel-body">
     <div class="form-group">
-      <label class="form-label">כינוי</label>
+      <label class="form-label" data-i18n="settings_nickname">כינוי</label>
       <input type="text" class="form-input" id="settings-nickname"/>
     </div>
     <div class="form-group">
-      <label class="form-label">רדיוס חיפוש</label>
+      <label class="form-label" data-i18n="settings_radius">רדיוס חיפוש</label>
       <div id="settings-radius-display">5 ק"מ</div>
       <div class="radius-row">
         <input type="range" id="settings-radius" min="1" max="100" value="5"/>
@@ -1035,14 +1058,14 @@
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">מספר טלפון *</label>
+      <label class="form-label" data-i18n="settings_phone">מספר טלפון *</label>
       <input type="tel" class="form-input" id="settings-phone" placeholder="05XXXXXXXX" maxlength="10" inputmode="numeric" style="direction:ltr;"/>
     </div>
     <div class="form-group">
-      <label class="form-label">אימייל</label>
+      <label class="form-label" data-i18n="settings_email">אימייל</label>
       <input type="email" class="form-input" id="settings-email" style="direction:ltr;"/>
     </div>
-    <button class="btn-primary" onclick="saveSettings()">שמור הגדרות</button>
+    <button class="btn-primary" data-i18n="settings_save" onclick="saveSettings()">שמור הגדרות</button>
   </div>
 </div>
 
@@ -1156,10 +1179,43 @@ const I18N = {
     cond_new: 'חדש',
     cond_like_new: 'כמו חדש',
     cond_used: 'משומש',
-    cond_bad: 'מצב גרוע'
+    cond_bad: 'מצב גרוע',
+    settings_title: 'הגדרות',
+    settings_nickname: 'כינוי',
+    settings_radius: 'רדיוס חיפוש',
+    settings_phone: 'מספר טלפון *',
+    settings_email: 'אימייל',
+    settings_save: 'שמור הגדרות',
+    km_unit: 'ק"מ',
+    privacy_title: 'מדיניות פרטיות',
+    privacy_updated: 'עודכן לאחרונה: יולי 2026',
+    privacy_intro: 'אפליקציית iNeed מאפשרת למשתמשים לפרסם פריטים למסירה או לבקש פריטים באזור מגוריהם, ולראות אותם על גבי מפה. מדיניות זו מסבירה איזה מידע אנו אוספים, כיצד אנו משתמשים בו, ומהן זכויותיך.',
+    privacy_collect_h: 'המידע שאנו אוספים',
+    privacy_collect_device: '<strong>מזהה מכשיר:</strong> מזהה ייחודי לזיהוי החשבון ללא שם משתמש וסיסמה.',
+    privacy_collect_nick: '<strong>כינוי:</strong> השם שבחרת להצגה למשתמשים אחרים.',
+    privacy_collect_phone: '<strong>מספר טלפון:</strong> לצורך יצירת קשר בין נותן למקבל. נחשף לצד השני אך ורק לאחר אישור בקשה, ואינו מוצג בפומבי על המפה.',
+    privacy_collect_email: '<strong>דוא"ל (אופציונלי):</strong> אם סופק, לצורך עדכונים.',
+    privacy_collect_location: '<strong>מיקום:</strong> להצגת פריטים בקרבתך ולמיקום פריטים שאתה מפרסם. ניתן להזין כתובת ידנית במקום מיקום נוכחי.',
+    privacy_collect_photos: '<strong>תמונות:</strong> תמונות שאתה מעלה עבור פריטים.',
+    privacy_collect_activity: '<strong>פעילות:</strong> פריטים שפרסמת, בקשות שהבעת בהן עניין, אישורים, ופריטים שסומנו כנמסרו/נלקחו.',
+    privacy_use_h: 'כיצד אנו משתמשים במידע',
+    privacy_use_1: 'הצגת פריטים רלוונטיים בקרבתך על המפה.',
+    privacy_use_2: 'יצירת קשר בין נותן למקבל לאחר אישור בקשה.',
+    privacy_use_3: 'שליחת התראות על עניין בפריטים שלך ועל אישור בקשות.',
+    privacy_use_4: 'תפעול ושיפור האפליקציה.',
+    privacy_share_h: 'שיתוף עם צדדים שלישיים',
+    privacy_share_p: 'איננו מוכרים את המידע שלך. אנו משתמשים בספקי שירות לצורך תפעול: Cloudinary (אחסון תמונות), OpenStreetMap (מפה ואיתור כתובות), ו-Render (אירוח השרת). מספר הטלפון והכינוי שלך משותפים עם משתמש אחר רק כאשר בקשה מאושרת, לצורך תיאום המסירה.',
+    privacy_retention_h: 'שמירה ומחיקה',
+    privacy_retention_p: 'אנו שומרים את המידע כל עוד החשבון פעיל. ניתן למחוק את החשבון בכל עת דרך "מחק חשבון" בתפריט. מחיקה מסירה לצמיתות את פרטי המשתמש, הפריטים והבקשות ממסד הנתונים.',
+    privacy_security_h: 'אבטחה',
+    privacy_security_p: 'אנו נוקטים באמצעים סבירים להגנה על המידע. עם זאת, אף שיטה אינה מאובטחת ב-100% ואיננו יכולים להבטיח אבטחה מוחלטת.',
+    privacy_children_h: 'ילדים',
+    privacy_children_p: 'האפליקציה אינה מיועדת לילדים מתחת לגיל 13, ואיננו אוספים ביודעין מידע מהם.',
+    privacy_changes_h: 'שינויים',
+    privacy_changes_p: 'אנו עשויים לעדכן מדיניות זו מעת לעת. עדכונים יפורסמו במסך זה.',
+    privacy_contact_h: 'יצירת קשר'
   },
   en: {
-    gate_tagline: 'Give and take in your neighborhood',
     gate_signup: 'Sign up',
     gate_login: 'Log in',
     signup_name_title: "What's your name?",
@@ -1219,7 +1275,41 @@ const I18N = {
     cond_new: 'New',
     cond_like_new: 'Like new',
     cond_used: 'Used',
-    cond_bad: 'Poor condition'
+    cond_bad: 'Poor condition',
+    settings_title: 'Settings',
+    settings_nickname: 'Nickname',
+    settings_radius: 'Search radius',
+    settings_phone: 'Phone number *',
+    settings_email: 'Email',
+    settings_save: 'Save settings',
+    km_unit: 'km',
+    privacy_title: 'Privacy policy',
+    privacy_updated: 'Last updated: July 2026',
+    privacy_intro: 'The iNeed app lets users post items to give away or request items in their area, and see them on a map. This policy explains what information we collect, how we use it, and what your rights are.',
+    privacy_collect_h: 'Information we collect',
+    privacy_collect_device: '<strong>Device ID:</strong> a unique identifier used to recognize your account without a username and password.',
+    privacy_collect_nick: '<strong>Nickname:</strong> the name you chose to display to other users.',
+    privacy_collect_phone: '<strong>Phone number:</strong> for contact between giver and receiver. Revealed to the other party only after a request is approved, and never shown publicly on the map.',
+    privacy_collect_email: '<strong>Email (optional):</strong> if provided, for updates.',
+    privacy_collect_location: '<strong>Location:</strong> to show items near you and to place items you post. You can enter an address manually instead of using your current location.',
+    privacy_collect_photos: '<strong>Photos:</strong> photos you upload for items.',
+    privacy_collect_activity: '<strong>Activity:</strong> items you posted, requests you expressed interest in, approvals, and items marked as given/taken.',
+    privacy_use_h: 'How we use the information',
+    privacy_use_1: 'Showing relevant items near you on the map.',
+    privacy_use_2: 'Connecting giver and receiver after a request is approved.',
+    privacy_use_3: 'Sending notifications about interest in your items and about approved requests.',
+    privacy_use_4: 'Operating and improving the app.',
+    privacy_share_h: 'Sharing with third parties',
+    privacy_share_p: 'We do not sell your information. We use service providers to operate: Cloudinary (image storage), OpenStreetMap (map and address lookup), and Render (server hosting). Your phone number and nickname are shared with another user only when a request is approved, to coordinate the handover.',
+    privacy_retention_h: 'Retention and deletion',
+    privacy_retention_p: 'We keep your information as long as your account is active. You can delete your account at any time via "Delete account" in the menu. Deletion permanently removes your user details, items, and requests from the database.',
+    privacy_security_h: 'Security',
+    privacy_security_p: 'We take reasonable measures to protect your information. However, no method is 100% secure and we cannot guarantee absolute security.',
+    privacy_children_h: 'Children',
+    privacy_children_p: 'The app is not intended for children under 13, and we do not knowingly collect information from them.',
+    privacy_changes_h: 'Changes',
+    privacy_changes_p: 'We may update this policy from time to time. Updates will be posted on this screen.',
+    privacy_contact_h: 'Contact'
   }
 };
 
@@ -1233,6 +1323,10 @@ function applyLanguage() {
   // Fill text content
   document.querySelectorAll('[data-i18n]').forEach(el => {
     el.textContent = t(el.getAttribute('data-i18n'));
+  });
+  // Fill entries that contain markup (e.g. <strong>) via innerHTML
+  document.querySelectorAll('[data-i18n-html]').forEach(el => {
+    el.innerHTML = t(el.getAttribute('data-i18n-html'));
   });
   // Fill placeholders
   document.querySelectorAll('[data-i18n-ph]').forEach(el => {
@@ -2196,7 +2290,7 @@ function openSettings() {
   if (currentUser) {
     document.getElementById('settings-nickname').value = currentUser.nickname || '';
     document.getElementById('settings-radius').value = currentUser.radius_km || 5;
-    document.getElementById('settings-radius-display').textContent = (currentUser.radius_km || 5) + ' ק"מ';
+    document.getElementById('settings-radius-display').textContent = (currentUser.radius_km || 5) + ' ' + t('km_unit');
     document.getElementById('settings-email').value = currentUser.email || '';
     document.getElementById('settings-phone').value = currentUser.phone || '';
   }
@@ -2343,7 +2437,7 @@ function signupPasswordNext() {
 
 function updateSignupRadiusDisplay() {
   const el = document.getElementById('signup-radius');
-  document.getElementById('signup-radius-display').textContent = el.value + ' ק"מ';
+  document.getElementById('signup-radius-display').textContent = el.value + ' ' + t('km_unit');
 }
 document.getElementById('signup-radius').addEventListener('input', updateSignupRadiusDisplay);
 document.getElementById('signup-radius').addEventListener('change', updateSignupRadiusDisplay);
@@ -2478,7 +2572,7 @@ async function submitPasswordReset() {
 
 function updateSettingsRadiusDisplay() {
   const el = document.getElementById('settings-radius');
-  document.getElementById('settings-radius-display').textContent = el.value + ' ק"מ';
+  document.getElementById('settings-radius-display').textContent = el.value + ' ' + t('km_unit');
 }
 document.getElementById('settings-radius').addEventListener('input', updateSettingsRadiusDisplay);
 document.getElementById('settings-radius').addEventListener('change', updateSettingsRadiusDisplay);
