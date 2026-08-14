@@ -544,6 +544,19 @@
       display:inline-flex; align-items:center; justify-content:center;
     }
     #header-lang-btn:active { transform:scale(0.88); }
+    #header-lang-dropdown {
+      display:none; position:absolute; top:110%; left:0;
+      background:white; border-radius:10px; overflow:hidden;
+      box-shadow:0 6px 20px rgba(0,0,0,0.18); z-index:600; min-width:140px;
+    }
+    #header-lang-dropdown.open { display:block; }
+    .lang-dd-item {
+      display:block; width:100%; text-align:right;
+      background:none; border:none; padding:12px 16px;
+      font-size:15px; cursor:pointer; font-family:'Heebo',sans-serif;
+      color:var(--dark); white-space:nowrap;
+    }
+    .lang-dd-item:hover { background:#f5f5f5; }
   </style>
 </head>
 <body>
@@ -694,7 +707,13 @@
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
       <span id="filter-active-dot" style="display:none; position:absolute; top:2px; right:2px; width:8px; height:8px; background:#e74c3c; border-radius:50%; border:1.5px solid white;"></span>
     </button>
-    <button id="header-lang-btn" onclick="toggleLanguage()" title="Language / שפה">🇮🇱</button>
+    <div id="header-lang-wrap" style="position:relative;">
+      <button id="header-lang-btn" onclick="toggleLangDropdown(event)" title="Language / שפה">🇮🇱</button>
+      <div id="header-lang-dropdown">
+        <button class="lang-dd-item" onclick="pickLanguage('he')">🇮🇱 עברית</button>
+        <button class="lang-dd-item" onclick="pickLanguage('en')">🇺🇸 English</button>
+      </div>
+    </div>
     <button class="header-btn" onclick="openMenu()">☰</button>
   </div>
 </div>
@@ -746,11 +765,11 @@
 <div id="menu-overlay" onclick="closeMenu()"></div>
 <div id="side-menu">
   <div id="menu-header">iNeed</div>
-  <div class="menu-item" onclick="openSettings()">הגדרות</div>
-  <div class="menu-item" onclick="openHistory()">היסטוריה</div>
-  <div class="menu-item" onclick="openPrivacy()">מדיניות פרטיות</div>
-  <div class="menu-item" onclick="signOut()">התנתק</div>
-  <div class="menu-item menu-item-danger" onclick="deleteAccount()">מחק חשבון</div>
+  <div class="menu-item" data-i18n="menu_settings" onclick="openSettings()">הגדרות</div>
+  <div class="menu-item" data-i18n="menu_history" onclick="openHistory()">היסטוריה</div>
+  <div class="menu-item" data-i18n="menu_privacy" onclick="openPrivacy()">מדיניות פרטיות</div>
+  <div class="menu-item" data-i18n="menu_signout" onclick="signOut()">התנתק</div>
+  <div class="menu-item menu-item-danger" data-i18n="menu_delete" onclick="deleteAccount()">מחק חשבון</div>
 </div>
 
 <!-- Post item panel (multi-step) -->
@@ -1030,40 +1049,40 @@
 <div id="filter-panel" class="panel">
   <div class="panel-header">
     <button class="panel-back" onclick="closePanel('filter-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
-    <span class="panel-title">סינון</span>
+    <span class="panel-title" data-i18n="filter_title">סינון</span>
   </div>
   <div class="panel-body">
     <div class="form-group">
-      <label class="form-label">קטגוריה</label>
+      <label class="form-label" data-i18n="filter_category">קטגוריה</label>
       <select class="form-select" id="filter-category">
-        <option value="">הכל</option>
-        <option>ריהוט</option>
-        <option>אלקטרוניקה</option>
-        <option>ביגוד והנעלה</option>
-        <option>ספרים ולימוד</option>
-        <option>מטבח וכלי בית</option>
-        <option>צעצועים וילדים</option>
-        <option>ספורט ופנאי</option>
-        <option>גינה וכלי עבודה</option>
-        <option>אחר</option>
+        <option value="" data-i18n="filter_all">הכל</option>
+        <option value="ריהוט" data-i18n="cat_furniture">ריהוט</option>
+        <option value="אלקטרוניקה" data-i18n="cat_electronics">אלקטרוניקה</option>
+        <option value="ביגוד והנעלה" data-i18n="cat_clothing">ביגוד והנעלה</option>
+        <option value="ספרים ולימוד" data-i18n="cat_books">ספרים ולימוד</option>
+        <option value="מטבח וכלי בית" data-i18n="cat_kitchen">מטבח וכלי בית</option>
+        <option value="צעצועים וילדים" data-i18n="cat_toys">צעצועים וילדים</option>
+        <option value="ספורט ופנאי" data-i18n="cat_sports">ספורט ופנאי</option>
+        <option value="גינה וכלי עבודה" data-i18n="cat_garden">גינה וכלי עבודה</option>
+        <option value="אחר" data-i18n="cat_other">אחר</option>
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">שם הפריט מכיל</label>
-      <input type="text" class="form-input" id="filter-name" placeholder="לדוגמה: כיסא"/>
+      <label class="form-label" data-i18n="filter_name">שם הפריט מכיל</label>
+      <input type="text" class="form-input" id="filter-name" data-i18n-ph="filter_name_ph" placeholder="לדוגמה: כיסא"/>
     </div>
     <div class="form-group">
-      <label class="form-label">מצב הפריט</label>
+      <label class="form-label" data-i18n="filter_condition">מצב הפריט</label>
       <select class="form-select" id="filter-condition">
-        <option value="">הכל</option>
-        <option value="new">חדש</option>
-        <option value="like_new">כמו חדש</option>
-        <option value="used">משומש</option>
-        <option value="bad">מצב גרוע</option>
+        <option value="" data-i18n="filter_all">הכל</option>
+        <option value="new" data-i18n="cond_new">חדש</option>
+        <option value="like_new" data-i18n="cond_like_new">כמו חדש</option>
+        <option value="used" data-i18n="cond_used">משומש</option>
+        <option value="bad" data-i18n="cond_bad">מצב גרוע</option>
       </select>
     </div>
-    <button class="btn-primary" onclick="applyFilters()">החל סינון</button>
-    <button class="btn-primary" id="clear-filter-btn" onclick="clearFilters()" style="display:none; background:#888; margin-top:10px;">בטל סינון</button>
+    <button class="btn-primary" data-i18n="filter_apply" onclick="applyFilters()">החל סינון</button>
+    <button class="btn-primary" id="clear-filter-btn" data-i18n="filter_clear" onclick="clearFilters()" style="display:none; background:#888; margin-top:10px;">בטל סינון</button>
   </div>
 </div>
 
@@ -1111,7 +1130,33 @@ const I18N = {
     reset_code_ph: 'קוד בן 6 ספרות',
     reset_pw_ph1: 'סיסמה חדשה',
     reset_pw_ph2: 'הקלד/י שוב',
-    reset_btn: 'אפס סיסמה ←'
+    reset_btn: 'אפס סיסמה ←',
+    menu_settings: 'הגדרות',
+    menu_history: 'היסטוריה',
+    menu_privacy: 'מדיניות פרטיות',
+    menu_signout: 'התנתק',
+    menu_delete: 'מחק חשבון',
+    filter_title: 'סינון',
+    filter_category: 'קטגוריה',
+    filter_name: 'שם הפריט מכיל',
+    filter_name_ph: 'לדוגמה: כיסא',
+    filter_condition: 'מצב הפריט',
+    filter_apply: 'החל סינון',
+    filter_clear: 'בטל סינון',
+    filter_all: 'הכל',
+    cat_furniture: 'ריהוט',
+    cat_electronics: 'אלקטרוניקה',
+    cat_clothing: 'ביגוד והנעלה',
+    cat_books: 'ספרים ולימוד',
+    cat_kitchen: 'מטבח וכלי בית',
+    cat_toys: 'צעצועים וילדים',
+    cat_sports: 'ספורט ופנאי',
+    cat_garden: 'גינה וכלי עבודה',
+    cat_other: 'אחר',
+    cond_new: 'חדש',
+    cond_like_new: 'כמו חדש',
+    cond_used: 'משומש',
+    cond_bad: 'מצב גרוע'
   },
   en: {
     gate_tagline: 'Give and take in your neighborhood',
@@ -1148,7 +1193,33 @@ const I18N = {
     reset_code_ph: '6-digit code',
     reset_pw_ph1: 'New password',
     reset_pw_ph2: 'Re-enter',
-    reset_btn: 'Reset password →'
+    reset_btn: 'Reset password →',
+    menu_settings: 'Settings',
+    menu_history: 'History',
+    menu_privacy: 'Privacy policy',
+    menu_signout: 'Sign out',
+    menu_delete: 'Delete account',
+    filter_title: 'Filter',
+    filter_category: 'Category',
+    filter_name: 'Item name contains',
+    filter_name_ph: 'e.g. chair',
+    filter_condition: 'Condition',
+    filter_apply: 'Apply filter',
+    filter_clear: 'Clear filter',
+    filter_all: 'All',
+    cat_furniture: 'Furniture',
+    cat_electronics: 'Electronics',
+    cat_clothing: 'Clothing & footwear',
+    cat_books: 'Books & study',
+    cat_kitchen: 'Kitchen & home',
+    cat_toys: 'Toys & kids',
+    cat_sports: 'Sports & leisure',
+    cat_garden: 'Garden & tools',
+    cat_other: 'Other',
+    cond_new: 'New',
+    cond_like_new: 'Like new',
+    cond_used: 'Used',
+    cond_bad: 'Poor condition'
   }
 };
 
@@ -1187,9 +1258,26 @@ function setLanguage(lang) {
   applyLanguage();
 }
 
-function toggleLanguage() {
-  setLanguage(currentLang === 'he' ? 'en' : 'he');
+function toggleLangDropdown(e) {
+  if (e) e.stopPropagation();
+  const dd = document.getElementById('header-lang-dropdown');
+  if (dd) dd.classList.toggle('open');
 }
+
+function pickLanguage(lang) {
+  setLanguage(lang);
+  const dd = document.getElementById('header-lang-dropdown');
+  if (dd) dd.classList.remove('open');
+}
+
+// Close the language dropdown when tapping elsewhere.
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('header-lang-wrap');
+  const dd = document.getElementById('header-lang-dropdown');
+  if (dd && dd.classList.contains('open') && wrap && !wrap.contains(e.target)) {
+    dd.classList.remove('open');
+  }
+});
 
 // Apply saved language as early as possible.
 applyLanguage();
