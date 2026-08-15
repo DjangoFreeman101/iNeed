@@ -926,10 +926,10 @@
 <div id="history-panel" class="panel">
   <div class="panel-header">
     <button class="panel-back" onclick="closePanel('history-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
-    <span class="panel-title">היסטוריה</span>
+    <span class="panel-title" data-i18n="history_title">היסטוריה</span>
   </div>
   <div class="panel-body" id="history-body">
-    <p style="color:var(--gray); text-align:center;">טוען...</p>
+    <p style="color:var(--gray); text-align:center;" data-i18n="loading">טוען...</p>
   </div>
 </div>
 
@@ -1310,6 +1310,7 @@ const I18N = {
     edit_save: 'שמור שינויים',
     myitems_title: 'הפריטים שלי',
     myrequests_title: 'הבקשות שלי',
+    history_title: 'היסטוריה',
     mycard_i_need: 'אני צריך',
     mycard_i_give: 'אני מוסר',
     mycard_delete: 'מחק',
@@ -1317,7 +1318,12 @@ const I18N = {
     mycard_taken: 'נלקח',
     mycard_mark_taken: 'סמן כנלקח',
     mycard_mark_available: 'החזר לזמין',
-    mycard_goto_pin: 'מעבר לפרסום במפה'
+    mycard_goto_pin: 'מעבר לפרסום במפה',
+    req_pending: 'ממתין',
+    req_approved: 'אושר ✓',
+    req_phone_pending: 'מספר הטלפון יופיע לאחר אישור המוסר',
+    req_cancel: 'בטל בקשה',
+    req_took: 'לקחתי'
   },
   en: {
     gate_signup: 'Sign up',
@@ -1500,6 +1506,7 @@ const I18N = {
     edit_save: 'Save changes',
     myitems_title: 'My items',
     myrequests_title: 'My requests',
+    history_title: 'History',
     mycard_i_need: 'I need',
     mycard_i_give: 'I give',
     mycard_delete: 'Delete',
@@ -1507,7 +1514,12 @@ const I18N = {
     mycard_taken: 'taken',
     mycard_mark_taken: 'Mark as taken',
     mycard_mark_available: 'Mark available',
-    mycard_goto_pin: 'Go to posting on map'
+    mycard_goto_pin: 'Go to posting on map',
+    req_pending: 'Awaiting',
+    req_approved: 'Approved ✓',
+    req_phone_pending: 'The phone number will appear after the giver approves',
+    req_cancel: 'Cancel request',
+    req_took: 'Took it'
   }
 };
 
@@ -2113,7 +2125,7 @@ async function openMyRequests(expandItemId) {
   document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
   openPanel('my-requests-panel');
   const body = document.getElementById('my-requests-body');
-  body.innerHTML = '<p style="color:var(--gray);text-align:center;">טוען...</p>';
+  body.innerHTML = '<p style="color:var(--gray);text-align:center;">' + t('loading') + '</p>';
 
   try {
     const res = await fetch(`${API_BASE}/my-outgoing-requests/${deviceId}`);
@@ -2148,23 +2160,23 @@ function renderMyRequestsList(rows) {
     <div class="request-card">
       <div class="request-card-head" onclick="toggleRequestDetails(${r.id})">
         <span class="request-card-title">${r.item_title}</span>
-        <span class="request-card-status ${isApproved ? 'approved' : 'pending'}">${isApproved ? 'אושר ✓' : 'ממתין'}</span>
+        <span class="request-card-status ${isApproved ? 'approved' : 'pending'}">${isApproved ? t('req_approved') : t('req_pending')}</span>
       </div>
       <div class="request-card-details" id="request-details-${r.id}" style="display:none;">
         ${r.item_image_url ? `<img src="${r.item_image_url}" class="request-detail-img"/>` : ''}
         <div class="request-detail-line">${r.item_category || ''}</div>
         ${r.item_description ? `<div class="request-detail-desc">${r.item_description}</div>` : ''}
-        <div class="request-detail-line">מאת: ${r.giver_name}</div>
+        <div class="request-detail-line">${t('pop_by')}: ${r.giver_name}</div>
         ${isApproved && r.giver_phone
           ? `<div class="request-phone">💬 <a href="${waLink(r.giver_phone)}" target="_blank" style="direction:ltr;">${r.giver_phone}</a></div>`
-          : '<div class="request-detail-line" style="color:var(--gray);">מספר הטלפון יופיע לאחר אישור המוסר</div>'}
-        <button class="request-cancel-btn" onclick="cancelRequestFromList(${r.item_id})">בטל בקשה</button>
+          : `<div class="request-detail-line" style="color:var(--gray);">${t('req_phone_pending')}</div>`}
+        <button class="request-cancel-btn" onclick="cancelRequestFromList(${r.item_id})">${t('req_cancel')}</button>
       </div>
     </div>`;
-    if (!isApproved) return cardInner; // can only swipe לקחתי after approval
+    if (!isApproved) return cardInner; // can only swipe took after approval
     return `
       <div class="swipe-wrap" data-request-id="${r.id}">
-        <div class="swipe-reveal">לקחתי</div>
+        <div class="swipe-reveal">${t('req_took')}</div>
         <div class="swipe-front">${cardInner}</div>
       </div>`;
   }).join('');
@@ -2201,7 +2213,7 @@ async function openHistory() {
   closeMenu();
   openPanel('history-panel');
   const body = document.getElementById('history-body');
-  body.innerHTML = '<p style="color:var(--gray);text-align:center;">טוען...</p>';
+  body.innerHTML = '<p style="color:var(--gray);text-align:center;">' + t('loading') + '</p>';
 
   try {
     const res = await fetch(`${API_BASE}/history/${deviceId}`);
@@ -2249,7 +2261,7 @@ async function openMyItems() {
   setUnreadDot(false);
   openPanel('my-items-panel');
   const body = document.getElementById('my-items-body');
-  body.innerHTML = '<p style="color:var(--gray);text-align:center;">טוען...</p>';
+  body.innerHTML = '<p style="color:var(--gray);text-align:center;">' + t('loading') + '</p>';
 
   const res = await fetch(`${API_BASE}/my-items/${deviceId}`);
   const items = await res.json();
@@ -2333,7 +2345,7 @@ async function viewRequesters(itemId) {
   openPanel('requesters-panel');
   document.getElementById('requesters-title').textContent = `${requestersPanelLabel(item)}: ${itemTitle}`;
   const body = document.getElementById('requesters-body');
-  body.innerHTML = '<p style="color:var(--gray);text-align:center;">טוען...</p>';
+  body.innerHTML = '<p style="color:var(--gray);text-align:center;">' + t('loading') + '</p>';
 
   const res = await fetch(`${API_BASE}/item/${itemId}/requests?device_id=${encodeURIComponent(deviceId)}`);
   const requesters = await res.json();
@@ -2657,7 +2669,7 @@ async function completeSignup() {
   const radius = parseInt(document.getElementById('signup-radius').value);
   authError('signup-final-error', '');
   const btn = document.getElementById('signup-final-btn');
-  btn.disabled = true; btn.textContent = 'טוען...';
+  btn.disabled = true; btn.textContent = t('loading');
   try {
     const res = await fetch(`${API_BASE}/signup`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
