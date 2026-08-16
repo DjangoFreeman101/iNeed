@@ -35,6 +35,7 @@
       top: 0; left: 0; right: 0;
       z-index: 500;
       height: 50px;
+      direction: ltr;
     }
     #header-title { font-size:20px; font-weight:900; letter-spacing:-0.5px; }
     #header-actions { display:flex; gap:10px; align-items:center; }
@@ -154,7 +155,7 @@
     }
     .panel.open { display:flex; }
     .panel-header {
-      background:var(--dark); color:white;
+      background:#000000; color:white;
       padding:14px 16px; display:flex;
       align-items:center; gap:12px;
       position:sticky; top:0; z-index:1;
@@ -469,7 +470,7 @@
       background:rgba(0,0,0,0.4); z-index:2999; display:none;
     }
     #menu-overlay.open { display:block; }
-    #menu-header { background:var(--dark); color:white; padding:20px 16px; font-size:18px; font-weight:700; }
+    #menu-header { background:#000000; color:#F44336; padding:20px 16px; font-size:18px; font-weight:700; }
     .menu-item {
       padding:16px; font-size:15px; color:var(--dark);
       border-bottom:1px solid #f0f0f0; cursor:pointer;
@@ -1998,13 +1999,6 @@ document.addEventListener('click', function(e) {
 // Apply saved language as early as possible.
 applyLanguage();
 
-// The header logo must load from the API origin, not the webview's local origin
-// (in the Capacitor app a root-relative "/header-logo.png" resolves against
-// capacitor://localhost and 404s). Setting it from API_BASE fixes that.
-(function() {
-  const logo = document.getElementById('header-logo');
-  if (logo) logo.src = `${API_BASE}/header-logo.png?v=3`;
-})();
 
 // ── Swipe-to-action helper ─────────────────────────────
 // Attaches to a wrapper that contains a .swipe-reveal (behind) and a
