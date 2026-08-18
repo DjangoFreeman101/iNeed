@@ -230,6 +230,19 @@
     }
     .group-arrow:active { background:#e0e0e0; }
     .group-counter { font-size:13px; font-weight:700; color:#666; }
+    /* Slide transition: a viewport clips the panels; the animating pair is
+       positioned absolutely and transformed, then settles back to normal flow. */
+    .group-viewport { position:relative; overflow:hidden; }
+    .group-panel.sliding {
+      position:absolute; top:0; left:0; width:100%;
+      transition:transform 0.28s ease;
+      will-change:transform;
+    }
+    .group-panel.slide-from-left  { transform:translateX(-100%); }
+    .group-panel.slide-from-right { transform:translateX(100%); }
+    .group-panel.slide-to-left    { transform:translateX(-100%); }
+    .group-panel.slide-to-right   { transform:translateX(100%); }
+    .group-panel.slide-center     { transform:translateX(0); }
 
     /* ── User location dot ── */
     .user-location-dot {
@@ -2360,7 +2373,9 @@ function buildGroupPopup(items, coordK) {
         <span class="group-counter"><span class="group-cur">${start + 1}</span>/${items.length}</span>
         <button class="group-arrow" onclick="pageGroup('${gid}', 1)">›</button>
       </div>
-      ${panels}
+      <div class="group-viewport">
+        ${panels}
+      </div>
     </div>`;
 }
 
@@ -2368,17 +2383,62 @@ function pageGroup(gid, dir) {
   const wrap = document.getElementById(gid);
   if (!wrap) return;
   const count = parseInt(wrap.getAttribute('data-count'), 10);
-  let cur = parseInt(wrap.getAttribute('data-cur'), 10);
-  cur = (cur + dir + count) % count;
+  const prev = parseInt(wrap.getAttribute('data-cur'), 10);
+  const cur = (prev + dir + count) % count;
+  if (cur === prev) return;
   wrap.setAttribute('data-cur', cur);
   // Persist this position for the coordinate so a refresh keeps it.
   const coordK = wrap.getAttribute('data-coord');
   if (coordK) groupCurIndex[coordK] = cur;
-  wrap.querySelectorAll('.group-panel').forEach(p => {
-    p.style.display = (parseInt(p.getAttribute('data-idx'), 10) === cur) ? 'block' : 'none';
-  });
   const label = wrap.querySelector('.group-cur');
   if (label) label.textContent = cur + 1;
+
+  const panels = wrap.querySelectorAll('.group-panel');
+  const outgoing = [...panels].find(p => parseInt(p.getAttribute('data-idx'), 10) === prev);
+  const incoming = [...panels].find(p => parseInt(p.getAttribute('data-idx'), 10) === cur);
+  if (!outgoing || !incoming) return;
+
+  // dir === +1 is "next": outgoing exits left, incoming enters from right.
+  // dir === -1 is "previous": outgoing exits right, incoming enters from left.
+  const next = dir > 0;
+  const exitClass  = next ? 'slide-to-left'   : 'slide-to-right';
+  const enterClass = next ? 'slide-from-right' : 'slide-from-left';
+
+  // If a previous animation is mid-flight, clean it up first.
+  wrap._slideCleanup && wrap._slideCleanup();
+
+  // Fix the viewport height so absolutely-positioned panels don't collapse it.
+  const vp = wrap.querySelector('.group-viewport');
+  const h = outgoing.offsetHeight;
+  if (vp) vp.style.height = h + 'px';
+
+  incoming.style.display = 'block';
+  outgoing.classList.add('sliding', 'slide-center');
+  incoming.classList.add('sliding', enterClass);
+
+  // Next frame: animate both to their targets.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      outgoing.classList.remove('slide-center');
+      outgoing.classList.add(exitClass);
+      incoming.classList.remove(enterClass);
+      incoming.classList.add('slide-center');
+    });
+  });
+
+  const cleanup = () => {
+    outgoing.classList.remove('sliding', 'slide-center', exitClass);
+    incoming.classList.remove('sliding', 'slide-center', enterClass);
+    outgoing.style.display = 'none';
+    incoming.style.display = 'block';
+    if (vp) vp.style.height = '';
+    incoming.removeEventListener('transitionend', cleanup);
+    wrap._slideCleanup = null;
+  };
+  wrap._slideCleanup = cleanup;
+  incoming.addEventListener('transitionend', cleanup);
+  // Fallback in case transitionend doesn't fire.
+  setTimeout(() => { if (wrap._slideCleanup === cleanup) cleanup(); }, 400);
 }
 
 // Attach horizontal-swipe paging to an open group popup. A clear horizontal
