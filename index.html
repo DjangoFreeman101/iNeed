@@ -207,6 +207,30 @@
     #photo-upload-area > div:hover { border-color:var(--dark); }
     #photo-preview { width:100%; border-radius:10px; max-height:200px; object-fit:cover; display:none; margin-top:10px; }
 
+    /* ── Multi-item pin count badge ── */
+    .pin-wrap { position:relative; width:28px; height:36px; }
+    .pin-count-badge {
+      position:absolute; top:37px; left:50%; transform:translateX(-50%);
+      white-space:nowrap; font-size:10px; font-weight:700;
+      color:#333; background:rgba(255,255,255,0.85);
+      padding:1px 5px; border-radius:8px; line-height:1.3;
+      box-shadow:0 1px 2px rgba(0,0,0,0.2);
+      pointer-events:none;
+    }
+    /* ── Grouped-item carousel popup ── */
+    .group-nav {
+      display:flex; align-items:center; justify-content:space-between;
+      gap:8px; margin-bottom:8px; padding-bottom:6px;
+      border-bottom:1px solid #eee;
+    }
+    .group-arrow {
+      background:#f0f0f0; border:none; border-radius:8px;
+      width:32px; height:32px; font-size:20px; line-height:1;
+      cursor:pointer; color:#333; flex-shrink:0;
+    }
+    .group-arrow:active { background:#e0e0e0; }
+    .group-counter { font-size:13px; font-weight:700; color:#666; }
+
     /* ── User location dot ── */
     .user-location-dot {
       width:16px; height:16px; border-radius:50%;
@@ -1128,6 +1152,7 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
 const API_BASE = 'https://ineed-0otk.onrender.com';
+let groupPopupSeq = 0; // unique id counter for grouped-item carousel popups
 
 // ── i18n (Stage 1: auth screens) ─────────────────────────
 // Dictionary of UI strings. Each screen element carries data-i18n="key"
@@ -1330,6 +1355,7 @@ const I18N = {
     req_cancel: 'בטל בקשה',
     req_took: 'לקחתי',
     confirm_delete_item: 'למחוק את הפריט?',
+    pin_items_here: '{n} פריטים כאן',
     toast_item_deleted: 'הפריט נמחק'
   },
   en: {
@@ -1529,6 +1555,7 @@ const I18N = {
     req_cancel: 'Cancel request',
     req_took: 'Took it',
     confirm_delete_item: 'Delete this item?',
+    pin_items_here: '{n} items here',
     toast_item_deleted: 'Item deleted'
   },
   cs: {
@@ -1728,6 +1755,7 @@ const I18N = {
     req_cancel: 'Zrušit žádost',
     req_took: 'Převzal jsem',
     confirm_delete_item: 'Smazat tuto položku?',
+    pin_items_here: '{n} položek zde',
     toast_item_deleted: 'Položka smazána'
   },
   ru: {
@@ -1927,6 +1955,7 @@ const I18N = {
     req_cancel: 'Отменить запрос',
     req_took: 'Я забрал',
     confirm_delete_item: 'Удалить эту вещь?',
+    pin_items_here: '{n} вещей здесь',
     toast_item_deleted: 'Вещь удалена'
   }
 };
@@ -2104,13 +2133,31 @@ const catColors = {
   'אחר': '#607d8b',
 };
 
-function makeItemIcon(item) {
-  const color = isTakePost(item) ? '#27ae60' /* green — need */ : '#e74c3c' /* red — give */;
+// coordinate key for grouping co-located items (rounded to ~1m precision)
+function coordKey(lat, lon) { return lat.toFixed(5) + ',' + lon.toFixed(5); }
+
+// Accepts an array of co-located items (or a single item for back-compat).
+// One give + one need at the same spot -> gray pin. All same type -> that
+// type's color. A "n items here" badge shows under multi-item pins.
+function makeItemIcon(group) {
+  const items = Array.isArray(group) ? group : [group];
+  const hasGive = items.some(i => !isTakePost(i));
+  const hasTake = items.some(i => isTakePost(i));
+  let color;
+  if (hasGive && hasTake) color = '#7f8c8d';        // gray — mixed
+  else if (hasTake) color = '#27ae60';              // green — need
+  else color = '#e74c3c';                           // red — give
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
     <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22S28 24.5 28 14C28 6.27 21.73 0 14 0z" fill="${color}"/>
     <circle cx="14" cy="14" r="7" fill="white"/>
   </svg>`;
-  return L.divIcon({ html: svg, iconSize:[28,36], iconAnchor:[14,36], popupAnchor:[0,-36], className:'' });
+  const badge = items.length > 1
+    ? `<div class="pin-count-badge">${t('pin_items_here').replace('{n}', items.length)}</div>`
+    : '';
+  return L.divIcon({
+    html: `<div class="pin-wrap">${svg}${badge}</div>`,
+    iconSize:[28,36], iconAnchor:[14,36], popupAnchor:[0,-36], className:''
+  });
 }
 
 // ── Load items ─────────────────────────────────────────
@@ -2197,25 +2244,33 @@ async function loadItems() {
     else itemsData.push(item);
   });
 
-  // Drop any marker that shouldn't be shown any more — either it left the
-  // viewport, or it's now outside the radius (e.g. after a settings change).
-  const visibleIds = new Set(items.map(i => i.id));
-  Object.keys(itemMarkers).forEach(id => {
-    if (!visibleIds.has(Number(id))) {
-      clusterGroup.removeLayer(itemMarkers[id]);
-      delete itemMarkers[id];
+  // Drop any group-marker whose coordinate no longer has visible items.
+  const groups = {};
+  items.forEach(it => {
+    const k = coordKey(it.lat, it.lon);
+    (groups[k] = groups[k] || []).push(it);
+  });
+  // Queue each group by publish time (oldest first) so the carousel order is stable.
+  Object.values(groups).forEach(arr => arr.sort((a, b) => (a.created_at || 0) - (b.created_at || 0)));
+
+  const visibleKeys = new Set(Object.keys(groups));
+  Object.keys(itemMarkers).forEach(k => {
+    if (!visibleKeys.has(k)) {
+      clusterGroup.removeLayer(itemMarkers[k]);
+      delete itemMarkers[k];
     }
   });
 
-  // Add/update markers
-  items.forEach(item => {
-    const popupHTML = buildItemPopup(item);
-    if (itemMarkers[item.id]) {
-      itemMarkers[item.id].setPopupContent(popupHTML);
+  // Add/update one marker per coordinate group.
+  Object.entries(groups).forEach(([k, arr]) => {
+    const popupHTML = buildGroupPopup(arr);
+    if (itemMarkers[k]) {
+      itemMarkers[k].setPopupContent(popupHTML);
+      itemMarkers[k].setIcon(makeItemIcon(arr));
     } else {
-      const m = L.marker([item.lat, item.lon], { icon: makeItemIcon(item) })
-        .bindPopup(popupHTML, { maxWidth: 260 });
-      itemMarkers[item.id] = m;
+      const m = L.marker([arr[0].lat, arr[0].lon], { icon: makeItemIcon(arr) })
+        .bindPopup(popupHTML, { maxWidth: 280 });
+      itemMarkers[k] = m;
       clusterGroup.addLayer(m);
     }
   });
@@ -2270,6 +2325,41 @@ function buildItemPopup(item) {
         <button class="item-popup-report" onclick="reportImage(${item.id})"> ${t('pop_report')}</button>
       ` : `<div style="font-size:12px;color:var(--gray);text-align:center;padding:8px;">${t('pop_your_item')}</div>`}
     </div>`;
+}
+
+// Wraps one or more co-located items. Single item -> plain popup. Multiple ->
+// a carousel: all item panels rendered, one shown at a time, arrows page through.
+function buildGroupPopup(items) {
+  if (items.length === 1) return buildItemPopup(items[0]);
+  const gid = 'grp' + (++groupPopupSeq);
+  const dir = currentLang === 'he' ? 'rtl' : 'ltr';
+  const panels = items.map((it, i) =>
+    `<div class="group-panel" data-idx="${i}" style="display:${i === 0 ? 'block' : 'none'};">${buildItemPopup(it)}</div>`
+  ).join('');
+  // In RTL the visual "previous" is on the right; arrows call the same paging fn.
+  return `
+    <div class="group-popup" id="${gid}" data-count="${items.length}" data-cur="0" style="direction:${dir};">
+      <div class="group-nav">
+        <button class="group-arrow" onclick="pageGroup('${gid}', -1)">‹</button>
+        <span class="group-counter"><span class="group-cur">1</span>/${items.length}</span>
+        <button class="group-arrow" onclick="pageGroup('${gid}', 1)">›</button>
+      </div>
+      ${panels}
+    </div>`;
+}
+
+function pageGroup(gid, dir) {
+  const wrap = document.getElementById(gid);
+  if (!wrap) return;
+  const count = parseInt(wrap.getAttribute('data-count'), 10);
+  let cur = parseInt(wrap.getAttribute('data-cur'), 10);
+  cur = (cur + dir + count) % count;
+  wrap.setAttribute('data-cur', cur);
+  wrap.querySelectorAll('.group-panel').forEach(p => {
+    p.style.display = (parseInt(p.getAttribute('data-idx'), 10) === cur) ? 'block' : 'none';
+  });
+  const label = wrap.querySelector('.group-cur');
+  if (label) label.textContent = cur + 1;
 }
 
 // ── Photo lightbox (enlarge a tapped photo) ─────────────
@@ -3555,17 +3645,41 @@ function goToItemPin(item) {
   else itemsData.push(item);
 
   const openPopupNow = () => {
-    let marker = itemMarkers[item.id];
+    const k = coordKey(item.lat, item.lon);
+    // Gather all items currently known at this coordinate, publish-ordered.
+    let group = itemsData.filter(x => coordKey(x.lat, x.lon) === k);
+    if (!group.length) group = [item];
+    group.sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
+
+    let marker = itemMarkers[k];
     if (!marker) {
-      const popupHTML = buildItemPopup(item);
-      marker = L.marker([item.lat, item.lon], { icon: makeItemIcon(item) })
-        .bindPopup(popupHTML, { maxWidth: 260 });
-      itemMarkers[item.id] = marker;
+      marker = L.marker([item.lat, item.lon], { icon: makeItemIcon(group) })
+        .bindPopup(buildGroupPopup(group), { maxWidth: 280 });
+      itemMarkers[k] = marker;
       clusterGroup.addLayer(marker);
     } else {
-      marker.setPopupContent(buildItemPopup(item));
+      marker.setPopupContent(buildGroupPopup(group));
+      marker.setIcon(makeItemIcon(group));
     }
     marker.openPopup();
+
+    // If this coordinate holds multiple items, page the carousel to the target.
+    if (group.length > 1) {
+      const targetIdx = group.findIndex(x => x.id === item.id);
+      if (targetIdx > 0) {
+        const wrap = marker.getPopup().getElement() &&
+                     marker.getPopup().getElement().querySelector('.group-popup');
+        if (wrap) {
+          // pageGroup steps relative; jump directly by setting then refreshing.
+          wrap.setAttribute('data-cur', targetIdx);
+          wrap.querySelectorAll('.group-panel').forEach(p => {
+            p.style.display = (parseInt(p.getAttribute('data-idx'), 10) === targetIdx) ? 'block' : 'none';
+          });
+          const label = wrap.querySelector('.group-cur');
+          if (label) label.textContent = targetIdx + 1;
+        }
+      }
+    }
   };
 
   map.once('moveend', () => setTimeout(openPopupNow, 150));
