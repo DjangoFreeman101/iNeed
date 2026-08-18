@@ -2381,6 +2381,52 @@ function pageGroup(gid, dir) {
   if (label) label.textContent = cur + 1;
 }
 
+// Attach horizontal-swipe paging to an open group popup. A clear horizontal
+// swipe pages items (same as the arrows); vertical moves and taps are left
+// alone so the photo, buttons, and map underneath still behave.
+function attachGroupSwipe(wrap) {
+  if (!wrap || wrap.dataset.swipeBound === '1') return;
+  wrap.dataset.swipeBound = '1';
+  let startX = 0, startY = 0, tracking = false;
+
+  wrap.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) { tracking = false; return; }
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    tracking = true;
+  }, { passive: true });
+
+  wrap.addEventListener('touchmove', (e) => {
+    if (!tracking) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    // Once it's clearly a horizontal drag, stop the map from panning underneath.
+    if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
+      e.stopPropagation();
+    }
+  }, { passive: true });
+
+  wrap.addEventListener('touchend', (e) => {
+    if (!tracking) return;
+    tracking = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    const THRESH = 40;
+    // Only a mostly-horizontal swipe past the threshold pages.
+    if (Math.abs(dx) < THRESH || Math.abs(dx) <= Math.abs(dy)) return;
+    e.stopPropagation();
+    const gid = wrap.id;
+    // Map swipe to direction. In LTR, swipe left (dx<0) = next (›). In RTL
+    // (Hebrew) the reading order flips, so swipe right = next.
+    const rtl = wrap.style.direction === 'rtl';
+    let step;
+    if (dx < 0) step = rtl ? -1 : 1;
+    else        step = rtl ? 1 : -1;
+    pageGroup(gid, step);
+  }, { passive: true });
+}
+
 // ── Photo lightbox (enlarge a tapped photo) ─────────────
 function openPhotoLightbox(url) {
   document.getElementById('photo-lightbox-img').src = url;
@@ -3899,6 +3945,14 @@ function startApp() {
   loadItems();
   map.on('moveend', loadItems);
   setInterval(loadItems, 30000);
+
+  // When any popup opens, if it's a multi-item group popup, enable swipe paging.
+  map.on('popupopen', (e) => {
+    const el = e.popup.getElement();
+    if (!el) return;
+    const wrap = el.querySelector('.group-popup');
+    if (wrap) attachGroupSwipe(wrap);
+  });
 
   requestNotificationPermission();
   setUnreadDot(localStorage.getItem('ineed_has_unread_interest') === '1');
