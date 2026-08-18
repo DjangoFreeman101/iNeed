@@ -1153,6 +1153,9 @@
 <script>
 const API_BASE = 'https://ineed-0otk.onrender.com';
 let groupPopupSeq = 0; // unique id counter for grouped-item carousel popups
+// Remembers which carousel panel is showing, keyed by coordinate, so a popup
+// rebuild (refresh) restores the user's position instead of snapping to item 1.
+const groupCurIndex = {};
 
 // ── i18n (Stage 1: auth screens) ─────────────────────────
 // Dictionary of UI strings. Each screen element carries data-i18n="key"
@@ -2268,13 +2271,17 @@ async function loadItems() {
 
   // Add/update one marker per coordinate group.
   Object.entries(groups).forEach(([k, arr]) => {
-    const popupHTML = buildGroupPopup(arr);
     if (itemMarkers[k]) {
-      itemMarkers[k].setPopupContent(popupHTML);
-      itemMarkers[k].setIcon(makeItemIcon(arr));
+      const marker = itemMarkers[k];
+      marker.setIcon(makeItemIcon(arr));
+      // Don't rebuild the popup HTML while it's open — that would reset the
+      // carousel to item 1 under the user. Refresh content only when closed.
+      if (!marker.isPopupOpen()) {
+        marker.setPopupContent(buildGroupPopup(arr, k));
+      }
     } else {
       const m = L.marker([arr[0].lat, arr[0].lon], { icon: makeItemIcon(arr) })
-        .bindPopup(popupHTML, { maxWidth: 280 });
+        .bindPopup(buildGroupPopup(arr, k), { maxWidth: 280 });
       itemMarkers[k] = m;
       clusterGroup.addLayer(m);
     }
@@ -2334,19 +2341,23 @@ function buildItemPopup(item) {
 
 // Wraps one or more co-located items. Single item -> plain popup. Multiple ->
 // a carousel: all item panels rendered, one shown at a time, arrows page through.
-function buildGroupPopup(items) {
+// coordK ties the carousel's remembered position to its map location.
+function buildGroupPopup(items, coordK) {
   if (items.length === 1) return buildItemPopup(items[0]);
   const gid = 'grp' + (++groupPopupSeq);
   const dir = currentLang === 'he' ? 'rtl' : 'ltr';
+  // Restore remembered index for this location, clamped to current item count.
+  let start = groupCurIndex[coordK] || 0;
+  if (start >= items.length) start = 0;
   const panels = items.map((it, i) =>
-    `<div class="group-panel" data-idx="${i}" style="display:${i === 0 ? 'block' : 'none'};">${buildItemPopup(it)}</div>`
+    `<div class="group-panel" data-idx="${i}" style="display:${i === start ? 'block' : 'none'};">${buildItemPopup(it)}</div>`
   ).join('');
   // In RTL the visual "previous" is on the right; arrows call the same paging fn.
   return `
-    <div class="group-popup" id="${gid}" data-count="${items.length}" data-cur="0" style="direction:${dir};">
+    <div class="group-popup" id="${gid}" data-count="${items.length}" data-cur="${start}" data-coord="${coordK || ''}" style="direction:${dir};">
       <div class="group-nav">
         <button class="group-arrow" onclick="pageGroup('${gid}', -1)">‹</button>
-        <span class="group-counter"><span class="group-cur">1</span>/${items.length}</span>
+        <span class="group-counter"><span class="group-cur">${start + 1}</span>/${items.length}</span>
         <button class="group-arrow" onclick="pageGroup('${gid}', 1)">›</button>
       </div>
       ${panels}
@@ -2360,6 +2371,9 @@ function pageGroup(gid, dir) {
   let cur = parseInt(wrap.getAttribute('data-cur'), 10);
   cur = (cur + dir + count) % count;
   wrap.setAttribute('data-cur', cur);
+  // Persist this position for the coordinate so a refresh keeps it.
+  const coordK = wrap.getAttribute('data-coord');
+  if (coordK) groupCurIndex[coordK] = cur;
   wrap.querySelectorAll('.group-panel').forEach(p => {
     p.style.display = (parseInt(p.getAttribute('data-idx'), 10) === cur) ? 'block' : 'none';
   });
@@ -3657,34 +3671,20 @@ function goToItemPin(item) {
     group.sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
 
     let marker = itemMarkers[k];
+    // Pre-set the remembered carousel index so the popup opens on the target item.
+    const targetIdx = group.length > 1 ? Math.max(0, group.findIndex(x => x.id === item.id)) : 0;
+    groupCurIndex[k] = targetIdx;
+
     if (!marker) {
       marker = L.marker([item.lat, item.lon], { icon: makeItemIcon(group) })
-        .bindPopup(buildGroupPopup(group), { maxWidth: 280 });
+        .bindPopup(buildGroupPopup(group, k), { maxWidth: 280 });
       itemMarkers[k] = marker;
       clusterGroup.addLayer(marker);
     } else {
-      marker.setPopupContent(buildGroupPopup(group));
+      marker.setPopupContent(buildGroupPopup(group, k));
       marker.setIcon(makeItemIcon(group));
     }
     marker.openPopup();
-
-    // If this coordinate holds multiple items, page the carousel to the target.
-    if (group.length > 1) {
-      const targetIdx = group.findIndex(x => x.id === item.id);
-      if (targetIdx > 0) {
-        const wrap = marker.getPopup().getElement() &&
-                     marker.getPopup().getElement().querySelector('.group-popup');
-        if (wrap) {
-          // pageGroup steps relative; jump directly by setting then refreshing.
-          wrap.setAttribute('data-cur', targetIdx);
-          wrap.querySelectorAll('.group-panel').forEach(p => {
-            p.style.display = (parseInt(p.getAttribute('data-idx'), 10) === targetIdx) ? 'block' : 'none';
-          });
-          const label = wrap.querySelector('.group-cur');
-          if (label) label.textContent = targetIdx + 1;
-        }
-      }
-    }
   };
 
   map.once('moveend', () => setTimeout(openPopupNow, 150));
