@@ -796,7 +796,7 @@
 
 <div id="upload-overlay">
   <div id="upload-spinner"></div>
-  <div id="upload-overlay-text">מעלה...</div>
+  <div id="upload-overlay-text" data-i18n="uploading">מעלה...</div>
 </div>
 
 <!-- Report reasons modal -->
@@ -1356,6 +1356,7 @@ const I18N = {
     req_took: 'לקחתי',
     confirm_delete_item: 'למחוק את הפריט?',
     pin_items_here: '{n} פריטים כאן',
+    uploading: 'מעלה...',
     toast_item_deleted: 'הפריט נמחק'
   },
   en: {
@@ -1556,6 +1557,7 @@ const I18N = {
     req_took: 'Took it',
     confirm_delete_item: 'Delete this item?',
     pin_items_here: '{n} items here',
+    uploading: 'Uploading...',
     toast_item_deleted: 'Item deleted'
   },
   cs: {
@@ -1756,6 +1758,7 @@ const I18N = {
     req_took: 'Převzal jsem',
     confirm_delete_item: 'Smazat tuto položku?',
     pin_items_here: '{n} položek zde',
+    uploading: 'Nahrávání...',
     toast_item_deleted: 'Položka smazána'
   },
   ru: {
@@ -1956,6 +1959,7 @@ const I18N = {
     req_took: 'Я забрал',
     confirm_delete_item: 'Удалить эту вещь?',
     pin_items_here: '{n} вещей здесь',
+    uploading: 'Загрузка...',
     toast_item_deleted: 'Вещь удалена'
   }
 };
@@ -2151,8 +2155,9 @@ function makeItemIcon(group) {
     <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22S28 24.5 28 14C28 6.27 21.73 0 14 0z" fill="${color}"/>
     <circle cx="14" cy="14" r="7" fill="white"/>
   </svg>`;
+  const badgeDir = currentLang === 'he' ? 'rtl' : 'ltr';
   const badge = items.length > 1
-    ? `<div class="pin-count-badge">${t('pin_items_here').replace('{n}', items.length)}</div>`
+    ? `<div class="pin-count-badge" style="direction:${badgeDir};">${t('pin_items_here').replace('{n}', items.length)}</div>`
     : '';
   return L.divIcon({
     html: `<div class="pin-wrap">${svg}${badge}</div>`,
