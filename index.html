@@ -2534,12 +2534,10 @@ function attachGroupSwipe(wrap) {
     if (Math.abs(dx) < THRESH || Math.abs(dx) <= Math.abs(dy)) return;
     e.stopPropagation();
     const gid = wrap.id;
-    // Map swipe to direction. In LTR, swipe left (dx<0) = next (›). In RTL
-    // (Hebrew) the reading order flips, so swipe right = next.
-    const rtl = wrap.style.direction === 'rtl';
-    let step;
-    if (dx < 0) step = rtl ? -1 : 1;
-    else        step = rtl ? 1 : -1;
+    // Physical swipe, same in every language: swipe left drags content left and
+    // brings the next item in from the right; swipe right does the reverse and
+    // brings the item to the left back in. (pageGroup(+1)=next, -1=previous.)
+    const step = dx < 0 ? 1 : -1;
     pageGroup(gid, step);
   }, { passive: true });
 }
