@@ -1373,6 +1373,7 @@ const I18N = {
     confirm_delete_item: 'למחוק את הפריט?',
     pin_items_here: '{n} פריטים כאן',
     uploading: 'מעלה...',
+    requesters_empty: 'עדיין אין פניות לפריט הזה',
     toast_item_deleted: 'הפריט נמחק'
   },
   en: {
@@ -1574,6 +1575,7 @@ const I18N = {
     confirm_delete_item: 'Delete this item?',
     pin_items_here: '{n} items here',
     uploading: 'Uploading...',
+    requesters_empty: 'Still no suggestions for this item',
     toast_item_deleted: 'Item deleted'
   },
   cs: {
@@ -1775,6 +1777,7 @@ const I18N = {
     confirm_delete_item: 'Smazat tuto položku?',
     pin_items_here: '{n} položek zde',
     uploading: 'Nahrávání...',
+    requesters_empty: 'Zatím žádné návrhy k této položce',
     toast_item_deleted: 'Položka smazána'
   },
   ru: {
@@ -1976,6 +1979,7 @@ const I18N = {
     confirm_delete_item: 'Удалить эту вещь?',
     pin_items_here: '{n} вещей здесь',
     uploading: 'Загрузка...',
+    requesters_empty: 'Пока нет откликов на эту вещь',
     toast_item_deleted: 'Вещь удалена'
   }
 };
@@ -1984,6 +1988,11 @@ let currentLang = localStorage.getItem('ineed_lang') || 'he';
 
 function t(key) {
   return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.he[key]) || key;
+}
+
+// Maps the current UI language to a locale for date formatting.
+function dateLocale() {
+  return ({ he: 'he-IL', en: 'en-US', cs: 'cs-CZ', ru: 'ru-RU' })[currentLang] || 'he-IL';
 }
 
 function applyLanguage() {
@@ -2856,7 +2865,7 @@ async function openHistory() {
     body.innerHTML = rows.map(r => {
       const isGave = r.role === 'gave';
       const label = isGave ? 'מסרתי' : 'לקחתי';
-      const when = r.done_at ? new Date(r.done_at * 1000).toLocaleString('he-IL') : '';
+      const when = r.done_at ? new Date(r.done_at * 1000).toLocaleString(dateLocale()) : '';
       return `
         <div class="history-card">
           <div class="history-card-top">
@@ -2982,7 +2991,7 @@ async function viewRequesters(itemId) {
   const requesters = await res.json();
 
   if (requesters.length === 0) {
-    body.innerHTML = `<p style="color:var(--gray);text-align:center;margin-top:40px;">אין ${interestCountLabel(item)} עדיין.</p>`;
+    body.innerHTML = `<p style="color:var(--gray);text-align:center;margin-top:40px;">${t('requesters_empty')}</p>`;
     return;
   }
 
@@ -2992,7 +3001,7 @@ async function viewRequesters(itemId) {
     <div class="requester-card">
       <div style="flex:1;">
         <div class="requester-name">${r.nickname}</div>
-        <div class="requester-meta">${new Date(r.created_at * 1000).toLocaleDateString('he-IL')}</div>
+        <div class="requester-meta">${new Date(r.created_at * 1000).toLocaleDateString(dateLocale())}</div>
         ${isApproved && r.requester_phone
           ? `<a href="${waLink(r.requester_phone)}" target="_blank" class="requester-phone" style="direction:ltr;display:inline-block;">💬 ${r.requester_phone}</a>`
           : ''}
