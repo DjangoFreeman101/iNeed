@@ -36,6 +36,7 @@ def init_db():
             nickname TEXT NOT NULL,
             radius_km INTEGER NOT NULL DEFAULT 5,
             email TEXT,
+            language TEXT NOT NULL DEFAULT 'il',
             created_at DOUBLE PRECISION NOT NULL,
             last_seen DOUBLE PRECISION NOT NULL
         )
@@ -89,6 +90,12 @@ def init_db():
     # Add phone column to users (for existing tables)
     cur.execute("""
         ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT
+    """)
+
+    # Preferred UI language per user, used to localize outgoing emails.
+    # Values: 'il' (Hebrew), 'en', 'cs', 'ru'. Defaults to Hebrew.
+    cur.execute("""
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'il'
     """)
 
     # Add status column to requests: 'pending' or 'approved' (for existing tables)
@@ -788,6 +795,17 @@ def email_shell(inner_html, rtl=True):
     </div>
     """
 
+def normalize_lang(lang):
+    """Map the app's language codes to the stored set. The frontend uses 'he'
+    for Hebrew; we store that as 'il'. Everything else passes through if known,
+    otherwise falls back to Hebrew ('il')."""
+    lang = (lang or "").strip().lower()
+    if lang in ("he", "il", "iw"):
+        return "il"
+    if lang in ("en", "cs", "ru"):
+        return lang
+    return "il"
+
 def send_simple_email(to_addr, subject, html, rtl=True):
     """Generic Resend sender for verification/reset codes. Best-effort: returns
     False (and logs) rather than raising, so callers can turn that into a
@@ -808,6 +826,73 @@ def send_simple_email(to_addr, subject, html, rtl=True):
         print("Resend error:", resp.status_code, resp.text)
         return False
     return True
+
+PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.djangofreeman.ineed"
+
+# Localized copy for the "someone is interested in your item" email.
+# is_take=True means the poster was looking for something and another user
+# has it ("X has the item you wanted"); is_take=False is the classic
+# "X wants the item you're giving away".
+INTEREST_EMAIL = {
+    "il": {
+        "subject_give": "מישהו מעוניין בפריט שלך ב-iNeed",
+        "subject_take": "מישהו מצא את מה שחיפשת ב-iNeed",
+        "body_give": "{name} מעוניין/ת בפריט שלך „{item}“.",
+        "body_take": "ל{name} יש „{item}“ שחיפשת.",
+        "cta": "פתח/י את iNeed",
+        "rtl": True,
+    },
+    "en": {
+        "subject_give": "Someone is interested in your item on iNeed",
+        "subject_take": "Someone found what you were looking for on iNeed",
+        "body_give": "{name} is interested in your item \u201c{item}\u201d.",
+        "body_take": "{name} has \u201c{item}\u201d that you were looking for.",
+        "cta": "Open iNeed",
+        "rtl": False,
+    },
+    "cs": {
+        "subject_give": "Někdo má zájem o vaši položku na iNeed",
+        "subject_take": "Někdo našel to, co jste hledali, na iNeed",
+        "body_give": "{name} má zájem o vaši položku \u201e{item}\u201c.",
+        "body_take": "{name} má \u201e{item}\u201c, kterou jste hledali.",
+        "cta": "Otevřít iNeed",
+        "rtl": False,
+    },
+    "ru": {
+        "subject_give": "Кто-то заинтересовался вашей вещью в iNeed",
+        "subject_take": "Кто-то нашёл то, что вы искали, в iNeed",
+        "body_give": "{name} заинтересован(а) в вашей вещи \u00ab{item}\u00bb.",
+        "body_take": "У {name} есть \u00ab{item}\u00bb, которую вы искали.",
+        "cta": "Открыть iNeed",
+        "rtl": False,
+    },
+}
+
+def send_interest_email(to_addr, language, requester_name, item_title, is_take):
+    """Notify an item's poster that another user expressed interest. Localized
+    to the poster's stored language. Best-effort: never raises."""
+    if not to_addr:
+        return False
+    copy = INTEREST_EMAIL.get(normalize_lang(language), INTEREST_EMAIL["il"])
+    subject = copy["subject_take"] if is_take else copy["subject_give"]
+    body_tpl = copy["body_take"] if is_take else copy["body_give"]
+    line = body_tpl.format(name=requester_name or "", item=item_title or "")
+    align = "right" if copy["rtl"] else "left"
+    html = f"""
+      <p style="font-size:17px;font-weight:700;margin:0 0 12px;text-align:{align};">{line}</p>
+      <div style="text-align:center;margin:24px 0 8px;">
+        <a href="{PLAY_STORE_URL}"
+           style="display:inline-block;background:#F44336;color:#fff;text-decoration:none;
+                  padding:12px 28px;border-radius:10px;font-weight:700;font-size:16px;">
+          {copy['cta']}
+        </a>
+      </div>
+    """
+    try:
+        return send_simple_email(to_addr, subject, html, rtl=copy["rtl"])
+    except Exception as e:
+        print("Interest email failed:", e)
+        return False
 
 # ── Auth: sign-up (per-screen checks + final creation) ───
 
@@ -889,6 +974,7 @@ class SignupBody(BaseModel):
     email: str
     password: str
     radius_km: int
+    language: str = "il"
 
 @app.post("/signup")
 def signup(body: SignupBody):
@@ -924,16 +1010,40 @@ def signup(body: SignupBody):
 
     now = time.time()
     pw_hash = hash_password(body.password)
+    lang = normalize_lang(body.language)
     cur.execute("""
-        INSERT INTO users (device_id, nickname, radius_km, email, phone, password_hash, created_at, last_seen)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO users (device_id, nickname, radius_km, email, phone, password_hash, language, created_at, last_seen)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (device_id) DO UPDATE SET
             nickname = EXCLUDED.nickname, radius_km = EXCLUDED.radius_km,
             email = EXCLUDED.email, phone = EXCLUDED.phone,
-            password_hash = EXCLUDED.password_hash, last_seen = EXCLUDED.last_seen
-    """, (body.device_id, body.nickname, body.radius_km, email, phone, pw_hash, now, now))
+            password_hash = EXCLUDED.password_hash, language = EXCLUDED.language,
+            last_seen = EXCLUDED.last_seen
+    """, (body.device_id, body.nickname, body.radius_km, email, phone, pw_hash, lang, now, now))
     conn.commit()
     cur.close(); conn.close()
+    return {"ok": True}
+
+class LanguageBody(BaseModel):
+    device_id: str
+    language: str
+
+@app.post("/user/language")
+def update_language(body: LanguageBody):
+    """Persist the user's UI language so emails can be localized. Called
+    fire-and-forget by the app whenever the language changes; best-effort."""
+    lang = normalize_lang(body.language)
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("UPDATE users SET language = %s WHERE device_id = %s",
+                    (lang, body.device_id))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print("Language update failed:", e)
+    finally:
+        cur.close(); conn.close()
     return {"ok": True}
 
 # ── Auth: login / forgot password ────────────────────────
@@ -1039,9 +1149,12 @@ def request_item(req: ItemRequest):
 
     # Get item info + requester nickname for notification
     cur.execute("""
-        SELECT i.title, i.device_id as giver_device_id, u.nickname as requester_name
+        SELECT i.title, i.device_id as giver_device_id, i.post_type,
+               u.nickname as requester_name,
+               g.email as giver_email, g.language as giver_language
         FROM items i
         JOIN users u ON u.device_id = %s
+        JOIN users g ON g.device_id = i.device_id
         WHERE i.id = %s
     """, (req.device_id, req.item_id))
     row = cur.fetchone()
@@ -1055,6 +1168,19 @@ def request_item(req: ItemRequest):
             "item_title": row["title"],
             "requester_name": row["requester_name"]
         }
+        # Email the poster (giver or taker) that someone's interested.
+        # Best-effort — never let a failed email break the request.
+        try:
+            is_take = (row.get("post_type") == "take")
+            send_interest_email(
+                row.get("giver_email"),
+                row.get("giver_language"),
+                row.get("requester_name"),
+                row.get("title"),
+                is_take,
+            )
+        except Exception as e:
+            print("Interest email dispatch failed:", e)
     return {"ok": True, "notification": notification_data}
 
 @app.post("/request/{request_id}/approve")

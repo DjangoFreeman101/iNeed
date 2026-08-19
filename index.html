@@ -2022,6 +2022,16 @@ function setLanguage(lang) {
   currentLang = lang;
   localStorage.setItem('ineed_lang', lang);
   applyLanguage();
+  // Persist to the server so localized emails match — fire-and-forget, never
+  // blocks the UI. Only meaningful once the user has an account (deviceId).
+  try {
+    if (typeof deviceId !== 'undefined' && deviceId) {
+      fetch(`${API_BASE}/user/language`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ device_id: deviceId, language: lang })
+      }).catch(() => {});
+    }
+  } catch (e) {}
 }
 
 function toggleLangDropdown(e) {
@@ -3296,7 +3306,8 @@ async function completeSignup() {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         device_id: deviceId, nickname: signupData.name, phone: signupData.phone,
-        email: signupData.email, password: signupData.password, radius_km: radius
+        email: signupData.email, password: signupData.password, radius_km: radius,
+        language: currentLang
       })
     });
     const data = await res.json();
