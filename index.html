@@ -1374,6 +1374,13 @@ const I18N = {
     pin_items_here: '{n} פריטים כאן',
     uploading: 'מעלה...',
     requesters_empty: 'עדיין אין פניות לפריט הזה',
+    history_empty: 'אין עדיין היסטוריה.',
+    history_error: 'שגיאה בטעינה. נסה שוב.',
+    hist_gave: 'מסרתי',
+    hist_took: 'לקחתי',
+    hist_old: 'ישן',
+    hist_republish: 'הפוך לרלוונטי שוב',
+    hist_republished: 'הפריט פורסם מחדש!',
     toast_item_deleted: 'הפריט נמחק'
   },
   en: {
@@ -1576,6 +1583,13 @@ const I18N = {
     pin_items_here: '{n} items here',
     uploading: 'Uploading...',
     requesters_empty: 'Still no suggestions for this item',
+    history_empty: 'No history yet.',
+    history_error: 'Loading error. Please try again.',
+    hist_gave: 'Gave',
+    hist_took: 'Took',
+    hist_old: 'Old',
+    hist_republish: 'Make relevant again',
+    hist_republished: 'Item re-published!',
     toast_item_deleted: 'Item deleted'
   },
   cs: {
@@ -1778,6 +1792,13 @@ const I18N = {
     pin_items_here: '{n} položek zde',
     uploading: 'Nahrávání...',
     requesters_empty: 'Zatím žádné návrhy k této položce',
+    history_empty: 'Zatím žádná historie.',
+    history_error: 'Chyba načítání. Zkuste to znovu.',
+    hist_gave: 'Daroval jsem',
+    hist_took: 'Vzal jsem',
+    hist_old: 'Staré',
+    hist_republish: 'Znovu zveřejnit',
+    hist_republished: 'Položka byla znovu zveřejněna!',
     toast_item_deleted: 'Položka smazána'
   },
   ru: {
@@ -1980,6 +2001,13 @@ const I18N = {
     pin_items_here: '{n} вещей здесь',
     uploading: 'Загрузка...',
     requesters_empty: 'Пока нет откликов на эту вещь',
+    history_empty: 'Пока нет истории.',
+    history_error: 'Ошибка загрузки. Попробуйте снова.',
+    hist_gave: 'Отдал',
+    hist_took: 'Взял',
+    hist_old: 'Старое',
+    hist_republish: 'Сделать снова актуальным',
+    hist_republished: 'Вещь снова опубликована!',
     toast_item_deleted: 'Вещь удалена'
   }
 };
@@ -2869,13 +2897,29 @@ async function openHistory() {
     const res = await fetch(`${API_BASE}/history/${deviceId}`);
     const rows = await res.json();
     if (!rows || rows.length === 0) {
-      body.innerHTML = '<p style="color:var(--gray);text-align:center;margin-top:40px;">אין עדיין היסטוריה.</p>';
+      body.innerHTML = `<p style="color:var(--gray);text-align:center;margin-top:40px;">${t('history_empty')}</p>`;
       return;
     }
     body.innerHTML = rows.map(r => {
-      const isGave = r.role === 'gave';
-      const label = isGave ? 'מסרתי' : 'לקחתי';
       const when = r.done_at ? new Date(r.done_at * 1000).toLocaleString(dateLocale()) : '';
+      if (r.is_old) {
+        // Retired-by-freshness item: "old" tag + re-publish button.
+        return `
+        <div class="history-card">
+          <div class="history-card-top">
+            <span class="item-badge" style="background:#95a5a6;">${t('hist_old')}</span>
+            <span class="history-date">${when}</span>
+          </div>
+          ${r.image_url ? `<img src="${r.image_url}" class="request-detail-img"/>` : ''}
+          <div class="history-title">${r.title}</div>
+          <div class="request-detail-line">${catLabel(r.category)}</div>
+          ${r.description ? `<div class="request-detail-desc">${r.description}</div>` : ''}
+          <button class="item-card-btn" style="width:100%;margin-top:10px;background:var(--green);color:white;"
+            onclick="republishItem(${r.item_id})">${t('hist_republish')}</button>
+        </div>`;
+      }
+      const isGave = r.role === 'gave';
+      const label = isGave ? t('hist_gave') : t('hist_took');
       return `
         <div class="history-card">
           <div class="history-card-top">
@@ -2884,12 +2928,27 @@ async function openHistory() {
           </div>
           ${r.image_url ? `<img src="${r.image_url}" class="request-detail-img"/>` : ''}
           <div class="history-title">${r.title}</div>
-          <div class="request-detail-line">${r.category || ''}</div>
+          <div class="request-detail-line">${catLabel(r.category)}</div>
           ${r.description ? `<div class="request-detail-desc">${r.description}</div>` : ''}
         </div>`;
     }).join('');
   } catch (e) {
-    body.innerHTML = '<p style="color:var(--gray);text-align:center;">שגיאה בטעינה. נסה שוב.</p>';
+    body.innerHTML = `<p style="color:var(--gray);text-align:center;">${t('history_error')}</p>`;
+  }
+}
+
+async function republishItem(itemId) {
+  try {
+    const res = await fetch(`${API_BASE}/item/republish`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ device_id: deviceId, item_id: itemId })
+    });
+    if (!res.ok) { showToast(t('toast_error')); return; }
+    showToast(t('hist_republished'));
+    openHistory();   // refresh — the item leaves history (now active again)
+    loadItems();     // and reappears on the map
+  } catch (e) {
+    showToast(t('toast_error'));
   }
 }
 

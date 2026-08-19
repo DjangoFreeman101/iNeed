@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 import psycopg2, psycopg2.extras, time, os, cloudinary, cloudinary.uploader, requests, re, math, bcrypt, random, string, secrets, threading
+from datetime import datetime, timezone, timedelta
 
 app = FastAPI()
 
@@ -156,6 +157,38 @@ def init_db():
     # Nullable so existing rows stay blank rather than needing a backfill.
     cur.execute("""
         ALTER TABLE items ADD COLUMN IF NOT EXISTS condition TEXT
+    """)
+
+    # ── Item lifecycle (freshness) ──────────────────────────────
+    # Items are periodically re-confirmed by email so stale listings expire.
+    # Flow (all resolutions by day, emails fired at 08:00 local of the due day):
+    #   T+24h  : first "still relevant?" email (no response = do nothing, wait)
+    #   T+21d  : second "still relevant?" email (starts a 1-week grace window)
+    #   T+27d  : "removed tomorrow" warning
+    #   T+28d  : auto-expire to status 'old' if not confirmed since T+21d
+    # "Yes" resets last_confirmed_at = now (whole cycle restarts, perpetually).
+    # "No" (or expiry) sets status='old' -> leaves the map, shows in history.
+    # last_confirmed_at anchors the clock; on publish it equals created_at.
+    cur.execute("""
+        ALTER TABLE items ADD COLUMN IF NOT EXISTS last_confirmed_at DOUBLE PRECISION
+    """)
+    # One stable unguessable token per item for the one-click yes/no email links.
+    cur.execute("""
+        ALTER TABLE items ADD COLUMN IF NOT EXISTS lifecycle_token TEXT
+    """)
+    # Which stage emails have already gone out for the CURRENT cycle, so we never
+    # double-send. All four reset to NULL whenever the cycle restarts (a "yes").
+    cur.execute("ALTER TABLE items ADD COLUMN IF NOT EXISTS check24_sent_at DOUBLE PRECISION")
+    cur.execute("ALTER TABLE items ADD COLUMN IF NOT EXISTS check3wk_sent_at DOUBLE PRECISION")
+    cur.execute("ALTER TABLE items ADD COLUMN IF NOT EXISTS lifecycle_warning_sent_at DOUBLE PRECISION")
+    # When the item became 'old' (for history display / ordering). NULL if active.
+    cur.execute("ALTER TABLE items ADD COLUMN IF NOT EXISTS retired_at DOUBLE PRECISION")
+
+    # Backfill: existing items get last_confirmed_at = created_at and a token, so
+    # the lifecycle clock starts cleanly for them from their original publish time.
+    cur.execute("""
+        UPDATE items SET last_confirmed_at = created_at
+        WHERE last_confirmed_at IS NULL
     """)
 
     # Post-approval exchange reminders — one row per party per approved request.
@@ -483,11 +516,12 @@ async def post_item(
 
     conn = get_db()
     cur = conn.cursor()
+    now = time.time()
     cur.execute("""
-        INSERT INTO items (device_id, post_type, title, description, category, condition, image_url, lat, lon, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO items (device_id, post_type, title, description, category, condition, image_url, lat, lon, created_at, last_confirmed_at, lifecycle_token)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
-    """, (device_id, post_type, title, description, category, condition, image_url, lat, lon, time.time()))
+    """, (device_id, post_type, title, description, category, condition, image_url, lat, lon, now, now, secrets.token_urlsafe(24)))
     item_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
@@ -1369,6 +1403,180 @@ def reminder_loop():
             print("Reminder loop error:", e)
         time.sleep(120)
 
+# ── Item lifecycle daemon ───────────────────────────────────
+# Freshness re-confirmation. Emails fire at 06:00 UTC on the due DATE, so the
+# publish hour never matters — only the calendar day the deadline lands on.
+LIFECYCLE_CHECK24_DAYS = 1     # first check: 24h after publish/confirm
+LIFECYCLE_CHECK3WK_DAYS = 21   # second check: 3 weeks after publish/confirm
+LIFECYCLE_WARNING_DAYS = 27    # "removed tomorrow" warning
+LIFECYCLE_EXPIRE_DAYS = 28     # auto-expire to 'old'
+LIFECYCLE_FIRE_HOUR_UTC = 6    # 06:00 UTC
+
+def _due_at_0600(anchor_ts, days):
+    """The moment we're allowed to act for a stage whose deadline is `days`
+    after `anchor_ts`: 06:00 UTC on that deadline's calendar date. Returns a
+    unix timestamp. Because we key off the DATE, any publish hour collapses to
+    the same 06:00 firing time."""
+    deadline = datetime.fromtimestamp(anchor_ts, tz=timezone.utc) + timedelta(days=days)
+    fire = deadline.replace(hour=LIFECYCLE_FIRE_HOUR_UTC, minute=0, second=0, microsecond=0)
+    return fire.timestamp()
+
+def process_item_lifecycle():
+    """One sweep of item freshness. Only 'available' items participate; taken or
+    already-old items are ignored. Every email is best-effort and idempotent
+    (guarded by its *_sent_at column)."""
+    now = time.time()
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    # Pull active items with the owner's email + language for localized sends.
+    cur.execute("""
+        SELECT i.id, i.title, i.post_type, i.created_at, i.last_confirmed_at,
+               i.lifecycle_token, i.check24_sent_at, i.check3wk_sent_at,
+               i.lifecycle_warning_sent_at,
+               u.email AS owner_email, u.language AS owner_language
+        FROM items i
+        JOIN users u ON u.device_id = i.device_id
+        WHERE i.status = 'available'
+    """)
+    items = [dict(r) for r in cur.fetchall()]
+    cur.close(); conn.close()
+
+    for it in items:
+        anchor = it["last_confirmed_at"] or it["created_at"]
+        token = it["lifecycle_token"]
+
+        # Ensure a token exists (legacy items backfilled without one).
+        if not token:
+            token = secrets.token_urlsafe(24)
+            c = get_db(); cc = c.cursor()
+            cc.execute("UPDATE items SET lifecycle_token = %s WHERE id = %s", (token, it["id"]))
+            c.commit(); cc.close(); c.close()
+            it["lifecycle_token"] = token
+
+        # 1) EXPIRE — 28 days after anchor, only if the 3-week check already went
+        #    out this cycle (i.e. they were asked and didn't confirm). Silence at
+        #    24h alone never expires anything.
+        if it["check3wk_sent_at"] and now >= _due_at_0600(anchor, LIFECYCLE_EXPIRE_DAYS):
+            c = get_db(); cc = c.cursor()
+            cc.execute("UPDATE items SET status = 'old', retired_at = %s WHERE id = %s",
+                       (now, it["id"]))
+            c.commit(); cc.close(); c.close()
+            continue
+
+        # 2) WARNING — day 27, once, only after the 3-week check was sent.
+        if (it["check3wk_sent_at"] and not it["lifecycle_warning_sent_at"]
+                and now >= _due_at_0600(anchor, LIFECYCLE_WARNING_DAYS)):
+            try:
+                send_lifecycle_email(it, "warning")
+            except Exception as e:
+                print("Lifecycle warning email failed:", e)
+            c = get_db(); cc = c.cursor()
+            cc.execute("UPDATE items SET lifecycle_warning_sent_at = %s WHERE id = %s",
+                       (now, it["id"]))
+            c.commit(); cc.close(); c.close()
+            continue
+
+        # 3) THREE-WEEK CHECK — day 21, once.
+        if not it["check3wk_sent_at"] and now >= _due_at_0600(anchor, LIFECYCLE_CHECK3WK_DAYS):
+            try:
+                send_lifecycle_email(it, "check3wk")
+            except Exception as e:
+                print("Lifecycle 3wk email failed:", e)
+            c = get_db(); cc = c.cursor()
+            cc.execute("UPDATE items SET check3wk_sent_at = %s WHERE id = %s", (now, it["id"]))
+            c.commit(); cc.close(); c.close()
+            continue
+
+        # 4) 24-HOUR CHECK — day 1, once. Silence here does nothing further.
+        if not it["check24_sent_at"] and now >= _due_at_0600(anchor, LIFECYCLE_CHECK24_DAYS):
+            try:
+                send_lifecycle_email(it, "check24")
+            except Exception as e:
+                print("Lifecycle 24h email failed:", e)
+            c = get_db(); cc = c.cursor()
+            cc.execute("UPDATE items SET check24_sent_at = %s WHERE id = %s", (now, it["id"]))
+            c.commit(); cc.close(); c.close()
+
+def item_lifecycle_loop():
+    while True:
+        try:
+            process_item_lifecycle()
+        except Exception as e:
+            print("Item lifecycle loop error:", e)
+        # Check hourly; the 06:00-UTC gate means each stage still only fires once
+        # per due date, and *_sent_at guards prevent repeats.
+        time.sleep(3600)
+
+# Localized copy for the freshness emails. {item} is the title.
+LIFECYCLE_EMAIL = {
+    "il": {
+        "check_subject": "האם הפריט שלך עדיין רלוונטי?",
+        "warn_subject": "הפריט שלך יוסר מחר",
+        "check_body": "האם „{item}“ עדיין רלוונטי?",
+        "warn_body": "„{item}“ יוסר מ-iNeed מחר, אלא אם תאשר/י שהוא עדיין רלוונטי.",
+        "yes": "כן, עדיין רלוונטי",
+        "no": "לא, הסר/י אותו",
+        "rtl": True,
+    },
+    "en": {
+        "check_subject": "Is your item still relevant?",
+        "warn_subject": "Your item will be removed tomorrow",
+        "check_body": "Is \u201c{item}\u201d still relevant?",
+        "warn_body": "\u201c{item}\u201d will be removed from iNeed tomorrow unless you confirm it's still relevant.",
+        "yes": "Yes, still relevant",
+        "no": "No, remove it",
+        "rtl": False,
+    },
+    "cs": {
+        "check_subject": "Je vaše položka stále aktuální?",
+        "warn_subject": "Vaše položka bude zítra odstraněna",
+        "check_body": "Je \u201e{item}\u201c stále aktuální?",
+        "warn_body": "\u201e{item}\u201c bude zítra odstraněna z iNeed, pokud nepotvrdíte, že je stále aktuální.",
+        "yes": "Ano, stále aktuální",
+        "no": "Ne, odstranit",
+        "rtl": False,
+    },
+    "ru": {
+        "check_subject": "Ваша вещь всё ещё актуальна?",
+        "warn_subject": "Ваша вещь будет удалена завтра",
+        "check_body": "\u00ab{item}\u00bb всё ещё актуальна?",
+        "warn_body": "\u00ab{item}\u00bb будет удалена из iNeed завтра, если вы не подтвердите, что она всё ещё актуальна.",
+        "yes": "Да, всё ещё актуальна",
+        "no": "Нет, удалить",
+        "rtl": False,
+    },
+}
+
+def send_lifecycle_email(it, kind):
+    """Send a freshness email (kind: 'check24' | 'check3wk' | 'warning') to the
+    item owner, localized to their language, with one-click yes/no links.
+    Best-effort; never raises out."""
+    to_addr = it.get("owner_email")
+    if not to_addr:
+        return False
+    copy = LIFECYCLE_EMAIL.get(normalize_lang(it.get("owner_language")), LIFECYCLE_EMAIL["il"])
+    is_warn = (kind == "warning")
+    subject = copy["warn_subject"] if is_warn else copy["check_subject"]
+    line = (copy["warn_body"] if is_warn else copy["check_body"]).format(item=it.get("title") or "")
+    base = app_base_url()
+    yes_url = f"{base}/item-life/{it['lifecycle_token']}/yes"
+    no_url = f"{base}/item-life/{it['lifecycle_token']}/no"
+    align = "right" if copy["rtl"] else "left"
+    btn = ("display:inline-block;text-decoration:none;padding:12px 24px;border-radius:10px;"
+           "font-weight:700;font-size:16px;margin:6px;")
+    html = f"""
+      <p style="font-size:17px;font-weight:700;margin:0 0 16px;text-align:{align};">{line}</p>
+      <div style="text-align:center;margin:20px 0 4px;">
+        <a href="{yes_url}" style="{btn}background:#27ae60;color:#fff;">{copy['yes']}</a>
+        <a href="{no_url}" style="{btn}background:#e74c3c;color:#fff;">{copy['no']}</a>
+      </div>
+    """
+    try:
+        return send_simple_email(to_addr, subject, html, rtl=copy["rtl"])
+    except Exception as e:
+        print("Lifecycle email send failed:", e)
+        return False
+
 def _reminder_page(msg):
     return HTMLResponse(f"""
     <html><head><meta charset="utf-8">
@@ -1436,6 +1644,111 @@ def reminder_confirm(token: str):
     cur.close()
     conn.close()
     return _reminder_page("תודה! ההעברה נרשמה והפריט עבר להיסטוריה.")
+
+# ── Item lifecycle one-click links ──────────────────────────
+def _lifecycle_page(msg, rtl=True):
+    direction = "rtl" if rtl else "ltr"
+    return HTMLResponse(f"""
+    <html><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1"></head>
+    <body dir="{direction}" style="font-family:Arial,sans-serif;text-align:center;padding:60px 20px;">
+      <h1 style="color:#F44336;">iNeed</h1>
+      <p style="font-size:18px;">{msg}</p>
+    </body></html>
+    """)
+
+# Localized confirmation pages shown after clicking a yes/no link.
+LIFECYCLE_PAGE = {
+    "il": {"yes": "תודה! הפריט יישאר פעיל.", "no": "הפריט הוסר ועבר להיסטוריה.",
+           "bad": "הקישור אינו תקין.", "gone": "הפריט כבר אינו פעיל.", "rtl": True},
+    "en": {"yes": "Thanks! Your item will stay active.", "no": "The item was removed and moved to your history.",
+           "bad": "This link is invalid.", "gone": "This item is no longer active.", "rtl": False},
+    "cs": {"yes": "Děkujeme! Vaše položka zůstane aktivní.", "no": "Položka byla odstraněna a přesunuta do historie.",
+           "bad": "Tento odkaz je neplatný.", "gone": "Tato položka již není aktivní.", "rtl": False},
+    "ru": {"yes": "Спасибо! Ваша вещь останется активной.", "no": "Вещь удалена и перемещена в историю.",
+           "bad": "Эта ссылка недействительна.", "gone": "Эта вещь больше не активна.", "rtl": False},
+}
+
+def _lifecycle_lookup(token):
+    """Returns (item_row, page_copy) or (None, page_copy) using the owner's lang."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT i.*, u.language AS owner_language
+        FROM items i JOIN users u ON u.device_id = i.device_id
+        WHERE i.lifecycle_token = %s
+    """, (token,))
+    row = cur.fetchone()
+    cur.close(); conn.close()
+    lang = normalize_lang(row["owner_language"]) if row else "il"
+    return (dict(row) if row else None), LIFECYCLE_PAGE[lang]
+
+@app.get("/item-life/{token}/yes")
+def lifecycle_yes(token: str):
+    """Owner confirms the item is still relevant: reset the clock and clear all
+    stage flags so the whole cycle restarts from now."""
+    row, copy = _lifecycle_lookup(token)
+    if not row:
+        return _lifecycle_page(copy["bad"], copy["rtl"])
+    if row["status"] != "available":
+        return _lifecycle_page(copy["gone"], copy["rtl"])
+    now = time.time()
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("""
+        UPDATE items SET last_confirmed_at = %s,
+               check24_sent_at = NULL, check3wk_sent_at = NULL,
+               lifecycle_warning_sent_at = NULL
+        WHERE id = %s
+    """, (now, row["id"]))
+    conn.commit(); cur.close(); conn.close()
+    return _lifecycle_page(copy["yes"], copy["rtl"])
+
+@app.get("/item-life/{token}/no")
+def lifecycle_no(token: str):
+    """Owner says the item is no longer relevant: retire it to 'old' (leaves the
+    map, appears in history)."""
+    row, copy = _lifecycle_lookup(token)
+    if not row:
+        return _lifecycle_page(copy["bad"], copy["rtl"])
+    if row["status"] != "available":
+        return _lifecycle_page(copy["gone"], copy["rtl"])
+    now = time.time()
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("UPDATE items SET status = 'old', retired_at = %s WHERE id = %s",
+                (now, row["id"]))
+    conn.commit(); cur.close(); conn.close()
+    return _lifecycle_page(copy["no"], copy["rtl"])
+
+class RepublishBody(BaseModel):
+    device_id: str
+    item_id: int
+
+@app.post("/item/republish")
+def republish_item(body: RepublishBody):
+    """Bring an 'old' item back to life: status -> available, clock reset to now,
+    all lifecycle stage flags cleared so the freshness cycle starts fresh. Only
+    the owner can do this, and only for their own 'old' items."""
+    now = time.time()
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT device_id, status FROM items WHERE id = %s", (body.item_id,))
+    row = cur.fetchone()
+    if not row or row["device_id"] != body.device_id or row["status"] != "old":
+        cur.close(); conn.close()
+        raise HTTPException(status_code=400, detail="Cannot republish this item")
+    cur.execute("""
+        UPDATE items SET status = 'available', last_confirmed_at = %s, created_at = %s,
+               retired_at = NULL, check24_sent_at = NULL, check3wk_sent_at = NULL,
+               lifecycle_warning_sent_at = NULL
+        WHERE id = %s
+    """, (now, now, body.item_id))
+    conn.commit(); cur.close(); conn.close()
+    # Re-run matching now that it's live again.
+    try:
+        check_and_create_matches(body.item_id)
+    except Exception as e:
+        print("Republish match check failed:", e)
+    return {"ok": True}
 
 @app.get("/my-outgoing-requests/{device_id}")
 def get_my_outgoing_requests(device_id: str):
@@ -1620,7 +1933,9 @@ def get_pending_exchanges(device_id: str):
 @app.get("/history/{device_id}")
 def get_history(device_id: str):
     """A user's completed exchanges: items they own that are exchanged, plus
-    requests they made that they marked taken. Each labeled מסרתי / לקחתי."""
+    requests they made that they marked taken. Each labeled מסרתי / לקחתי.
+    Also includes items retired as 'old' by the freshness lifecycle, which can
+    be re-published from here."""
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
@@ -1653,9 +1968,25 @@ def get_history(device_id: str):
         d["source"] = "request"
         taken.append(d)
 
+    # Items retired as 'old' by the freshness lifecycle — shown with an "old"
+    # tag and a re-publish action.
+    cur.execute("""
+        SELECT i.id AS item_id, i.title, i.description, i.category, i.image_url,
+               i.post_type, i.retired_at AS done_at
+        FROM items i
+        WHERE i.device_id = %s AND i.status = 'old'
+    """, (device_id,))
+    old_items = []
+    for r in cur.fetchall():
+        d = dict(r)
+        d["role"] = "old"
+        d["source"] = "item"
+        d["is_old"] = True
+        old_items.append(d)
+
     cur.close()
     conn.close()
-    combined = owned + taken
+    combined = owned + taken + old_items
     combined.sort(key=lambda x: x.get("done_at") or 0, reverse=True)
     return combined
 
@@ -1763,3 +2094,4 @@ def delete_account(device_id: str):
 # Started last, once every function above is defined. Daemon thread so it never
 # blocks shutdown; Render keeps the web service alive so this ticks steadily.
 threading.Thread(target=reminder_loop, daemon=True).start()
+threading.Thread(target=item_lifecycle_loop, daemon=True).start()
