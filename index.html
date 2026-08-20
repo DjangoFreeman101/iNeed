@@ -2217,7 +2217,7 @@ let userLat = null, userLon = null;
 const map = L.map('map').setView([31.9730, 34.7895], 14);
 // Basemap style. Light uses CARTO Voyager (warm/clean); dark uses CARTO Dark
 // Matter. The user toggles between them from the menu; choice persists.
-const MAP_STYLE_LIGHT = 'rastertiles/voyager';  // try 'light_all' for minimal
+const MAP_STYLE_LIGHT = 'light_all';  // CARTO Positron: clean light-gray, red pins pop
 const MAP_STYLE_DARK = 'dark_all';
 function cartoUrl(style) {
   return `https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png`;
