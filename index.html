@@ -2187,8 +2187,16 @@ let userLat = null, userLon = null;
 
 // ── Map ────────────────────────────────────────────────
 const map = L.map('map').setView([31.9730, 34.7895], 14);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© OpenStreetMap'
+// Basemap style. Swap MAP_STYLE between the options below to change the look:
+//   voyager   — light & warm, soft colors, friendly (current default)
+//   light_all — CARTO Positron: very light/minimal, pins pop most
+//   dark_all  — CARTO Dark Matter: dark mode
+// After changing, just redeploy — no other edits needed.
+const MAP_STYLE = 'rastertiles/voyager';   // try 'light_all' for ultra-minimal
+L.tileLayer(`https://{s}.basemaps.cartocdn.com/${MAP_STYLE}/{z}/{x}/{y}{r}.png`, {
+  attribution: '© OpenStreetMap © CARTO',
+  subdomains: 'abcd',
+  maxZoom: 20
 }).addTo(map);
 
 const clusterGroup = L.markerClusterGroup({ maxClusterRadius: 60, disableClusteringAtZoom: 16 });
