@@ -46,6 +46,9 @@
 
     /* ── Map ── */
     #map { height:100vh; width:100%; padding-top:50px; }
+    /* Soften CARTO Dark Matter: lift the near-black background toward a medium
+       gray so roads/labels read clearly. Tune the numbers to taste. */
+    .dark-tiles { filter: brightness(1.55) contrast(0.9); }
 
     /* ── Bottom buttons ── */
     #post-btn {
@@ -2225,6 +2228,12 @@ let baseTileLayer = L.tileLayer(cartoUrl(darkMap ? MAP_STYLE_DARK : MAP_STYLE_LI
   maxZoom: 20
 }).addTo(map);
 
+// Lighten the near-black dark tiles toward gray so roads read clearly.
+function applyDarkTileFilter() {
+  const pane = map.getPane('tilePane');
+  if (pane) pane.classList.toggle('dark-tiles', darkMap);
+}
+
 function applyDarkToggleUI() {
   const el = document.getElementById('dark-toggle');
   if (el) el.classList.toggle('on', darkMap);
@@ -2235,10 +2244,12 @@ function toggleDarkMap() {
   localStorage.setItem('ineed_dark_map', darkMap ? '1' : '0');
   baseTileLayer.setUrl(cartoUrl(darkMap ? MAP_STYLE_DARK : MAP_STYLE_LIGHT));
   applyDarkToggleUI();
+  applyDarkTileFilter();
 }
 
 // Reflect the saved state on the toggle once the DOM is ready.
 applyDarkToggleUI();
+applyDarkTileFilter();
 
 const clusterGroup = L.markerClusterGroup({ maxClusterRadius: 60, disableClusteringAtZoom: 16 });
 map.addLayer(clusterGroup);
