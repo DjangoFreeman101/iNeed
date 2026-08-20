@@ -514,6 +514,22 @@
     }
     .menu-item:hover { background:#f9f9f9; }
     .menu-item-danger { color:var(--accent); font-weight:700; }
+    /* Dark-mode toggle row */
+    .menu-toggle-row { display:flex; align-items:center; justify-content:space-between; }
+    .menu-toggle {
+      width:44px; height:26px; border-radius:999px; background:#ccc;
+      position:relative; flex-shrink:0; transition:background 0.2s;
+    }
+    .menu-toggle-knob {
+      position:absolute; top:3px; left:3px; width:20px; height:20px;
+      border-radius:50%; background:#fff; transition:transform 0.2s;
+      box-shadow:0 1px 3px rgba(0,0,0,0.3);
+    }
+    .menu-toggle.on { background:var(--green, #27ae60); }
+    .menu-toggle.on .menu-toggle-knob { transform:translateX(18px); }
+    /* In RTL the knob should slide the other way when on */
+    html[dir="rtl"] .menu-toggle-knob { left:auto; right:3px; }
+    html[dir="rtl"] .menu-toggle.on .menu-toggle-knob { transform:translateX(-18px); }
 
     /* ── Radius slider ── */
     input[type=range] { width:100%; accent-color:var(--dark); }
@@ -845,6 +861,10 @@
   <div class="menu-item" data-i18n="menu_privacy" onclick="openPrivacy()">מדיניות פרטיות</div>
   <div class="menu-item" data-i18n="menu_signout" onclick="signOut()">התנתק</div>
   <div class="menu-item menu-item-danger" data-i18n="menu_delete" onclick="deleteAccount()">מחק חשבון</div>
+  <div class="menu-item menu-toggle-row" onclick="toggleDarkMap()">
+    <span data-i18n="menu_dark">מצב כהה</span>
+    <span class="menu-toggle" id="dark-toggle"><span class="menu-toggle-knob"></span></span>
+  </div>
 </div>
 
 <!-- Post item panel (multi-step) -->
@@ -1166,6 +1186,7 @@
 <script>
 const API_BASE = 'https://ineed-0otk.onrender.com';
 let groupPopupSeq = 0; // unique id counter for grouped-item carousel popups
+let darkMap = localStorage.getItem('ineed_dark_map') === '1'; // dark basemap toggle
 // Remembers which carousel panel is showing, keyed by coordinate, so a popup
 // rebuild (refresh) restores the user's position instead of snapping to item 1.
 const groupCurIndex = {};
@@ -1215,6 +1236,7 @@ const I18N = {
     menu_privacy: 'מדיניות פרטיות',
     menu_signout: 'התנתק',
     menu_delete: 'מחק חשבון',
+    menu_dark: 'מצב כהה',
     filter_title: 'סינון',
     filter_category: 'קטגוריה',
     filter_name: 'שם הפריט מכיל',
@@ -1424,6 +1446,7 @@ const I18N = {
     menu_privacy: 'Privacy policy',
     menu_signout: 'Sign out',
     menu_delete: 'Delete account',
+    menu_dark: 'Dark mode',
     filter_title: 'Filter',
     filter_category: 'Category',
     filter_name: 'Item name contains',
@@ -1633,6 +1656,7 @@ const I18N = {
     menu_privacy: 'Zásady ochrany osobních údajů',
     menu_signout: 'Odhlásit se',
     menu_delete: 'Smazat účet',
+    menu_dark: 'Tmavý režim',
     filter_title: 'Filtr',
     filter_category: 'Kategorie',
     filter_name: 'Název položky obsahuje',
@@ -1842,6 +1866,7 @@ const I18N = {
     menu_privacy: 'Политика конфиденциальности',
     menu_signout: 'Выйти',
     menu_delete: 'Удалить аккаунт',
+    menu_dark: 'Тёмный режим',
     filter_title: 'Фильтр',
     filter_category: 'Категория',
     filter_name: 'Название содержит',
@@ -2187,17 +2212,33 @@ let userLat = null, userLon = null;
 
 // ── Map ────────────────────────────────────────────────
 const map = L.map('map').setView([31.9730, 34.7895], 14);
-// Basemap style. Swap MAP_STYLE between the options below to change the look:
-//   voyager   — light & warm, soft colors, friendly (current default)
-//   light_all — CARTO Positron: very light/minimal, pins pop most
-//   dark_all  — CARTO Dark Matter: dark mode
-// After changing, just redeploy — no other edits needed.
-const MAP_STYLE = 'rastertiles/voyager';   // try 'light_all' for ultra-minimal
-L.tileLayer(`https://{s}.basemaps.cartocdn.com/${MAP_STYLE}/{z}/{x}/{y}{r}.png`, {
+// Basemap style. Light uses CARTO Voyager (warm/clean); dark uses CARTO Dark
+// Matter. The user toggles between them from the menu; choice persists.
+const MAP_STYLE_LIGHT = 'rastertiles/voyager';  // try 'light_all' for minimal
+const MAP_STYLE_DARK = 'dark_all';
+function cartoUrl(style) {
+  return `https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png`;
+}
+let baseTileLayer = L.tileLayer(cartoUrl(darkMap ? MAP_STYLE_DARK : MAP_STYLE_LIGHT), {
   attribution: '© OpenStreetMap © CARTO',
   subdomains: 'abcd',
   maxZoom: 20
 }).addTo(map);
+
+function applyDarkToggleUI() {
+  const el = document.getElementById('dark-toggle');
+  if (el) el.classList.toggle('on', darkMap);
+}
+
+function toggleDarkMap() {
+  darkMap = !darkMap;
+  localStorage.setItem('ineed_dark_map', darkMap ? '1' : '0');
+  baseTileLayer.setUrl(cartoUrl(darkMap ? MAP_STYLE_DARK : MAP_STYLE_LIGHT));
+  applyDarkToggleUI();
+}
+
+// Reflect the saved state on the toggle once the DOM is ready.
+applyDarkToggleUI();
 
 const clusterGroup = L.markerClusterGroup({ maxClusterRadius: 60, disableClusteringAtZoom: 16 });
 map.addLayer(clusterGroup);
