@@ -2968,6 +2968,45 @@ function renderMyRequestsList(rows) {
     const requestId = Number(wrap.getAttribute('data-request-id'));
     attachSwipe(wrap, () => takeRequest(requestId));
   });
+
+  maybeHintSwipe(body);
+}
+
+// First-time discovery hint: gently nudge an approved card sideways (visual
+// only, commits nothing) so users discover the swipe-to-took gesture. Fires
+// once for each of the first 3 distinct approved items ever — an item that's
+// been nudged is "used up" whether or not it was swiped.
+function maybeHintSwipe(body) {
+  let nudged;
+  try { nudged = JSON.parse(localStorage.getItem('ineed_nudged_request_ids') || '[]'); }
+  catch (e) { nudged = []; }
+  if (nudged.length >= 3) return; // already demonstrated 3 times
+
+  // First approved card whose request hasn't been nudged yet.
+  const cards = body.querySelectorAll('.swipe-wrap[data-request-id]');
+  let target = null, targetId = null;
+  for (const wrap of cards) {
+    const id = Number(wrap.getAttribute('data-request-id'));
+    if (!nudged.includes(id)) { target = wrap; targetId = id; break; }
+  }
+  if (!target) return;
+
+  const front = target.querySelector('.swipe-front');
+  if (!front) return;
+
+  // Record it now so returning without swiping won't re-trigger for this item.
+  nudged.push(targetId);
+  localStorage.setItem('ineed_nudged_request_ids', JSON.stringify(nudged));
+
+  // Play after the panel-open animation settles.
+  setTimeout(() => {
+    front.style.transition = 'transform 0.35s ease';
+    front.style.transform = 'translateX(38px)';   // a peek — well under the 90px commit threshold
+    setTimeout(() => {
+      front.style.transform = 'translateX(0)';
+      setTimeout(() => { front.style.transition = 'none'; }, 360);
+    }, 420);
+  }, 450);
 }
 
 async function takeRequest(requestId) {
