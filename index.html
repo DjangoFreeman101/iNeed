@@ -2219,12 +2219,15 @@ let userLat = null, userLon = null;
 
 // ── Map ────────────────────────────────────────────────
 const map = L.map('map').setView([31.9730, 34.7895], 14);
-// Basemap style. Light uses CARTO Voyager (warm/clean); dark uses CARTO Dark
-// Matter. The user toggles between them from the menu; choice persists.
+// Basemap style. Light uses CARTO Positron; dark uses CARTO Dark Matter. The
+// user toggles between them from the menu; choice persists.
+// CARTO now requires a free API key for these tiles (5M requests/mo free tier).
+// Get/replace at carto.com/basemaps/apikey.
+const CARTO_KEY = 'cb1_2e7i_1_e75cec94401a50acccdc1d0c';
 const MAP_STYLE_LIGHT = 'light_all';  // CARTO Positron: clean light-gray, red pins pop
 const MAP_STYLE_DARK = 'dark_all';
 function cartoUrl(style) {
-  return `https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png`;
+  return `https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`;
 }
 let baseTileLayer = L.tileLayer(cartoUrl(darkMap ? MAP_STYLE_DARK : MAP_STYLE_LIGHT), {
   attribution: '© OpenStreetMap © CARTO',
