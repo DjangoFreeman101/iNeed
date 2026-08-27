@@ -210,6 +210,18 @@ def init_db():
         )
     """)
 
+    # Pending rejection notices. When a poster rejects an interested person, we
+    # record it here; the rejected user's app polls for these, shows a one-time
+    # banner ("Your request for X was declined"), then acknowledges (deletes) it.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS rejections (
+            id SERIAL PRIMARY KEY,
+            device_id TEXT NOT NULL,
+            item_title TEXT NOT NULL,
+            created_at DOUBLE PRECISION NOT NULL
+        )
+    """)
+
     conn.commit()
     cur.close()
     conn.close()
@@ -1244,6 +1256,88 @@ def approve_request(request_id: int, device_id: str):
     conn.close()
     create_exchange_reminders(request_id)
     return {"ok": True}
+
+# Localized "your request was declined" email.
+REJECT_EMAIL = {
+    "il": {"subject": "בקשתך נדחתה", "body": "בקשתך עבור „{item}“ נדחתה.", "rtl": True},
+    "en": {"subject": "Your request was declined", "body": "Your request for \u201c{item}\u201d was declined.", "rtl": False},
+    "cs": {"subject": "Vaše žádost byla zamítnuta", "body": "Vaše žádost o \u201e{item}\u201c byla zamítnuta.", "rtl": False},
+    "ru": {"subject": "Ваш запрос отклонён", "body": "Ваш запрос на \u00ab{item}\u00bb был отклонён.", "rtl": False},
+}
+
+def send_reject_email(to_addr, language, item_title):
+    if not to_addr:
+        return False
+    copy = REJECT_EMAIL.get(normalize_lang(language), REJECT_EMAIL["il"])
+    align = "right" if copy["rtl"] else "left"
+    html = f'<p style="font-size:17px;font-weight:700;margin:0;text-align:{align};">{copy["body"].format(item=item_title or "")}</p>'
+    try:
+        return send_simple_email(to_addr, copy["subject"], html, rtl=copy["rtl"])
+    except Exception as e:
+        print("Reject email failed:", e)
+        return False
+
+@app.post("/request/{request_id}/reject")
+def reject_request(request_id: int, device_id: str):
+    """The poster rejects an interested person's PENDING request. Verifies the
+    caller owns the item, then deletes the request entirely (they may re-request
+    later), records a rejection notice for the person's app to surface, and
+    emails them. Only pending requests can be rejected."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT r.id, r.device_id AS requester_device_id, r.status,
+               i.device_id AS owner_device_id, i.title AS item_title,
+               u.email AS requester_email, u.language AS requester_language
+        FROM requests r
+        JOIN items i ON i.id = r.item_id
+        JOIN users u ON u.device_id = r.device_id
+        WHERE r.id = %s
+    """, (request_id,))
+    row = cur.fetchone()
+    if not row:
+        cur.close(); conn.close()
+        raise HTTPException(status_code=404, detail="Request not found")
+    if row["owner_device_id"] != device_id:
+        cur.close(); conn.close()
+        raise HTTPException(status_code=403, detail="Not your item")
+    if row["status"] != "pending":
+        cur.close(); conn.close()
+        raise HTTPException(status_code=400, detail="Only pending requests can be rejected")
+
+    # Clear FK dependents, delete the request, record the rejection notice.
+    cur.execute("DELETE FROM exchange_reminders WHERE request_id = %s", (request_id,))
+    cur.execute("DELETE FROM requests WHERE id = %s", (request_id,))
+    cur.execute(
+        "INSERT INTO rejections (device_id, item_title, created_at) VALUES (%s, %s, %s)",
+        (row["requester_device_id"], row["item_title"], time.time())
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    # Best-effort email; never blocks the reject.
+    try:
+        send_reject_email(row["requester_email"], row["requester_language"], row["item_title"])
+    except Exception as e:
+        print("Reject email dispatch failed:", e)
+    return {"ok": True}
+
+@app.get("/rejections/{device_id}")
+def get_rejections(device_id: str):
+    """The rejected user's app polls this; returns pending rejection notices and
+    deletes them (one-time delivery, like a mailbox)."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT id, item_title FROM rejections WHERE device_id = %s ORDER BY created_at",
+                (device_id,))
+    rows = [dict(r) for r in cur.fetchall()]
+    if rows:
+        cur.execute("DELETE FROM rejections WHERE device_id = %s", (device_id,))
+        conn.commit()
+    cur.close()
+    conn.close()
+    return rows
 
 # ── Exchange reminders (post-approval, email-based) ──────
 # Push can't reliably carry a 30min/24h delay on Android (exact-alarm permission

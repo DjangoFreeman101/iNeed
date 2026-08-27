@@ -330,6 +330,13 @@
       cursor:pointer; font-family:'Heebo',sans-serif; flex-shrink:0;
     }
     .requester-approve-btn:active { opacity:0.8; }
+    .requester-actions { display:flex; gap:8px; flex-shrink:0; }
+    .requester-reject-btn {
+      background:#eee; color:#c0392b; border:none;
+      padding:8px 18px; border-radius:8px; font-size:14px; font-weight:700;
+      cursor:pointer; font-family:'Heebo',sans-serif; flex-shrink:0;
+    }
+    .requester-reject-btn:active { opacity:0.8; }
     .requester-approved { font-size:13px; font-weight:700; color:var(--green); flex-shrink:0; }
     .requester-phone {
       font-size:15px; font-weight:700; color:var(--dark);
@@ -1367,6 +1374,14 @@ const I18N = {
     notif_approved_single: '{name} אישר את הבקשה שלך ל"{item}"',
     notif_approved_multi: '{n} מהבקשות שלך אושרו',
     notif_approved_title: 'הבקשה שלך אושרה!',
+    req_approve: 'אשר',
+    req_reject: 'דחה',
+    req_approved_label: 'מאושר ✓',
+    req_approved_toast: 'הבקשה אושרה! מספר הטלפון יופיע כעת',
+    req_reject_confirm: 'האם אתה בטוח?',
+    req_rejected_toast: 'הבקשה נדחתה',
+    notif_declined: 'בקשתך עבור „{item}“ נדחתה',
+    notif_declined_title: 'בקשתך נדחתה',
     loading: 'טוען...',
     report_title: 'מה לא בסדר בתמונה הזו, לדעתך?',
     report_offensive: 'תוכן פוגעני או לא הולם',
@@ -1577,6 +1592,14 @@ const I18N = {
     notif_approved_single: '{name} approved your request for "{item}"',
     notif_approved_multi: '{n} of your requests were approved',
     notif_approved_title: 'Your request was approved!',
+    req_approve: 'Approve',
+    req_reject: 'Reject',
+    req_approved_label: 'Approved ✓',
+    req_approved_toast: 'Request approved! The phone number will now appear',
+    req_reject_confirm: 'Are you sure?',
+    req_rejected_toast: 'Request rejected',
+    notif_declined: 'Your request for “{item}” was declined',
+    notif_declined_title: 'Your request was declined',
     loading: 'Loading...',
     report_title: 'What do you think is wrong with this photo?',
     report_offensive: 'Offensive or inappropriate content',
@@ -1787,6 +1810,14 @@ const I18N = {
     notif_approved_single: '{name} schválil tvoji žádost o „{item}“',
     notif_approved_multi: '{n} z tvých žádostí bylo schváleno',
     notif_approved_title: 'Tvoje žádost byla schválena!',
+    req_approve: 'Schválit',
+    req_reject: 'Odmítnout',
+    req_approved_label: 'Schváleno ✓',
+    req_approved_toast: 'Žádost schválena! Nyní se zobrazí telefonní číslo',
+    req_reject_confirm: 'Opravdu?',
+    req_rejected_toast: 'Žádost odmítnuta',
+    notif_declined: 'Vaše žádost o „{item}“ byla zamítnuta',
+    notif_declined_title: 'Vaše žádost byla zamítnuta',
     loading: 'Načítání...',
     report_title: 'Co je podle tebe na této fotografii špatně?',
     report_offensive: 'Urážlivý nebo nevhodný obsah',
@@ -1997,6 +2028,14 @@ const I18N = {
     notif_approved_single: '{name} одобрил ваш запрос на «{item}»',
     notif_approved_multi: 'Одобрено {n} из ваших запросов',
     notif_approved_title: 'Ваш запрос одобрен!',
+    req_approve: 'Одобрить',
+    req_reject: 'Отклонить',
+    req_approved_label: 'Одобрено ✓',
+    req_approved_toast: 'Запрос одобрен! Теперь появится номер телефона',
+    req_reject_confirm: 'Вы уверены?',
+    req_rejected_toast: 'Запрос отклонён',
+    notif_declined: 'Ваш запрос на «{item}» был отклонён',
+    notif_declined_title: 'Ваш запрос отклонён',
     loading: 'Загрузка...',
     report_title: 'Что, по-вашему, не так с этой фотографией?',
     report_offensive: 'Оскорбительный или неприемлемый контент',
@@ -3141,8 +3180,11 @@ async function viewRequesters(itemId) {
           : ''}
       </div>
       ${isApproved
-        ? `<span class="requester-approved">מאושר ✓</span>`
-        : `<button class="requester-approve-btn" onclick="approveRequest(${r.id}, ${itemId})">אשר</button>`}
+        ? `<span class="requester-approved">${t('req_approved_label')}</span>`
+        : `<div class="requester-actions">
+             <button class="requester-approve-btn" onclick="approveRequest(${r.id}, ${itemId})">${t('req_approve')}</button>
+             <button class="requester-reject-btn" onclick="rejectRequest(${r.id}, ${itemId})">${t('req_reject')}</button>
+           </div>`}
     </div>`;
   }).join('');
 }
@@ -3150,11 +3192,23 @@ async function viewRequesters(itemId) {
 async function approveRequest(requestId, itemId) {
   try {
     const res = await fetch(`${API_BASE}/request/${requestId}/approve?device_id=${encodeURIComponent(deviceId)}`, { method: 'POST' });
-    if (!res.ok) { showToast('שגיאה באישור — נסה שוב'); return; }
-    showToast('הבקשה אושרה! מספר הטלפון יופיע כעת');
+    if (!res.ok) { showToast(t('toast_error')); return; }
+    showToast(t('req_approved_toast'));
     viewRequesters(itemId); // refresh the list to reveal the phone
   } catch (e) {
-    showToast('שגיאה בחיבור — נסה שוב');
+    showToast(t('toast_error'));
+  }
+}
+
+async function rejectRequest(requestId, itemId) {
+  if (!confirm(t('req_reject_confirm'))) return;
+  try {
+    const res = await fetch(`${API_BASE}/request/${requestId}/reject?device_id=${encodeURIComponent(deviceId)}`, { method: 'POST' });
+    if (!res.ok) { showToast(t('toast_error')); return; }
+    showToast(t('req_rejected_toast'));
+    viewRequesters(itemId); // refresh — the rejected person drops off the list
+  } catch (e) {
+    showToast(t('toast_error'));
   }
 }
 
@@ -4127,7 +4181,35 @@ async function checkForApprovals() {
   }
 }
 
-// ── Reminder: approved but not yet swiped as gave/took ──
+// Poll for rejection notices. The server returns pending notices and deletes
+// them (one-time), so anything returned here is new and gets a banner.
+async function checkForRejections() {
+  try {
+    const res = await fetch(`${API_BASE}/rejections/${deviceId}`);
+    if (!res.ok) return;
+    const rows = await res.json();
+    if (!rows || rows.length === 0) return;
+    // Show one banner per notice (usually just one).
+    rows.forEach(r => {
+      const message = t('notif_declined').replace('{item}', r.item_title);
+      showInterestBanner(message, 'my-requests');
+      if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
+        try {
+          window.Capacitor.Plugins.LocalNotifications.schedule({
+            notifications: [{
+              id: Math.floor((Date.now() + Math.random() * 1000) % 2147483647),
+              title: t('notif_declined_title'),
+              body: message,
+              schedule: { at: new Date(Date.now() + 1000) }
+            }]
+          });
+        } catch(e) {}
+      }
+    });
+  } catch(e) {
+    console.log('Rejection check failed:', e);
+  }
+}
 async function checkPendingExchanges() {
   // Only lights the quiet "My Items" dot. The actual nudge to confirm is the
   // 30-minute reminder email sent from the backend — no banner, no push.
@@ -4174,6 +4256,8 @@ function startApp() {
   setInterval(checkForNewInterest, 20000);
   checkForApprovals();
   setInterval(checkForApprovals, 20000);
+  checkForRejections();
+  setInterval(checkForRejections, 20000);
   checkPendingExchanges();
   setInterval(checkPendingExchanges, 25000);
   checkForMatches();
