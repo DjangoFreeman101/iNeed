@@ -388,6 +388,22 @@
       font-size:15px; font-weight:700; cursor:pointer; font-family:'Heebo',sans-serif;
     }
     #interest-banner.show { transform:translateY(0); pointer-events:auto; }
+    /* Undo snackbar — bottom of screen, 5s window after a swipe-to-took. */
+    #undo-bar {
+      position:fixed; left:16px; right:16px; bottom:24px;
+      background:#333; color:white; border-radius:12px;
+      padding:14px 16px; display:flex; align-items:center; justify-content:space-between;
+      gap:12px; z-index:9999; box-shadow:0 4px 18px rgba(0,0,0,0.35);
+      transform:translateY(calc(100% + 40px)); transition:transform 0.3s ease;
+      font-size:15px; font-weight:600; font-family:'Heebo',sans-serif;
+      pointer-events:none;
+    }
+    #undo-bar.show { transform:translateY(0); pointer-events:auto; }
+    #undo-bar-btn {
+      background:none; border:none; color:#5bc0eb; font-weight:800;
+      font-size:15px; cursor:pointer; flex-shrink:0; padding:4px 8px;
+      font-family:'Heebo',sans-serif;
+    }
     #interest-banner button {
       background:rgba(255,255,255,0.25); color:white; border:none;
       border-radius:6px; width:26px; height:26px; font-size:14px;
@@ -832,6 +848,11 @@
   <button onclick="event.stopPropagation(); dismissInterestBanner(false)">✕</button>
 </div>
 
+<div id="undo-bar">
+  <span id="undo-bar-text"></span>
+  <button id="undo-bar-btn" onclick="undoBarAction()">Undo</button>
+</div>
+
 <div id="upload-overlay">
   <div id="upload-spinner"></div>
   <div id="upload-overlay-text" data-i18n="uploading">מעלה...</div>
@@ -1200,6 +1221,7 @@
 <script>
 const API_BASE = 'https://ineed-0otk.onrender.com';
 let groupPopupSeq = 0; // unique id counter for grouped-item carousel popups
+let pendingTakeTimer = null; // delayed swipe-to-took commit (undo window)
 let darkMap = localStorage.getItem('ineed_dark_map') === '1'; // dark basemap toggle
 // Remembers which carousel panel is showing, keyed by coordinate, so a popup
 // rebuild (refresh) restores the user's position instead of snapping to item 1.
@@ -1380,6 +1402,9 @@ const I18N = {
     req_approved_toast: 'הבקשה אושרה! מספר הטלפון יופיע כעת',
     req_reject_confirm: 'האם אתה בטוח?',
     req_rejected_toast: 'הבקשה נדחתה',
+    undo_taken: 'סומן כנלקח',
+    undo_btn: 'ביטול',
+    added_to_history: 'נוסף להיסטוריה!',
     notif_declined: 'בקשתך עבור „{item}“ נדחתה',
     notif_declined_title: 'בקשתך נדחתה',
     loading: 'טוען...',
@@ -1598,6 +1623,9 @@ const I18N = {
     req_approved_toast: 'Request approved! The phone number will now appear',
     req_reject_confirm: 'Are you sure?',
     req_rejected_toast: 'Request rejected',
+    undo_taken: 'Marked as taken',
+    undo_btn: 'Undo',
+    added_to_history: 'Added to history!',
     notif_declined: 'Your request for “{item}” was declined',
     notif_declined_title: 'Your request was declined',
     loading: 'Loading...',
@@ -1816,6 +1844,9 @@ const I18N = {
     req_approved_toast: 'Žádost schválena! Nyní se zobrazí telefonní číslo',
     req_reject_confirm: 'Opravdu?',
     req_rejected_toast: 'Žádost odmítnuta',
+    undo_taken: 'Označeno jako převzaté',
+    undo_btn: 'Zpět',
+    added_to_history: 'Přidáno do historie!',
     notif_declined: 'Vaše žádost o „{item}“ byla zamítnuta',
     notif_declined_title: 'Vaše žádost byla zamítnuta',
     loading: 'Načítání...',
@@ -2034,6 +2065,9 @@ const I18N = {
     req_approved_toast: 'Запрос одобрен! Теперь появится номер телефона',
     req_reject_confirm: 'Вы уверены?',
     req_rejected_toast: 'Запрос отклонён',
+    undo_taken: 'Отмечено как взято',
+    undo_btn: 'Отменить',
+    added_to_history: 'Добавлено в историю!',
     notif_declined: 'Ваш запрос на «{item}» был отклонён',
     notif_declined_title: 'Ваш запрос отклонён',
     loading: 'Загрузка...',
@@ -2966,10 +3000,52 @@ function renderMyRequestsList(rows) {
   // Wire up swipe handlers for approved rows.
   body.querySelectorAll('.swipe-wrap[data-request-id]').forEach(wrap => {
     const requestId = Number(wrap.getAttribute('data-request-id'));
-    attachSwipe(wrap, () => takeRequest(requestId));
+    attachSwipe(wrap, () => pendingTakeWithUndo(requestId, wrap));
   });
 
   maybeHintSwipe(body);
+}
+
+// After a swipe, don't hit the server immediately — collapse the card and show
+// an Undo button for 5s. If undone, nothing ever happened. If the 5s elapse,
+// the take is committed to the server then. (Gmail-"Undo Send" style.)
+function pendingTakeWithUndo(requestId, wrap) {
+  // Collapse the swiped card out of the list visually.
+  wrap.style.transition = 'height 0.25s ease, opacity 0.25s ease, margin 0.25s ease';
+  wrap.style.overflow = 'hidden';
+  wrap.style.height = wrap.offsetHeight + 'px';
+  void wrap.offsetHeight;
+  wrap.style.height = '0px';
+  wrap.style.opacity = '0';
+  wrap.style.marginBottom = '0px';
+
+  const bar = document.getElementById('undo-bar');
+  document.getElementById('undo-bar-text').textContent = t('undo_taken');
+  document.getElementById('undo-bar-btn').textContent = t('undo_btn');
+  bar.classList.add('show');
+
+  clearTimeout(pendingTakeTimer);
+  const commit = async () => {
+    bar.classList.remove('show');
+    clearTimeout(pendingTakeTimer);
+    pendingTakeTimer = null;
+    await takeRequest(requestId);   // NOW the server hears about it
+  };
+  // Store the committer so the Undo button (and a later swipe) can find it.
+  bar._commit = commit;
+  bar._undo = () => {
+    clearTimeout(pendingTakeTimer);
+    pendingTakeTimer = null;
+    bar.classList.remove('show');
+    bar._commit = null;
+    openMyRequests();   // re-render — the card comes back, nothing was sent
+  };
+  pendingTakeTimer = setTimeout(commit, 5000);
+}
+
+function undoBarAction() {
+  const bar = document.getElementById('undo-bar');
+  if (bar && bar._undo) bar._undo();
 }
 
 // First-time discovery hint: gently nudge an approved card sideways (visual
@@ -3013,10 +3089,10 @@ async function takeRequest(requestId) {
   try {
     const res = await fetch(`${API_BASE}/request/${requestId}/take?device_id=${encodeURIComponent(deviceId)}`, { method: 'POST' });
     if (!res.ok) { showToast(t('toast_error')); openMyRequests(); return; }
-    showToast('נוסף להיסטוריה!');
+    showToast(t('added_to_history'));
     openMyRequests();
   } catch (e) {
-    showToast('שגיאה בחיבור');
+    showToast(t('toast_error'));
     openMyRequests();
   }
 }
