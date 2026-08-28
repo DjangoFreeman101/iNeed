@@ -46,6 +46,22 @@
 
     /* ── Map ── */
     #map { height:100vh; width:100%; padding-top:50px; }
+    /* Small "Loading..." pill shown over the map while items are being fetched. */
+    #map-loading {
+      position:fixed; top:62px; left:50%; transform:translateX(-50%);
+      background:rgba(0,0,0,0.78); color:#fff; z-index:600;
+      padding:7px 14px; border-radius:999px; font-size:13px; font-weight:600;
+      display:none; align-items:center; gap:8px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.25); font-family:'Heebo',sans-serif;
+      pointer-events:none;
+    }
+    #map-loading.show { display:flex; }
+    #map-loading-spinner {
+      width:13px; height:13px; border:2px solid rgba(255,255,255,0.35);
+      border-top-color:#fff; border-radius:50%; display:inline-block;
+      animation:map-load-spin 0.7s linear infinite;
+    }
+    @keyframes map-load-spin { to { transform:rotate(360deg); } }
     /* Soften CARTO Dark Matter: lift the near-black background toward a medium
        gray so roads/labels read clearly. Tune the numbers to taste. */
     .dark-tiles { filter: brightness(1.55) contrast(0.9); }
@@ -678,6 +694,7 @@
   <div id="loading-sub" data-i18n="loading_sub">תן וקח</div>
   <div id="loading-spinner"></div>
 </div>
+<div id="map-loading"><span id="map-loading-spinner"></span><span data-i18n="loading">טוען...</span></div>
 <script>
   // Emergency fallback - if app doesn't load in 4 seconds, remove loading screen
   window._loadingTimer = setTimeout(function() {
@@ -2443,8 +2460,17 @@ async function loadItems() {
     lon_max: (b.getEast() + lonPad).toFixed(5),
     device_id: deviceId
   });
-  const res = await fetch(`${API_BASE}/items?${params}`);
-  const allItems = await res.json();
+
+  const mapLoadingEl = document.getElementById('map-loading');
+  if (mapLoadingEl) mapLoadingEl.classList.add('show');
+
+  let allItems;
+  try {
+    const res = await fetch(`${API_BASE}/items?${params}`);
+    allItems = await res.json();
+  } finally {
+    if (mapLoadingEl) mapLoadingEl.classList.remove('show');
+  }
 
   // Only show items within the user's chosen radius.
   const radiusItems = filterByRadius(allItems);
