@@ -2462,13 +2462,17 @@ async function loadItems() {
   });
 
   const mapLoadingEl = document.getElementById('map-loading');
-  if (mapLoadingEl) mapLoadingEl.classList.add('show');
+  // Only show the pill on the very first load (the startup / cold-start wait).
+  // Later loads from panning/zooming are fast and don't need an indicator.
+  const showPill = !window._firstItemsLoaded;
+  if (showPill && mapLoadingEl) mapLoadingEl.classList.add('show');
 
   let allItems;
   try {
     const res = await fetch(`${API_BASE}/items?${params}`);
     allItems = await res.json();
   } finally {
+    window._firstItemsLoaded = true;
     if (mapLoadingEl) mapLoadingEl.classList.remove('show');
   }
 
