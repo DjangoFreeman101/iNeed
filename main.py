@@ -1855,6 +1855,7 @@ def get_my_outgoing_requests(device_id: str):
         SELECT r.id, r.item_id, r.status, r.created_at,
                i.title AS item_title, i.post_type, i.description AS item_description,
                i.category AS item_category, i.image_url AS item_image_url,
+               i.lat AS item_lat, i.lon AS item_lon,
                owner.nickname AS giver_name, owner.phone AS giver_phone
         FROM requests r
         JOIN items i ON i.id = r.item_id
