@@ -369,7 +369,6 @@
     }
     .nav-btn-gmaps { background:#1a73e8; }
     .nav-btn-waze { background:#33ccff; }
-    .nav-btn-moovit { background:#ff6d00; }
     .nav-btn:active { opacity:0.85; }
 
     .leaflet-top.leaflet-left { top: 58px !important; }
@@ -2577,14 +2576,12 @@ function navButtons(lat, lon) {
   if (lat == null || lon == null) return '';
   const gmaps = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving&dir_action=navigate`;
   const waze = `https://waze.com/ul?ll=${lat},${lon}&navigate=yes`;
-  const moovit = `https://moovit.com/directions?to=${lat}_${lon}`;
   return `
     <div class="nav-btns">
       <div class="nav-btns-label">${t('go_there')}</div>
       <div class="nav-btns-row">
         <a class="nav-btn nav-btn-gmaps" href="${gmaps}" target="_blank" rel="noopener">${t('nav_gmaps')}</a>
         <a class="nav-btn nav-btn-waze" href="${waze}" target="_blank" rel="noopener">${t('nav_waze')}</a>
-        <a class="nav-btn nav-btn-moovit" href="${moovit}" target="_blank" rel="noopener">${t('nav_moovit')}</a>
       </div>
     </div>`;
 }
@@ -2623,7 +2620,7 @@ function buildItemPopup(item) {
           onclick="${requested ? `cancelInterest(${item.id})` : `expressInterest(${item.id})`}">
           ${requested ? interestCancelLabel(item) : interestActionLabel(item)}
         </button>
-        <button class="item-popup-report" onclick="reportImage(${item.id})"> ${t('pop_report')}</button>
+        ${item.image_url ? `<button class="item-popup-report" onclick="reportImage(${item.id})"> ${t('pop_report')}</button>` : ''}
       ` : `<div style="font-size:12px;color:var(--gray);text-align:center;padding:8px;">${t('pop_your_item')}</div>`}
     </div>`;
 }
