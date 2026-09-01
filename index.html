@@ -142,6 +142,13 @@
     .request-detail-line { font-size:13px; color:#444; margin-top:6px; }
     .request-detail-desc { font-size:14px; color:#444; line-height:1.5; margin-top:8px; }
     .request-phone { font-size:15px; font-weight:700; color:var(--green); margin-top:10px; }
+    /* "Go There" button — opens the OS native navigation-app chooser */
+    .go-there-btn {
+      display:block; margin-top:8px; text-align:center; text-decoration:none;
+      background:var(--dark); color:#fff; padding:10px; border-radius:8px;
+      font-size:14px; font-weight:700; font-family:'Heebo',sans-serif;
+    }
+    .go-there-btn:active { opacity:0.85; }
     .request-phone a { color:var(--green); text-decoration:none; }
     .request-cancel-btn {
       width:100%; margin-top:14px; padding:10px; border:none; border-radius:8px;
@@ -1454,6 +1461,7 @@ const I18N = {
     req_pending: 'ממתין',
     req_approved: 'אושר ✓',
     req_phone_pending: 'מספר הטלפון יופיע לאחר אישור המוסר',
+    go_there: 'נווט לשם',
     req_cancel: 'בטל בקשה',
     req_took: 'לקחתי',
     confirm_delete_item: 'למחוק את הפריט?',
@@ -1675,6 +1683,7 @@ const I18N = {
     req_pending: 'Awaiting',
     req_approved: 'Approved ✓',
     req_phone_pending: 'The phone number will appear after the giver approves',
+    go_there: 'Go There',
     req_cancel: 'Cancel request',
     req_took: 'Took it',
     confirm_delete_item: 'Delete this item?',
@@ -1896,6 +1905,7 @@ const I18N = {
     req_pending: 'Čeká se',
     req_approved: 'Schváleno ✓',
     req_phone_pending: 'Telefonní číslo se zobrazí po schválení dárcem',
+    go_there: 'Navigovat tam',
     req_cancel: 'Zrušit žádost',
     req_took: 'Převzal jsem',
     confirm_delete_item: 'Smazat tuto položku?',
@@ -2117,6 +2127,7 @@ const I18N = {
     req_pending: 'Ожидает',
     req_approved: 'Одобрено ✓',
     req_phone_pending: 'Номер телефона появится после одобрения дающим',
+    go_there: 'Проложить маршрут',
     req_cancel: 'Отменить запрос',
     req_took: 'Я забрал',
     confirm_delete_item: 'Удалить эту вещь?',
@@ -2539,6 +2550,16 @@ function waLink(phone) {
   const intl = digits.replace(/^0/, '972');              // 05... -> 9725...
   return `https://wa.me/${intl}`;
 }
+
+// "Go There" — a geo: link. On Android this triggers the OS's native
+// "Open with…" chooser listing the user's installed navigation apps (Google
+// Maps, Waze, etc.), so the user picks how to navigate. Shown only next to a
+// revealed (approved) contact. The ?q= label makes the destination show a pin.
+function goThereButton(lat, lon) {
+  if (lat == null || lon == null) return '';
+  const geo = `geo:${lat},${lon}?q=${lat},${lon}`;
+  return `<a class="go-there-btn" href="${geo}">${t('go_there')}</a>`;
+}
 function interestActionLabel(item) { return isTakePost(item) ? t('pop_i_have') : t('pop_i_want'); }
 function interestCancelLabel(item) { return isTakePost(item) ? t('pop_offering_cancel') : t('pop_interested_cancel'); }
 function interestCountLabel(item) { return isTakePost(item) ? t('pop_offerers') : t('pop_interested'); }
@@ -2568,7 +2589,7 @@ function buildItemPopup(item) {
       ${item.description ? `<div class="item-popup-desc">${item.description}</div>` : ''}
       <div class="item-popup-by">${t('pop_by')}: ${item.nickname}</div>
       <div class="item-popup-interest">${item.request_count} ${interestCountLabel(item)}</div>
-      ${approvedPhone ? `<div class="item-popup-approved">${t('pop_approved')} <a href="${waLink(approvedPhone)}" target="_blank" style="direction:ltr;">💬 ${approvedPhone}</a></div>` : ''}
+      ${approvedPhone ? `<div class="item-popup-approved">${t('pop_approved')} <a href="${waLink(approvedPhone)}" target="_blank" style="direction:ltr;">💬 ${approvedPhone}</a></div>${goThereButton(item.lat, item.lon)}` : ''}
       ${!isMyItem ? `
         <button class="item-popup-btn ${requested ? 'requested' : ''}"
           onclick="${requested ? `cancelInterest(${item.id})` : `expressInterest(${item.id})`}">
@@ -3014,7 +3035,7 @@ function renderMyRequestsList(rows) {
         ${r.item_description ? `<div class="request-detail-desc">${r.item_description}</div>` : ''}
         <div class="request-detail-line">${t('pop_by')}: ${r.giver_name}</div>
         ${isApproved && r.giver_phone
-          ? `<div class="request-phone">💬 <a href="${waLink(r.giver_phone)}" target="_blank" style="direction:ltr;">${r.giver_phone}</a></div>`
+          ? `<div class="request-phone">💬 <a href="${waLink(r.giver_phone)}" target="_blank" style="direction:ltr;">${r.giver_phone}</a></div>${goThereButton(r.item_lat, r.item_lon)}`
           : `<div class="request-detail-line" style="color:var(--gray);">${t('req_phone_pending')}</div>`}
         <button class="request-cancel-btn" onclick="cancelRequestFromList(${r.item_id})">${t('req_cancel')}</button>
       </div>
