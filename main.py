@@ -268,16 +268,77 @@ def haversine_km(lat1, lon1, lat2, lon2):
     a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
     return 2 * R * math.asin(math.sqrt(a))
 
+MATCH_CANDIDATE_CAP = 50  # safety cap on how many nearby items we judge per post
+
+def _llm_pick_matches(item, candidates):
+    """Ask the model which candidates are genuinely the same item the two users
+    could exchange. ONE call for all candidates. Returns a set of candidate ids.
+    Falls back to exact-title matching if the model is unavailable or errors."""
+    client = _openai_client()
+    # Fallback: no AI -> exact normalized-title match (keeps matching working).
+    if not client:
+        nt = normalize_title(item["title"])
+        return {c["id"] for c in candidates if normalize_title(c["title"]) == nt}
+    try:
+        posted = ("GIVING AWAY" if item["post_type"] == "give" else "LOOKING FOR")
+        lines = []
+        for i, c in enumerate(candidates, start=1):
+            desc = (c.get("description") or "").strip()
+            cat = c.get("category") or ""
+            lines.append(f'{i}. title="{c["title"]}"'
+                         + (f' category="{cat}"' if cat else "")
+                         + (f' description="{desc}"' if desc else ""))
+        listing = "\n".join(lines)
+        other = ("LOOKING FOR" if item["post_type"] == "give" else "GIVING AWAY")
+        prompt = (
+            "You match people on a neighborhood give-and-take app. One user is "
+            f'{posted} this item:\n'
+            f'  title="{item["title"]}"'
+            + (f' category="{item.get("category") or ""}"')
+            + (f' description="{(item.get("description") or "").strip()}"') + "\n\n"
+            f"Here are nearby items where other users are {other}:\n{listing}\n\n"
+            "Return the numbers of the items that are the SAME thing (or a close "
+            "substitute the two people would actually be happy to exchange). Be "
+            "generous: if it's reasonably the same item, include it; language may "
+            "differ. If none match, return an empty list. "
+            'Respond ONLY as JSON: {"matches":[numbers]}'
+        )
+        resp = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=80,
+            temperature=0,
+        )
+        parsed = _parse_json_reply(resp.choices[0].message.content)
+        nums = (parsed or {}).get("matches") if isinstance(parsed, dict) else None
+        if not isinstance(nums, list):
+            return set()
+        picked = set()
+        for n in nums:
+            try:
+                idx = int(n) - 1
+            except (TypeError, ValueError):
+                continue
+            if 0 <= idx < len(candidates):
+                picked.add(candidates[idx]["id"])
+        return picked
+    except Exception as e:
+        print("LLM match failed, falling back to exact title:", e)
+        nt = normalize_title(item["title"])
+        return {c["id"] for c in candidates if normalize_title(c["title"]) == nt}
+
 def check_and_create_matches(item_id):
-    """Given an item that just changed, look for opposite-type items that now
-    match it, and record any new mutual matches. Safe to call repeatedly —
-    already-matched pairs are skipped via the UNIQUE constraint."""
+    """Given an item that just changed, find opposite-type items nearby that
+    semantically match it (judged by the LLM across all fields — no category
+    gate), and record new mutual matches. Safe to call repeatedly — already
+    matched pairs are skipped via the UNIQUE constraint. Runs server-side, so
+    it completes even if the poster closes the app."""
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cur.execute("""
-        SELECT i.id, i.post_type, i.title, i.category, i.lat, i.lon, i.status,
-               i.device_id, u.radius_km
+        SELECT i.id, i.post_type, i.title, i.description, i.category,
+               i.lat, i.lon, i.status, i.device_id, u.radius_km
         FROM items i JOIN users u ON u.device_id = i.device_id
         WHERE i.id = %s
     """, (item_id,))
@@ -287,33 +348,39 @@ def check_and_create_matches(item_id):
         return []
 
     other_type = "take" if item["post_type"] == "give" else "give"
-    norm_name = normalize_title(item["title"])
 
+    # Candidate pool: opposite type, available, someone else's. NO category gate —
+    # the LLM decides across the actual item details. Radius stays a hard filter.
     cur.execute("""
-        SELECT i.id, i.lat, i.lon, i.device_id, u.radius_km
+        SELECT i.id, i.title, i.description, i.category, i.lat, i.lon,
+               i.device_id, u.radius_km
         FROM items i JOIN users u ON u.device_id = i.device_id
         WHERE i.post_type = %s
           AND i.status = 'available'
-          AND i.category = %s
           AND i.device_id != %s
-    """, (other_type, item["category"], item["device_id"]))
-    candidates = cur.fetchall()
+    """, (other_type, item["device_id"]))
+    rows = cur.fetchall()
+
+    # Keep only those within BOTH users' radius (hyperlocal), then cap.
+    candidates = []
+    for c in rows:
+        dist = haversine_km(item["lat"], item["lon"], c["lat"], c["lon"])
+        if dist <= item["radius_km"] and dist <= c["radius_km"]:
+            candidates.append(dict(c))
+    candidates = candidates[:MATCH_CANDIDATE_CAP]
+
+    if not candidates:
+        cur.close(); conn.close()
+        return []
+
+    matched_ids = _llm_pick_matches(dict(item), candidates)
 
     new_matches = []
     for c in candidates:
-        # Compare normalized in Python (accounts for extra/irregular whitespace).
-        cur.execute("SELECT title FROM items WHERE id = %s", (c["id"],))
-        cand_title = cur.fetchone()["title"]
-        if normalize_title(cand_title) != norm_name:
+        if c["id"] not in matched_ids:
             continue
-
-        dist = haversine_km(item["lat"], item["lon"], c["lat"], c["lon"])
-        if dist > item["radius_km"] or dist > c["radius_km"]:
-            continue  # must be within BOTH radii
-
         give_id = item["id"] if item["post_type"] == "give" else c["id"]
         take_id = c["id"] if item["post_type"] == "give" else item["id"]
-
         try:
             cur.execute("""
                 INSERT INTO matches (give_item_id, take_item_id, created_at)
@@ -493,7 +560,7 @@ def update_settings(settings: UserSettings):
     cur.close()
     conn.close()
     if radius_changed:
-        recheck_matches_for_user(settings.device_id)
+        threading.Thread(target=recheck_matches_for_user, args=(settings.device_id,), daemon=True).start()
     return {"ok": True}
 
 # ── Items ────────────────────────────────────────────────
@@ -689,7 +756,9 @@ async def post_item(
     conn.commit()
     cur.close()
     conn.close()
-    check_and_create_matches(item_id)
+    # Run matching in the background so the user isn't kept waiting on the LLM
+    # call. It's server-side, so it finishes even if they close the app.
+    threading.Thread(target=check_and_create_matches, args=(item_id,), daemon=True).start()
     return {"ok": True, "item_id": item_id}
 
 @app.get("/items")
@@ -801,7 +870,7 @@ async def edit_item(
     conn.commit()
     cur.close()
     conn.close()
-    check_and_create_matches(item_id)
+    threading.Thread(target=check_and_create_matches, args=(item_id,), daemon=True).start()
     return {"ok": True}
 
 @app.patch("/item/{item_id}/status")
@@ -1988,11 +2057,8 @@ def republish_item(body: RepublishBody):
         WHERE id = %s
     """, (now, now, body.item_id))
     conn.commit(); cur.close(); conn.close()
-    # Re-run matching now that it's live again.
-    try:
-        check_and_create_matches(body.item_id)
-    except Exception as e:
-        print("Republish match check failed:", e)
+    # Re-run matching (in the background) now that it's live again.
+    threading.Thread(target=check_and_create_matches, args=(body.item_id,), daemon=True).start()
     return {"ok": True}
 
 @app.get("/my-outgoing-requests/{device_id}")
