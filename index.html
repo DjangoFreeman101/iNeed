@@ -121,7 +121,8 @@
     .match-side-badge.take { background:#fff3e0; color:#e65100; }
     .match-card { position:relative; }
     .match-cancel-x {
-      position:absolute; top:8px; left:8px; z-index:2;
+      /* inset-inline-end = right in LTR (en/cs/ru), left in RTL (he) */
+      position:absolute; top:8px; inset-inline-end:8px; z-index:2;
       width:28px; height:28px; border-radius:50%;
       background:rgba(255,255,255,0.92); border:none;
       color:var(--accent); font-size:16px; font-weight:700; line-height:1;
