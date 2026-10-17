@@ -222,6 +222,14 @@
       font-size:15px; font-weight:600; cursor:pointer;
       font-family:'Heebo',sans-serif; margin-top:8px;
     }
+    .ai-chip {
+      margin-top:8px; background:#fdecea; color:var(--accent);
+      border:1px solid #f5c6cb; border-radius:999px;
+      padding:6px 14px; font-size:13px; font-weight:700; cursor:pointer;
+      font-family:'Heebo',sans-serif;
+    }
+    .ai-chip:active { opacity:0.8; }
+    .ai-chip:disabled { opacity:0.5; cursor:default; }
     .btn-danger {
       width:100%; background:var(--accent); color:white; border:none;
       padding:12px; border-radius:12px; font-size:15px;
@@ -953,6 +961,7 @@
     <div class="form-group">
       <label class="form-label" data-i18n="post_title_label">כותרת *</label>
       <input type="text" class="form-input" id="post-title" data-i18n-ph="post_title_ph" placeholder="מה אתה נותן / מחפש?" maxlength="80"/>
+      <button type="button" id="ai-suggest-name-btn" class="ai-chip" onclick="aiSuggestName()">✨ <span data-i18n="ai_suggest_name">הצע שם פשוט יותר</span></button>
     </div>
     <div class="form-group">
       <label class="form-label" data-i18n="post_category_label">קטגוריה *</label>
@@ -1016,6 +1025,7 @@
         <img id="photo-preview" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover;display:block;"/>
         <button onclick="removePhoto()" data-i18n="post_photo_remove" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.65);color:white;border:none;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:Heebo,sans-serif;">הסר תמונה</button>
       </div>
+      <div id="ai-suggest-status" style="display:none;font-size:13px;color:var(--accent);font-weight:700;margin-top:8px;">✨ <span id="ai-suggest-status-text"></span></div>
       <button class="btn-primary" data-i18n="post_submit" onclick="submitItem()">פרסם פריט</button>
   </div>
 </div>
@@ -1461,6 +1471,11 @@ const I18N = {
     req_pending: 'ממתין',
     req_approved: 'אושר ✓',
     req_phone_pending: 'מספר הטלפון יופיע לאחר אישור המוסר',
+    ai_analyzing: 'מנתח את התמונה...',
+    ai_filled: 'מולא אוטומטית — אפשר לערוך',
+    ai_suggest_name: 'הצע שם פשוט יותר',
+    ai_need_text: 'כתוב קודם מה אתה מחפש',
+    ai_suggested: 'עודכן לפי ההצעה',
     go_there: 'נווט לשם',
     req_cancel: 'בטל בקשה',
     req_took: 'לקחתי',
@@ -1683,6 +1698,11 @@ const I18N = {
     req_pending: 'Awaiting',
     req_approved: 'Approved ✓',
     req_phone_pending: 'The phone number will appear after the giver approves',
+    ai_analyzing: 'Analyzing photo...',
+    ai_filled: 'Auto-filled — you can edit',
+    ai_suggest_name: 'Suggest a simpler name',
+    ai_need_text: 'Type what you want first',
+    ai_suggested: 'Updated with the suggestion',
     go_there: 'Go There',
     req_cancel: 'Cancel request',
     req_took: 'Took it',
@@ -1905,6 +1925,11 @@ const I18N = {
     req_pending: 'Čeká se',
     req_approved: 'Schváleno ✓',
     req_phone_pending: 'Telefonní číslo se zobrazí po schválení dárcem',
+    ai_analyzing: 'Analyzuji fotku...',
+    ai_filled: 'Předvyplněno — lze upravit',
+    ai_suggest_name: 'Navrhnout jednodušší název',
+    ai_need_text: 'Nejdřív napiš, co hledáš',
+    ai_suggested: 'Aktualizováno podle návrhu',
     go_there: 'Navigovat tam',
     req_cancel: 'Zrušit žádost',
     req_took: 'Převzal jsem',
@@ -2127,6 +2152,11 @@ const I18N = {
     req_pending: 'Ожидает',
     req_approved: 'Одобрено ✓',
     req_phone_pending: 'Номер телефона появится после одобрения дающим',
+    ai_analyzing: 'Анализирую фото...',
+    ai_filled: 'Заполнено автоматически — можно изменить',
+    ai_suggest_name: 'Предложить простое название',
+    ai_need_text: 'Сначала напишите, что ищете',
+    ai_suggested: 'Обновлено по предложению',
     go_there: 'Проложить маршрут',
     req_cancel: 'Отменить запрос',
     req_took: 'Я забрал',
@@ -2911,6 +2941,63 @@ function previewPhoto(input) {
     document.getElementById('photo-upload-area').style.display = 'none';
   };
   reader.readAsDataURL(file);
+  aiSuggestFromPhoto(file);   // AI: analyze the photo and pre-fill the form
+}
+
+// Maps the app language to the stored code the backend expects ('he' -> 'il').
+function aiLang() { return currentLang === 'he' ? 'il' : currentLang; }
+
+// AI auto-fill: send the chosen photo to the vision model and pre-fill any
+// EMPTY fields (title/category/description) with its suggestions. Best-effort —
+// if the AI is unavailable or slow, the form just stays as the user left it.
+async function aiSuggestFromPhoto(file) {
+  const box = document.getElementById('ai-suggest-status');
+  const txt = document.getElementById('ai-suggest-status-text');
+  try {
+    if (box && txt) { txt.textContent = t('ai_analyzing'); box.style.display = 'block'; }
+    const form = new FormData();
+    form.append('image', file);
+    form.append('language', aiLang());
+    const res = await fetch(`${API_BASE}/suggest-item`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (!data || !data.ok) { if (box) box.style.display = 'none'; return; }
+    const titleEl = document.getElementById('post-title');
+    const catEl = document.getElementById('post-category');
+    const descEl = document.getElementById('post-desc');
+    if (titleEl && !titleEl.value.trim() && data.title) titleEl.value = data.title;
+    if (catEl && !catEl.value && data.category) catEl.value = data.category;
+    if (descEl && !descEl.value.trim() && data.description) descEl.value = data.description;
+    if (box && txt) { txt.textContent = t('ai_filled'); setTimeout(() => { box.style.display = 'none'; }, 2500); }
+  } catch (e) {
+    if (box) box.style.display = 'none';
+  }
+}
+
+// AI: turn whatever the user typed in the title ("a tool to hang a picture")
+// into the simple common name ("hammer"). Replaces the title; it stays editable.
+async function aiSuggestName() {
+  const titleEl = document.getElementById('post-title');
+  const text = (titleEl && titleEl.value || '').trim();
+  if (!text) { showToast(t('ai_need_text')); return; }
+  const btn = document.getElementById('ai-suggest-name-btn');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/suggest-search`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text, language: aiLang() })
+    });
+    const data = await res.json();
+    if (data && data.ok && data.suggestion) {
+      titleEl.value = data.suggestion;
+      showToast(t('ai_suggested'));
+    } else {
+      showToast(t('toast_error'));
+    }
+  } catch (e) {
+    showToast(t('toast_error'));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function submitItem() {

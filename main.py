@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-import psycopg2, psycopg2.extras, time, os, cloudinary, cloudinary.uploader, requests, re, math, bcrypt, random, string, secrets, threading
+import psycopg2, psycopg2.extras, time, os, cloudinary, cloudinary.uploader, requests, re, math, bcrypt, random, string, secrets, threading, json, base64
 from datetime import datetime, timezone, timedelta
 
 app = FastAPI()
@@ -499,6 +499,129 @@ def update_settings(settings: UserSettings):
 # ── Items ────────────────────────────────────────────────
 
 CONDITION_OPTIONS = {"new", "like_new", "used", "bad"}
+CATEGORY_KEYS = {"furniture", "electronics", "clothing", "books",
+                 "kitchen", "toys", "sports", "garden", "other"}
+
+# ── AI assist (OpenAI) ───────────────────────────────────
+# Both the model and the key are env vars so the model can be swapped without a
+# code change. All AI calls are BEST-EFFORT: any failure returns a null result
+# and the app carries on — the AI never blocks posting or searching.
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+
+def _openai_client():
+    """Lazily build the client so a missing library/key never crashes startup."""
+    if not OPENAI_API_KEY:
+        return None
+    try:
+        from openai import OpenAI
+        return OpenAI(api_key=OPENAI_API_KEY)
+    except Exception as e:
+        print("OpenAI client init failed:", e)
+        return None
+
+def _parse_json_reply(text):
+    """Models sometimes wrap JSON in ```json fences or add stray prose. Pull out
+    the first {...} block and parse it. Returns a dict or None."""
+    if not text:
+        return None
+    t = text.strip()
+    # Strip markdown code fences if present.
+    if t.startswith("```"):
+        t = re.sub(r"^```[a-zA-Z]*\n?", "", t)
+        t = re.sub(r"\n?```$", "", t).strip()
+    # Grab the outermost {...} just in case there's surrounding text.
+    m = re.search(r"\{.*\}", t, re.S)
+    if m:
+        t = m.group(0)
+    try:
+        return json.loads(t)
+    except Exception:
+        return None
+
+class SuggestSearchBody(BaseModel):
+    text: str
+    language: Optional[str] = "il"
+
+@app.post("/suggest-item")
+async def suggest_item(image: UploadFile = File(...), language: str = Form("il")):
+    """Vision auto-fill: look at an item photo and suggest a human-worded title,
+    a category (constrained to our keys), and a one-line description. Best-effort:
+    returns {ok: False} on any problem so the posting form just stays blank."""
+    client = _openai_client()
+    if not client:
+        return {"ok": False}
+    try:
+        data = await image.read()
+        b64 = base64.b64encode(data).decode("ascii")
+        lang = normalize_lang(language)
+        lang_name = {"il": "Hebrew", "en": "English", "cs": "Czech", "ru": "Russian"}.get(lang, "Hebrew")
+        prompt = (
+            "You are helping someone list a second-hand item to give away on a "
+            "neighborhood give-and-take app. Look at the photo and return JSON "
+            "with exactly these keys:\n"
+            '  "title": the SIMPLEST common name a normal person would type when '
+            'searching for this — e.g. "charger", "office chair", "kids bike". '
+            "2-3 words max, no brand names, no technical specs, everyday language.\n"
+            '  "category": EXACTLY ONE of: furniture, electronics, clothing, '
+            "books, kitchen, toys, sports, garden, other.\n"
+            '  "description": one short natural sentence about the item.\n'
+            f"Write the title and description in {lang_name}. The category must "
+            "stay one of the English keys above. Respond with ONLY the JSON."
+        )
+        resp = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+            ]}],
+            max_tokens=200,
+        )
+        parsed = _parse_json_reply(resp.choices[0].message.content)
+        if not parsed:
+            return {"ok": False}
+        cat = str(parsed.get("category", "")).strip().lower()
+        if cat not in CATEGORY_KEYS:
+            cat = "other"
+        return {
+            "ok": True,
+            "title": (parsed.get("title") or "").strip()[:80],
+            "category": cat,
+            "description": (parsed.get("description") or "").strip()[:300],
+        }
+    except Exception as e:
+        print("suggest-item failed:", e)
+        return {"ok": False}
+
+@app.post("/suggest-search")
+def suggest_search(body: SuggestSearchBody):
+    """Turn a free-text description of a NEED into the simple common item name,
+    so a searcher who types 'a tool to hang a picture' gets 'hammer'. Best-effort."""
+    client = _openai_client()
+    if not client or not (body.text or "").strip():
+        return {"ok": False}
+    try:
+        lang = normalize_lang(body.language)
+        lang_name = {"il": "Hebrew", "en": "English", "cs": "Czech", "ru": "Russian"}.get(lang, "Hebrew")
+        prompt = (
+            "A user of a give-and-take app is describing something they are "
+            "looking for. Give the single simplest common item name they most "
+            "likely mean — the plain word a person would search for. "
+            f'Reply in {lang_name}, with ONLY that short name (1-3 words), nothing else.\n\n'
+            f'They wrote: "{body.text.strip()}"'
+        )
+        resp = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=20,
+        )
+        suggestion = (resp.choices[0].message.content or "").strip().strip('".')[:80]
+        if not suggestion:
+            return {"ok": False}
+        return {"ok": True, "suggestion": suggestion}
+    except Exception as e:
+        print("suggest-search failed:", e)
+        return {"ok": False}
 
 @app.post("/item")
 async def post_item(
