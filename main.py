@@ -565,7 +565,10 @@ async def suggest_item(image: UploadFile = File(...), language: str = Form("il")
             "2-3 words max, no brand names, no technical specs, everyday language.\n"
             '  "category": EXACTLY ONE of: furniture, electronics, clothing, '
             "books, kitchen, toys, sports, garden, other.\n"
-            '  "description": one short natural sentence about the item.\n'
+            '  "description": a bare, factual description of WHAT THE ITEM IS '
+            "only — a short noun phrase, no full sentence, no opinions, no uses, "
+            'no filler like "you can use it". E.g. "blue ballpoint pen", '
+            '"wooden dining chair", "kids red bicycle".\n'
             f"Write the title and description in {lang_name}. The category must "
             "stay one of the English keys above. Respond with ONLY the JSON."
         )
@@ -613,7 +616,9 @@ def suggest_search(body: SuggestSearchBody):
             "everyday language, no brands).\n"
             '  category: EXACTLY ONE of: furniture, electronics, clothing, books, '
             "kitchen, toys, sports, garden, other.\n"
-            '  description: one short natural sentence.\n'
+            '  description: a bare factual description of WHAT IT IS only — a '
+            "short noun phrase, no full sentence, no opinions or uses, no filler "
+            'like "you can use it". E.g. "blue ballpoint pen", "wooden chair".\n'
             f"Write title and description in {lang_name}; keep category an English "
             "key. Give exactly 3 distinct suggestions. Respond with ONLY the JSON.\n\n"
             f'They wrote: "{body.text.strip()}"'
