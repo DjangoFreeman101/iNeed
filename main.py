@@ -327,6 +327,33 @@ def _llm_pick_matches(item, candidates):
         nt = normalize_title(item["title"])
         return {c["id"] for c in candidates if normalize_title(c["title"]) == nt}
 
+def _email_both_sides(cur, item_a, item_b):
+    """Email both owners of a newly created match. Each gets the other user's
+    nickname + phone and both item titles, in their own stored language. Uses
+    the caller's cursor for the user lookups; emailing is best-effort."""
+    def _user(device_id):
+        cur.execute(
+            "SELECT email, language, nickname, phone FROM users WHERE device_id = %s",
+            (device_id,),
+        )
+        r = cur.fetchone()
+        return dict(r) if r else {}
+
+    ua = _user(item_a["device_id"])
+    ub = _user(item_b["device_id"])
+
+    # Owner of item_a hears about user B + item B, and vice versa.
+    send_match_email(
+        ua.get("email"), ua.get("language"),
+        ub.get("nickname"), ub.get("phone"),
+        item_a.get("title"), item_b.get("title"),
+    )
+    send_match_email(
+        ub.get("email"), ub.get("language"),
+        ua.get("nickname"), ua.get("phone"),
+        item_b.get("title"), item_a.get("title"),
+    )
+
 def check_and_create_matches(item_id):
     """Given an item that just changed, find opposite-type items nearby that
     semantically match it (judged by the LLM across all fields — no category
@@ -388,6 +415,11 @@ def check_and_create_matches(item_id):
             """, (give_id, take_id, time.time()))
             conn.commit()
             new_matches.append({"give_item_id": give_id, "take_item_id": take_id})
+            # Brand-new pair → email both sides with each other's details.
+            try:
+                _email_both_sides(cur, item, c)
+            except Exception as e:
+                print("Match email dispatch failed:", e)
         except psycopg2.errors.UniqueViolation:
             conn.rollback()  # already matched before — skip silently
 
@@ -1158,6 +1190,89 @@ def send_interest_email(to_addr, language, requester_name, item_title, is_take):
         return send_simple_email(to_addr, subject, html, rtl=copy["rtl"])
     except Exception as e:
         print("Interest email failed:", e)
+        return False
+
+# Localized copy for the "you have a match!" email. Symmetric — both sides of
+# a match get the same shape: who the other person is, both items, and how to
+# reach them. {me}=recipient's item, {other_item}=the matched item,
+# {name}=other user's nickname, {phone}=other user's phone.
+MATCH_EMAIL = {
+    "il": {
+        "subject": "יש לך התאמה ב-iNeed! 🎉",
+        "intro": "מצאנו לך התאמה! ל{name} יש משהו שמתאים לך.",
+        "my_label": "הפריט שלך",
+        "their_label": "הפריט של {name}",
+        "contact_label": "ליצירת קשר עם {name}",
+        "cta": "פתח/י את iNeed",
+        "rtl": True,
+    },
+    "en": {
+        "subject": "You have a match on iNeed! 🎉",
+        "intro": "We found you a match! {name} has something for you.",
+        "my_label": "Your item",
+        "their_label": "{name}’s item",
+        "contact_label": "Contact {name}",
+        "cta": "Open iNeed",
+        "rtl": False,
+    },
+    "cs": {
+        "subject": "Máte shodu na iNeed! 🎉",
+        "intro": "Našli jsme vám shodu! {name} má něco pro vás.",
+        "my_label": "Vaše položka",
+        "their_label": "Položka uživatele {name}",
+        "contact_label": "Kontaktovat {name}",
+        "cta": "Otevřít iNeed",
+        "rtl": False,
+    },
+    "ru": {
+        "subject": "У вас есть совпадение в iNeed! 🎉",
+        "intro": "Мы нашли вам совпадение! У {name} есть кое-что для вас.",
+        "my_label": "Ваша вещь",
+        "their_label": "Вещь пользователя {name}",
+        "contact_label": "Связаться с {name}",
+        "cta": "Открыть iNeed",
+        "rtl": False,
+    },
+}
+
+def send_match_email(to_addr, language, other_name, other_phone, my_item_title, other_item_title):
+    """Tell one side of a new match about the other side — who they are, both
+    items, and the phone number to reach them. Localized to the recipient's
+    stored language. Best-effort: never raises."""
+    if not to_addr:
+        return False
+    copy = MATCH_EMAIL.get(normalize_lang(language), MATCH_EMAIL["il"])
+    name = other_name or "—"
+    align = "right" if copy["rtl"] else "left"
+    phone_block = ""
+    if other_phone:
+        phone_block = f"""
+      <p style="font-size:15px;margin:4px 0 0;text-align:{align};color:#555;">
+        {copy['contact_label'].format(name=name)}:
+        <a href="tel:{other_phone}" style="color:#F44336;font-weight:700;text-decoration:none;">{other_phone}</a>
+      </p>
+        """
+    html = f"""
+      <p style="font-size:17px;font-weight:700;margin:0 0 16px;text-align:{align};">{copy['intro'].format(name=name)}</p>
+      <div style="background:#f6f6f6;border-radius:10px;padding:14px 16px;margin:0 0 8px;text-align:{align};">
+        <p style="font-size:13px;color:#888;margin:0 0 2px;">{copy['my_label']}</p>
+        <p style="font-size:16px;font-weight:700;margin:0 0 10px;">{my_item_title or ''}</p>
+        <p style="font-size:13px;color:#888;margin:0 0 2px;">{copy['their_label'].format(name=name)}</p>
+        <p style="font-size:16px;font-weight:700;margin:0;">{other_item_title or ''}</p>
+      </div>
+      {phone_block}
+      <div style="text-align:center;margin:24px 0 8px;">
+        <a href="{PLAY_STORE_URL}"
+           style="display:inline-block;background:#F44336;color:#fff;text-decoration:none;
+                  padding:12px 28px;border-radius:10px;font-weight:700;font-size:16px;">
+          {copy['cta']}
+        </a>
+      </div>
+    """
+    try:
+        return send_simple_email(to_addr, subject=copy["subject"], html=html, rtl=copy["rtl"])
+    except Exception as e:
+        print("Match email failed:", e)
         return False
 
 # ── Auth: sign-up (per-screen checks + final creation) ───
