@@ -230,6 +230,13 @@
     }
     .ai-chip:active { opacity:0.8; }
     .ai-chip:disabled { opacity:0.5; cursor:default; }
+    .ai-autofill-btn {
+      width:100%; background:var(--accent); color:#fff; border:none;
+      border-radius:12px; padding:13px; font-size:15px; font-weight:700;
+      cursor:pointer; font-family:'Heebo',sans-serif; margin-bottom:12px;
+    }
+    .ai-autofill-btn:active { opacity:0.85; }
+    .ai-autofill-btn:disabled { opacity:0.6; cursor:default; }
     .btn-danger {
       width:100%; background:var(--accent); color:white; border:none;
       padding:12px; border-radius:12px; font-size:15px;
@@ -958,6 +965,11 @@
 
   <!-- Step 2: Details -->
   <div id="post-step-2" class="panel-body" style="display:none;">
+    <button type="button" id="ai-autofill-btn" class="ai-autofill-btn" onclick="document.getElementById('ai-photo-input').click()">
+      📷 <span data-i18n="ai_autofill">מלא אוטומטית עם AI (צילום)</span>
+    </button>
+    <input type="file" id="ai-photo-input" accept="image/*" capture="environment" style="display:none" onchange="aiAutoFillPhoto(this)"/>
+    <div id="ai-autofill-status" style="display:none;font-size:13px;color:var(--accent);font-weight:700;margin:-4px 0 12px;">✨ <span id="ai-autofill-status-text"></span></div>
     <div class="form-group">
       <label class="form-label" data-i18n="post_title_label">כותרת *</label>
       <input type="text" class="form-input" id="post-title" data-i18n-ph="post_title_ph" placeholder="מה אתה נותן / מחפש?" maxlength="80"/>
@@ -1471,6 +1483,8 @@ const I18N = {
     req_pending: 'ממתין',
     req_approved: 'אושר ✓',
     req_phone_pending: 'מספר הטלפון יופיע לאחר אישור המוסר',
+    ai_autofill: 'מלא אוטומטית עם AI (צילום)',
+    ai_failed: 'לא הצלחתי לנתח את התמונה, נסה שוב',
     ai_analyzing: 'מנתח את התמונה...',
     ai_filled: 'מולא אוטומטית — אפשר לערוך',
     ai_suggest_name: 'הצע שם פשוט יותר',
@@ -1698,6 +1712,8 @@ const I18N = {
     req_pending: 'Awaiting',
     req_approved: 'Approved ✓',
     req_phone_pending: 'The phone number will appear after the giver approves',
+    ai_autofill: 'Auto-fill with AI (photo)',
+    ai_failed: "Couldn't analyze the photo, try again",
     ai_analyzing: 'Analyzing photo...',
     ai_filled: 'Auto-filled — you can edit',
     ai_suggest_name: 'Suggest a simpler name',
@@ -1925,6 +1941,8 @@ const I18N = {
     req_pending: 'Čeká se',
     req_approved: 'Schváleno ✓',
     req_phone_pending: 'Telefonní číslo se zobrazí po schválení dárcem',
+    ai_autofill: 'Vyplnit pomocí AI (foto)',
+    ai_failed: 'Fotku se nepodařilo analyzovat, zkuste to znovu',
     ai_analyzing: 'Analyzuji fotku...',
     ai_filled: 'Předvyplněno — lze upravit',
     ai_suggest_name: 'Navrhnout jednodušší název',
@@ -2152,6 +2170,8 @@ const I18N = {
     req_pending: 'Ожидает',
     req_approved: 'Одобрено ✓',
     req_phone_pending: 'Номер телефона появится после одобрения дающим',
+    ai_autofill: 'Заполнить с помощью AI (фото)',
+    ai_failed: 'Не удалось проанализировать фото, попробуйте снова',
     ai_analyzing: 'Анализирую фото...',
     ai_filled: 'Заполнено автоматически — можно изменить',
     ai_suggest_name: 'Предложить простое название',
@@ -2926,6 +2946,8 @@ async function submitReport() {
 function removePhoto() {
   document.getElementById('photo-input').value = '';
   document.getElementById('photo-camera-input').value = '';
+  const aip = document.getElementById('ai-photo-input'); if (aip) aip.value = '';
+  window._aiCapturedPhoto = null;
   document.getElementById('photo-preview').src = '';
   document.getElementById('photo-preview-container').style.display = 'none';
   document.getElementById('photo-upload-area').style.display = 'flex';
@@ -2941,11 +2963,58 @@ function previewPhoto(input) {
     document.getElementById('photo-upload-area').style.display = 'none';
   };
   reader.readAsDataURL(file);
-  aiSuggestFromPhoto(file);   // AI: analyze the photo and pre-fill the form
 }
 
 // Maps the app language to the stored code the backend expects ('he' -> 'il').
 function aiLang() { return currentLang === 'he' ? 'il' : currentLang; }
+
+// "Auto-fill with AI" button (Step 2): the user takes a photo; the vision model
+// fills in title/category/description, and the same photo becomes the item's
+// photo so they don't shoot it twice.
+async function aiAutoFillPhoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  window._aiCapturedPhoto = file;   // reuse as the item's photo at submit time
+  // Show it in the Step 3 photo preview too.
+  const reader = new FileReader();
+  reader.onload = e => {
+    const pv = document.getElementById('photo-preview');
+    if (pv) pv.src = e.target.result;
+    const pc = document.getElementById('photo-preview-container');
+    if (pc) pc.style.display = 'block';
+    const ua = document.getElementById('photo-upload-area');
+    if (ua) ua.style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+
+  const box = document.getElementById('ai-autofill-status');
+  const txt = document.getElementById('ai-autofill-status-text');
+  const btn = document.getElementById('ai-autofill-btn');
+  const show = (key, hide) => {
+    if (box && txt) { txt.textContent = t(key); box.style.display = 'block'; if (hide) setTimeout(() => { box.style.display = 'none'; }, 3000); }
+  };
+  try {
+    if (btn) btn.disabled = true;
+    show('ai_analyzing', false);
+    const form = new FormData();
+    form.append('image', file);
+    form.append('language', aiLang());
+    const res = await fetch(`${API_BASE}/suggest-item`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (!data || !data.ok) { show('ai_failed', true); return; }
+    const titleEl = document.getElementById('post-title');
+    const catEl = document.getElementById('post-category');
+    const descEl = document.getElementById('post-desc');
+    if (titleEl && data.title) titleEl.value = data.title;
+    if (catEl && data.category) catEl.value = data.category;
+    if (descEl && data.description) descEl.value = data.description;
+    show('ai_filled', true);
+  } catch (e) {
+    show('ai_failed', true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
 
 // AI auto-fill: send the chosen photo to the vision model and pre-fill any
 // EMPTY fields (title/category/description) with its suggestions. Best-effort —
@@ -3013,7 +3082,7 @@ async function submitItem() {
   if (selectedPostType === 'give' && !condition) { showToast(t('toast_pick_condition')); return; }
   if (itemLat === null || itemLon === null) { showToast(t('toast_set_location')); return; }
 
-  const photoFile = (photoInput.files[0]) || (photoCameraInput.files[0]) || null;
+  const photoFile = (photoInput.files[0]) || (photoCameraInput.files[0]) || window._aiCapturedPhoto || null;
 
   const form = new FormData();
   form.append('device_id', deviceId);
@@ -3058,6 +3127,8 @@ async function submitItem() {
     document.getElementById('post-condition-group').style.display = 'none';
     document.getElementById('post-desc').value = '';
     document.getElementById('photo-input').value = '';
+    const aip2 = document.getElementById('ai-photo-input'); if (aip2) aip2.value = '';
+    window._aiCapturedPhoto = null;
     const pc = document.getElementById('photo-preview-container'); if(pc) pc.style.display = 'none';
     document.getElementById('photo-upload-area').style.display = 'flex';
     selectedPostType = null;
