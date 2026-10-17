@@ -304,14 +304,19 @@ def _llm_pick_matches(item, candidates):
             + (f' category="{item.get("category") or ""}"')
             + (f' description="{(item.get("description") or "").strip()}"') + "\n\n"
             f"Here are nearby items where other users are {other}:\n{listing}\n\n"
-            "Return the numbers of the items that are the SAME thing (or a close "
-            "substitute the two people would actually be happy to exchange). Be "
-            "generous: if it's reasonably the same item, include it; language may "
-            "differ. If none match, return an empty list. "
-            'Respond ONLY as JSON: {"matches":[numbers]}'
+            "Pick ONLY the items that are the SAME object as the user's item, or a "
+            "genuine equivalent that satisfies the exact same need. This includes "
+            "synonyms, different wordings, brand/model variants, and the SAME item "
+            "written in another language (e.g. \"couch\"=\"sofa\", "
+            "\"bicycle\"=\"bike\"=\"אופניים\"). It does NOT include items that merely "
+            "share a category or vibe: a chair and a bowl of soup are NOT a match, "
+            "a table and a lamp are NOT a match, a shirt and shoes are NOT a match. "
+            "If you are not confident two people would agree it is essentially the "
+            "same thing, leave it out. When in doubt, exclude. If none qualify, "
+            'return an empty list. Respond ONLY as JSON: {"matches":[numbers]}'
         )
         resp = client.chat.completions.create(
-            model=OPENAI_MODEL,
+            model=OPENAI_MATCH_MODEL,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=80,
             temperature=0,
@@ -638,6 +643,10 @@ CATEGORY_KEYS = {"furniture", "electronics", "clothing", "books",
 # and the app carries on — the AI never blocks posting or searching.
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+# Model used for semantic match judging. Defaults to OPENAI_MODEL, but can be
+# pointed at a stronger model (e.g. gpt-4o) for better precision without
+# changing the autofill model.
+OPENAI_MATCH_MODEL = os.environ.get("OPENAI_MATCH_MODEL", OPENAI_MODEL)
 
 def _openai_client():
     """Lazily build the client so a missing library/key never crashes startup."""
