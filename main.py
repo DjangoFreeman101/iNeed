@@ -134,6 +134,13 @@ def init_db():
         ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT
     """)
 
+    # Dismissed matches stay in the table (so the UNIQUE constraint still
+    # blocks the matcher from re-inserting + re-emailing a cancelled pair),
+    # but are hidden from /my-matches.
+    cur.execute("""
+        ALTER TABLE matches ADD COLUMN IF NOT EXISTS dismissed BOOLEAN NOT NULL DEFAULT FALSE
+    """)
+
     # Email verification codes (sign-up) — one active code per email.
     cur.execute("""
         CREATE TABLE IF NOT EXISTS email_verifications (
@@ -461,7 +468,7 @@ def get_my_matches(device_id: str):
         JOIN items mine ON mine.id = m.give_item_id
         JOIN items other ON other.id = m.take_item_id
         JOIN users ou ON ou.device_id = other.device_id
-        WHERE mine.device_id = %s
+        WHERE mine.device_id = %s AND m.dismissed = FALSE
 
         UNION ALL
 
@@ -477,7 +484,7 @@ def get_my_matches(device_id: str):
         JOIN items mine ON mine.id = m.take_item_id
         JOIN items other ON other.id = m.give_item_id
         JOIN users ou ON ou.device_id = other.device_id
-        WHERE mine.device_id = %s
+        WHERE mine.device_id = %s AND m.dismissed = FALSE
 
         ORDER BY created_at DESC
     """, (device_id, device_id))
@@ -485,6 +492,28 @@ def get_my_matches(device_id: str):
     cur.close()
     conn.close()
     return rows
+
+@app.delete("/match/{match_id}")
+def dismiss_match(match_id: int, device_id: str):
+    """Cancel a match. Only a device that owns one side may do it. The row is
+    kept but flagged dismissed, so the matcher won't re-create + re-email the
+    same pair, and it disappears from both sides' /my-matches."""
+    conn = get_db()
+    cur = conn.cursor()
+    # Verify this device owns the give OR take side of this match.
+    cur.execute("""
+        SELECT 1 FROM matches m
+        JOIN items gi ON gi.id = m.give_item_id
+        JOIN items ti ON ti.id = m.take_item_id
+        WHERE m.id = %s AND (gi.device_id = %s OR ti.device_id = %s)
+    """, (match_id, device_id, device_id))
+    if not cur.fetchone():
+        cur.close(); conn.close()
+        raise HTTPException(status_code=403, detail="Not your match")
+    cur.execute("UPDATE matches SET dismissed = TRUE WHERE id = %s", (match_id,))
+    conn.commit()
+    cur.close(); conn.close()
+    return {"ok": True}
 
 # ── Static files ─────────────────────────────────────────
 

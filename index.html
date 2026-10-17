@@ -119,6 +119,16 @@
     }
     .match-side-badge.give { background:#e8f5e9; color:#2e7d32; }
     .match-side-badge.take { background:#fff3e0; color:#e65100; }
+    .match-card { position:relative; }
+    .match-cancel-x {
+      position:absolute; top:8px; left:8px; z-index:2;
+      width:28px; height:28px; border-radius:50%;
+      background:rgba(255,255,255,0.92); border:none;
+      color:var(--accent); font-size:16px; font-weight:700; line-height:1;
+      cursor:pointer; font-family:'Heebo',sans-serif;
+      box-shadow:0 1px 4px rgba(0,0,0,0.2);
+      display:flex; align-items:center; justify-content:center;
+    }
 
     /* ── Swipe to action ── */
     .swipe-wrap { position:relative; overflow:hidden; border-radius:12px; margin-bottom:10px; }
@@ -1542,6 +1552,9 @@ const I18N = {
     match_wants: 'מחפש/ת',
     match_for: 'מתאים ל„{item}“ שלך',
     match_sent: 'נשלח! נעדכן את הצד השני',
+    match_cancel: 'בטל התאמה',
+    match_cancel_confirm: 'לבטל את ההתאמה?',
+    match_cancelled: 'ההתאמה בוטלה',
     req_pending: 'ממתין',
     req_approved: 'אושר ✓',
     req_phone_pending: 'מספר הטלפון יופיע לאחר אישור המוסר',
@@ -1781,6 +1794,9 @@ const I18N = {
     match_wants: 'Looking for',
     match_for: 'Matches your “{item}”',
     match_sent: 'Sent! We’ll let them know',
+    match_cancel: 'Cancel match',
+    match_cancel_confirm: 'Cancel this match?',
+    match_cancelled: 'Match cancelled',
     req_pending: 'Awaiting',
     req_approved: 'Approved ✓',
     req_phone_pending: 'The phone number will appear after the giver approves',
@@ -2020,6 +2036,9 @@ const I18N = {
     match_wants: 'Hledá',
     match_for: 'Odpovídá vaší položce „{item}“',
     match_sent: 'Odesláno! Dáme druhé straně vědět',
+    match_cancel: 'Zrušit shodu',
+    match_cancel_confirm: 'Zrušit tuto shodu?',
+    match_cancelled: 'Shoda zrušena',
     req_pending: 'Čeká se',
     req_approved: 'Schváleno ✓',
     req_phone_pending: 'Telefonní číslo se zobrazí po schválení dárcem',
@@ -2259,6 +2278,9 @@ const I18N = {
     match_wants: 'Ищет',
     match_for: 'Подходит к вашей вещи «{item}»',
     match_sent: 'Отправлено! Мы сообщим другой стороне',
+    match_cancel: 'Отменить совпадение',
+    match_cancel_confirm: 'Отменить это совпадение?',
+    match_cancelled: 'Совпадение отменено',
     req_pending: 'Ожидает',
     req_approved: 'Одобрено ✓',
     req_phone_pending: 'Номер телефона появится после одобрения дающим',
@@ -4343,7 +4365,26 @@ async function requestNotificationPermission() {
     }
     if (window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
       try { await window.Capacitor.Plugins.LocalNotifications.requestPermissions(); } catch(e) {}
+      // Tapping a notification deep-links via its `extra` payload.
+      try {
+        await window.Capacitor.Plugins.LocalNotifications.addListener(
+          'localNotificationActionPerformed',
+          (ev) => handleNotificationTap(ev && ev.notification && ev.notification.extra)
+        );
+      } catch(e) {}
     }
+  }
+}
+
+// Route a tapped notification to the right place. Runs after the map exists
+// (the listener is only attached during init, which follows map creation).
+function handleNotificationTap(extra) {
+  if (!extra || !extra.action) return;
+  if (extra.action === 'match-item' && extra.item) {
+    document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
+    goToItemPin(extra.item);
+  } else if (extra.action === 'open-matches') {
+    openMatches();
   }
 }
 
@@ -4555,7 +4596,8 @@ function renderMatchesList(rows) {
     const already = !!myReq[r.other_item_id];
     const ctx = t('match_for').replace('{item}', r.my_item_title || '');
     return `
-      <div class="item-card">
+      <div class="item-card match-card">
+        <button class="match-cancel-x" title="${t('match_cancel')}" onclick="cancelMatch(${r.match_id})">✕</button>
         ${r.other_item_image_url ? `<img src="${r.other_item_image_url}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;"/>` : ''}
         <div class="item-card-title">${r.other_item_title}<span class="match-side-badge ${sideClass}">${sideLabel}</span></div>
         <div class="item-card-meta">${catLabel(r.other_item_category)}</div>
@@ -4593,6 +4635,20 @@ async function requestMatch(otherItemId, btn) {
   } catch(e) {
     showToast(t('toast_error'));
   }
+}
+
+// Cancel a match: confirm, flag it dismissed server-side, drop it from the list.
+function cancelMatch(matchId) {
+  if (!confirm(t('match_cancel_confirm'))) return;
+  fetch(`${API_BASE}/match/${matchId}?device_id=${encodeURIComponent(deviceId)}`, { method: 'DELETE' })
+    .then(r => {
+      if (!r.ok) { showToast(t('toast_error')); return; }
+      matchesData = (matchesData || []).filter(x => x.match_id !== matchId);
+      renderMatchesList(matchesData);
+      markMatchesSeen(matchesData);   // recompute the red dot
+      showToast(t('match_cancelled'));
+    })
+    .catch(() => showToast(t('toast_error')));
 }
 
 function seeMatchOnMap(matchId) {
@@ -4665,7 +4721,12 @@ async function checkForMatches() {
             id: Math.floor((Date.now() + 3) % 2147483647),
             title: t('notif_match_title'),
             body: message,
-            schedule: { at: new Date(Date.now() + 1000) }
+            schedule: { at: new Date(Date.now() + 1000) },
+            // Tapping the notification deep-links: a single match flies to the
+            // item's pin; multiple opens the Matches panel.
+            extra: newRows.length === 1
+              ? { action: 'match-item', item: otherItem }
+              : { action: 'open-matches' }
           }]
         });
       } catch(e) {}
