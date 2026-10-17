@@ -328,12 +328,13 @@ def _llm_pick_matches(item, candidates):
         return {c["id"] for c in candidates if normalize_title(c["title"]) == nt}
 
 def _email_both_sides(cur, item_a, item_b):
-    """Email both owners of a newly created match. Each gets the other user's
-    nickname + phone and both item titles, in their own stored language. Uses
-    the caller's cursor for the user lookups; emailing is best-effort."""
+    """Email both owners of a newly created match. No contact details are sent
+    — each side just gets a localized suggestion nudging them back to the app.
+    item_a / item_b must each carry 'device_id', 'title', 'post_type'. Uses the
+    caller's cursor for the user lookups; emailing is best-effort."""
     def _user(device_id):
         cur.execute(
-            "SELECT email, language, nickname, phone FROM users WHERE device_id = %s",
+            "SELECT email, language FROM users WHERE device_id = %s",
             (device_id,),
         )
         r = cur.fetchone()
@@ -342,16 +343,16 @@ def _email_both_sides(cur, item_a, item_b):
     ua = _user(item_a["device_id"])
     ub = _user(item_b["device_id"])
 
-    # Owner of item_a hears about user B + item B, and vice versa.
+    # Each recipient hears about the OTHER item, phrased from their side.
     send_match_email(
         ua.get("email"), ua.get("language"),
-        ub.get("nickname"), ub.get("phone"),
         item_a.get("title"), item_b.get("title"),
+        recipient_is_taker=(item_a.get("post_type") == "take"),
     )
     send_match_email(
         ub.get("email"), ub.get("language"),
-        ua.get("nickname"), ua.get("phone"),
         item_b.get("title"), item_a.get("title"),
+        recipient_is_taker=(item_b.get("post_type") == "take"),
     )
 
 def check_and_create_matches(item_id):
@@ -415,8 +416,9 @@ def check_and_create_matches(item_id):
             """, (give_id, take_id, time.time()))
             conn.commit()
             new_matches.append({"give_item_id": give_id, "take_item_id": take_id})
-            # Brand-new pair → email both sides with each other's details.
+            # Brand-new pair → email both sides (no contact details revealed).
             try:
+                c["post_type"] = other_type  # candidate query doesn't select it
                 _email_both_sides(cur, item, c)
             except Exception as e:
                 print("Match email dispatch failed:", e)
@@ -1192,75 +1194,53 @@ def send_interest_email(to_addr, language, requester_name, item_title, is_take):
         print("Interest email failed:", e)
         return False
 
-# Localized copy for the "you have a match!" email. Symmetric — both sides of
-# a match get the same shape: who the other person is, both items, and how to
-# reach them. {me}=recipient's item, {other_item}=the matched item,
-# {name}=other user's nickname, {phone}=other user's phone.
+# Localized copy for the "you have a match!" email. NO contact details are
+# ever revealed here — the phone/name connection only happens in-app once both
+# sides opt in. The email just nudges the user back to the app to see the match.
+# {me}=recipient's own item, {other}=the matched item on the other side.
 MATCH_EMAIL = {
     "il": {
-        "subject": "יש לך התאמה ב-iNeed! 🎉",
-        "intro": "מצאנו לך התאמה! ל{name} יש משהו שמתאים לך.",
-        "my_label": "הפריט שלך",
-        "their_label": "הפריט של {name}",
-        "contact_label": "ליצירת קשר עם {name}",
+        "subject": "מצאנו לך התאמה ב-iNeed! 🎉",
+        "line_take": "מכיוון שפרסמת שאתה צריך „{me}“, אולי יתאים לך „{other}“.",
+        "line_give": "מכיוון שאתה מחלק „{me}“, מישהו בקרבתך מחפש בדיוק את זה: „{other}“.",
         "cta": "פתח/י את iNeed",
         "rtl": True,
     },
     "en": {
-        "subject": "You have a match on iNeed! 🎉",
-        "intro": "We found you a match! {name} has something for you.",
-        "my_label": "Your item",
-        "their_label": "{name}’s item",
-        "contact_label": "Contact {name}",
+        "subject": "We found you a match on iNeed! 🎉",
+        "line_take": "Since you posted that you need “{me}”, you might like “{other}”.",
+        "line_give": "Since you’re giving away “{me}”, someone nearby is looking for exactly that: “{other}”.",
         "cta": "Open iNeed",
         "rtl": False,
     },
     "cs": {
-        "subject": "Máte shodu na iNeed! 🎉",
-        "intro": "Našli jsme vám shodu! {name} má něco pro vás.",
-        "my_label": "Vaše položka",
-        "their_label": "Položka uživatele {name}",
-        "contact_label": "Kontaktovat {name}",
+        "subject": "Našli jsme vám shodu na iNeed! 🎉",
+        "line_take": "Protože jste zveřejnili, že potřebujete „{me}“, mohlo by se vám líbit „{other}“.",
+        "line_give": "Protože rozdáváte „{me}“, někdo ve vašem okolí hledá přesně tohle: „{other}“.",
         "cta": "Otevřít iNeed",
         "rtl": False,
     },
     "ru": {
-        "subject": "У вас есть совпадение в iNeed! 🎉",
-        "intro": "Мы нашли вам совпадение! У {name} есть кое-что для вас.",
-        "my_label": "Ваша вещь",
-        "their_label": "Вещь пользователя {name}",
-        "contact_label": "Связаться с {name}",
+        "subject": "Мы нашли вам совпадение в iNeed! 🎉",
+        "line_take": "Поскольку вы написали, что вам нужно «{me}», вам может подойти «{other}».",
+        "line_give": "Поскольку вы отдаёте «{me}», кто-то рядом ищет именно это: «{other}».",
         "cta": "Открыть iNeed",
         "rtl": False,
     },
 }
 
-def send_match_email(to_addr, language, other_name, other_phone, my_item_title, other_item_title):
-    """Tell one side of a new match about the other side — who they are, both
-    items, and the phone number to reach them. Localized to the recipient's
-    stored language. Best-effort: never raises."""
+def send_match_email(to_addr, language, my_item_title, other_item_title, recipient_is_taker):
+    """Nudge one side of a new match back into the app. Reveals NO contact
+    details — just a suggestion phrased from the recipient's point of view.
+    Localized to the recipient's stored language. Best-effort: never raises."""
     if not to_addr:
         return False
     copy = MATCH_EMAIL.get(normalize_lang(language), MATCH_EMAIL["il"])
-    name = other_name or "—"
     align = "right" if copy["rtl"] else "left"
-    phone_block = ""
-    if other_phone:
-        phone_block = f"""
-      <p style="font-size:15px;margin:4px 0 0;text-align:{align};color:#555;">
-        {copy['contact_label'].format(name=name)}:
-        <a href="tel:{other_phone}" style="color:#F44336;font-weight:700;text-decoration:none;">{other_phone}</a>
-      </p>
-        """
+    tpl = copy["line_take"] if recipient_is_taker else copy["line_give"]
+    line = tpl.format(me=my_item_title or "", other=other_item_title or "")
     html = f"""
-      <p style="font-size:17px;font-weight:700;margin:0 0 16px;text-align:{align};">{copy['intro'].format(name=name)}</p>
-      <div style="background:#f6f6f6;border-radius:10px;padding:14px 16px;margin:0 0 8px;text-align:{align};">
-        <p style="font-size:13px;color:#888;margin:0 0 2px;">{copy['my_label']}</p>
-        <p style="font-size:16px;font-weight:700;margin:0 0 10px;">{my_item_title or ''}</p>
-        <p style="font-size:13px;color:#888;margin:0 0 2px;">{copy['their_label'].format(name=name)}</p>
-        <p style="font-size:16px;font-weight:700;margin:0;">{other_item_title or ''}</p>
-      </div>
-      {phone_block}
+      <p style="font-size:17px;font-weight:700;margin:0 0 4px;text-align:{align};">{line}</p>
       <div style="text-align:center;margin:24px 0 8px;">
         <a href="{PLAY_STORE_URL}"
            style="display:inline-block;background:#F44336;color:#fff;text-decoration:none;

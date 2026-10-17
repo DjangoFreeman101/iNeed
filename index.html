@@ -97,6 +97,29 @@
     }
     .unread-dot.show { display:block; }
 
+    /* ── Matches button (bottom-left, left of the + button) ── */
+    #matches-btn {
+      position:fixed; bottom:24px; left:16px;
+      background:white; border:none; border-radius:23px;
+      height:46px; padding:0 14px; cursor:pointer;
+      z-index:2000; box-shadow:0 3px 10px rgba(0,0,0,0.2);
+      display:flex; align-items:center; gap:6px;
+      font-family:'Heebo',sans-serif; font-size:13px; font-weight:700;
+      color:#F44336; max-width:calc(50% - 44px);
+    }
+    #matches-btn svg { width:18px; height:18px; flex:0 0 auto; }
+    #matches-btn span[data-i18n] { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #post-btn { z-index:2001; }  /* always painted above the Matches pill if they ever touch */
+
+    /* ── Match cards ── */
+    .match-ctx { font-size:13px; color:var(--gray); margin:2px 0 10px; }
+    .match-side-badge {
+      display:inline-block; font-size:12px; font-weight:700;
+      padding:2px 8px; border-radius:10px; margin-left:6px;
+    }
+    .match-side-badge.give { background:#e8f5e9; color:#2e7d32; }
+    .match-side-badge.take { background:#fff3e0; color:#e65100; }
+
     /* ── Swipe to action ── */
     .swipe-wrap { position:relative; overflow:hidden; border-radius:12px; margin-bottom:10px; }
     .swipe-reveal {
@@ -887,6 +910,11 @@
 
 <div id="map"></div>
 
+<button id="matches-btn" onclick="openMatches()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>
+  <span data-i18n="matches_btn">התאמות</span>
+  <span id="matches-dot" class="unread-dot"></span>
+</button>
 <button id="post-btn" onclick="openPostPanel()">+</button>
 <button id="my-items-btn" onclick="openMyItems()" style="cursor:pointer;"><img style="pointer-events:none;" src="data:image/png;base64,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" width="22" height="22"/><span id="my-items-dot" class="unread-dot"></span></button>
 <button id="requests-btn" onclick="openMyRequests()" style="cursor:pointer;"><img style="pointer-events:none;" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAACXBIWXMAAAsTAAALEwEAmpwYAAADZ0lEQVR4nO2azW9MURjGf9LqjFTU1EetJF1SYeFvQEvQLrqhdqSx8JFiiYbEZxMrSf8O0jQlCJNoqa+F0NbHBhU0dqqNcuXluckJMzVz59zpXOmT3GRmzjnvOc993/Pe8z53YB7/L+qBVuAi0AeMAJ+BaV32+bnarM9OIEOFIA3sAa4B34GgyGsGGAA6gNRcEFgEHAHGnUVNATeB4/LMGt3xhboy+s3aTgC3NCYc/w7o0s0pC7YBr5wFDAN7gboItpYC+4AHjr2XQAsxwu5UrzPhQ2CzR/vNwGPH/uU4vLNKC7cJvgAHgCrfk/Db5iFg0vF2gy/jjXJ3oKyzjvixHhjVnC+0hpI9EZK4qxRbLO4BgxHGLQOGHDKRPZN2wslI1Ea0E8Z8FNQ6ZIaj7pleJ5yieMIHkdAzo04CKDrFhhu71D1RKpFwz4QJwLJbwQ+78Dlh2YkKIGI47OyXgkLsqPOcqKogItXAE9kyUrMipaOCdd6EH/giYtgqW+P/8kqHkyGoQCILnEy6a7aO19XJzk6VSMTQKXv95EG9jtVTEQ+A5SKSUX3zLd862zThDfzCNxHDbdncTg70qNHqiUon0i2bF3I19qlxRwKItMnmlVyNY2q0Ks4HrCo87xC55LGcbZJN0wX+woQa7WzjA+dy1OinPdleLnufcjVOq7HG02TvI4gRAZAtwHbK0QliJ+IKE8Vcdwq0n83X13donc2xSNOzYseY581erc1uIfZRqdJ+ix19ImIKYKLRIyImniUarSJiamGikXEOjaYAJhoD8orJmInGbhExLTbRSAFvRWYLCUeXiDyKSd8tG9KOTGqCcjmQLfIYUzBaNGBS4lhiiSB5MpBc6ev8FVVIf10KkbRkoUBCclQRuxQscd5mDZZSba5QFWaD7+t7udDgaFgmk64stWxulKEwzDYQPzY6+rO9DVjtq/5vcMJsUtprHEfyauCYU+QNqaz1KmSknQQQSFBu8SiF2quMZ7L9I49Y4VWRaXZCLVAcd0b8F4Nlw/3AU8feyCxvi71LS2mFV3icCRQOpgCelO7UpIXWqL+F51qgHTilZ8eMM/4NcFAyUjk1sl9ISRXv/2NRhV5TGtte4J4L4iLiok5arNXmV5VtJuSpr8AHhY2pg2dUyC0uco5sESrLPJhL/ATcq2k2baxZkQAAAABJRU5ErkJggg==" width="24" height="24"/><span id="requests-dot" class="unread-dot"></span></button>
@@ -1063,6 +1091,17 @@
     <span class="panel-title" data-i18n="myitems_title">הפריטים שלי</span>
   </div>
   <div class="panel-body" id="my-items-body">
+    <p style="color:var(--gray); text-align:center;" data-i18n="loading">טוען...</p>
+  </div>
+</div>
+
+<!-- Matches panel (give/take matches the LLM found for me) -->
+<div id="matches-panel" class="panel">
+  <div class="panel-header">
+    <button class="panel-back" onclick="closePanel('matches-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
+    <span class="panel-title" data-i18n="matches_title">ההתאמות שלי</span>
+  </div>
+  <div class="panel-body" id="matches-body">
     <p style="color:var(--gray); text-align:center;" data-i18n="loading">טוען...</p>
   </div>
 </div>
@@ -1493,6 +1532,16 @@ const I18N = {
     mycard_mark_taken: 'סמן כנלקח',
     mycard_mark_available: 'החזר לזמין',
     mycard_goto_pin: 'מעבר לפרסום במפה',
+    matches_btn: 'התאמות',
+    matches_title: 'ההתאמות שלי',
+    matches_empty: 'אין התאמות עדיין. פרסם פריט ונמצא עבורך התאמה בקרבת מקום.',
+    match_i_want: 'אני רוצה',
+    match_give_to: 'אני מוסר',
+    match_see_map: 'הצג במפה',
+    match_offering: 'מציע/ה',
+    match_wants: 'מחפש/ת',
+    match_for: 'מתאים ל„{item}“ שלך',
+    match_sent: 'נשלח! נעדכן את הצד השני',
     req_pending: 'ממתין',
     req_approved: 'אושר ✓',
     req_phone_pending: 'מספר הטלפון יופיע לאחר אישור המוסר',
@@ -1722,6 +1771,16 @@ const I18N = {
     mycard_mark_taken: 'Mark as taken',
     mycard_mark_available: 'Mark available',
     mycard_goto_pin: 'Go to posting on map',
+    matches_btn: 'Matches',
+    matches_title: 'My matches',
+    matches_empty: 'No matches yet. Post an item and we’ll find you a match nearby.',
+    match_i_want: 'I want',
+    match_give_to: 'Give to',
+    match_see_map: 'See on map',
+    match_offering: 'Offering',
+    match_wants: 'Looking for',
+    match_for: 'Matches your “{item}”',
+    match_sent: 'Sent! We’ll let them know',
     req_pending: 'Awaiting',
     req_approved: 'Approved ✓',
     req_phone_pending: 'The phone number will appear after the giver approves',
@@ -1951,6 +2010,16 @@ const I18N = {
     mycard_mark_taken: 'Označit jako převzaté',
     mycard_mark_available: 'Označit jako dostupné',
     mycard_goto_pin: 'Přejít na příspěvek na mapě',
+    matches_btn: 'Shody',
+    matches_title: 'Moje shody',
+    matches_empty: 'Zatím žádné shody. Přidejte položku a najdeme vám shodu ve vašem okolí.',
+    match_i_want: 'Chci to',
+    match_give_to: 'Darovat',
+    match_see_map: 'Zobrazit na mapě',
+    match_offering: 'Nabízí',
+    match_wants: 'Hledá',
+    match_for: 'Odpovídá vaší položce „{item}“',
+    match_sent: 'Odesláno! Dáme druhé straně vědět',
     req_pending: 'Čeká se',
     req_approved: 'Schváleno ✓',
     req_phone_pending: 'Telefonní číslo se zobrazí po schválení dárcem',
@@ -2180,6 +2249,16 @@ const I18N = {
     mycard_mark_taken: 'Отметить как переданное',
     mycard_mark_available: 'Вернуть в доступные',
     mycard_goto_pin: 'Перейти к публикации на карте',
+    matches_btn: 'Совпадения',
+    matches_title: 'Мои совпадения',
+    matches_empty: 'Пока нет совпадений. Опубликуйте вещь, и мы найдём вам совпадение поблизости.',
+    match_i_want: 'Хочу',
+    match_give_to: 'Отдать',
+    match_see_map: 'Показать на карте',
+    match_offering: 'Отдаёт',
+    match_wants: 'Ищет',
+    match_for: 'Подходит к вашей вещи «{item}»',
+    match_sent: 'Отправлено! Мы сообщим другой стороне',
     req_pending: 'Ожидает',
     req_approved: 'Одобрено ✓',
     req_phone_pending: 'Номер телефона появится после одобрения дающим',
@@ -4428,12 +4507,119 @@ async function checkForNewInterest() {
   }
 }
 
+// ── Matches menu ────────────────────────────────────────
+let matchesData = [];
+
+function setMatchesDot(show) {
+  const dot = document.getElementById('matches-dot');
+  if (dot) dot.className = 'unread-dot' + (show ? ' show' : '');
+}
+function getSeenMatchIds() {
+  return new Set(JSON.parse(localStorage.getItem('ineed_seen_match_ids') || '[]'));
+}
+function markMatchesSeen(rows) {
+  const seen = getSeenMatchIds();
+  (rows || []).forEach(r => seen.add(r.match_id));
+  localStorage.setItem('ineed_seen_match_ids', JSON.stringify(Array.from(seen)));
+  setMatchesDot(false);
+}
+
+async function openMatches() {
+  document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
+  closeMenu();
+  openPanel('matches-panel');
+  const body = document.getElementById('matches-body');
+  body.innerHTML = '<p style="color:var(--gray);text-align:center;">' + t('loading') + '</p>';
+  try {
+    const res = await fetch(`${API_BASE}/my-matches/${deviceId}`);
+    matchesData = res.ok ? await res.json() : [];
+  } catch(e) { matchesData = []; }
+  markMatchesSeen(matchesData);      // viewing clears the red dot
+  renderMatchesList(matchesData);
+}
+
+function renderMatchesList(rows) {
+  const body = document.getElementById('matches-body');
+  if (!rows.length) {
+    body.innerHTML = '<p style="color:var(--gray);text-align:center;margin-top:40px;">' + t('matches_empty') + '</p>';
+    return;
+  }
+  const myReq = JSON.parse(localStorage.getItem('my_requests') || '{}');
+  body.innerHTML = rows.map(r => {
+    // I'm the taker when MY item is a 'take' — then the other side is a give I want.
+    const iAmTaker = r.my_post_type === 'take';
+    const actionLabel = iAmTaker ? t('match_i_want') : t('match_give_to');
+    const otherIsGive = r.other_post_type === 'give';
+    const sideLabel = otherIsGive ? t('match_offering') : t('match_wants');
+    const sideClass = otherIsGive ? 'give' : 'take';
+    const already = !!myReq[r.other_item_id];
+    const ctx = t('match_for').replace('{item}', r.my_item_title || '');
+    return `
+      <div class="item-card">
+        ${r.other_item_image_url ? `<img src="${r.other_item_image_url}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;"/>` : ''}
+        <div class="item-card-title">${r.other_item_title}<span class="match-side-badge ${sideClass}">${sideLabel}</span></div>
+        <div class="item-card-meta">${catLabel(r.other_item_category)}</div>
+        <div class="match-ctx">${ctx}</div>
+        <div class="item-card-actions">
+          <button class="item-card-btn" style="background:${already ? 'var(--gray)' : 'var(--green)'};color:white;" ${already ? 'disabled' : ''}
+            onclick="requestMatch(${r.other_item_id}, this)">${already ? t('match_sent') : actionLabel}</button>
+          <button class="item-card-btn" style="background:#f0f0f0;color:var(--dark);"
+            onclick="seeMatchOnMap(${r.match_id})">${t('match_see_map')}</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// Opt-in: tapping "I want" / "Give to" records a request on the other item,
+// which is exactly the existing interest flow (emails + notifies the owner).
+async function requestMatch(otherItemId, btn) {
+  try {
+    const res = await fetch(`${API_BASE}/request`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ item_id: otherItemId, device_id: deviceId })
+    });
+    const data = await res.json();
+    if (data && data.ok) {
+      const myReq = JSON.parse(localStorage.getItem('my_requests') || '{}');
+      myReq[otherItemId] = true;
+      localStorage.setItem('my_requests', JSON.stringify(myReq));
+      if (btn) { btn.textContent = t('match_sent'); btn.disabled = true; btn.style.background = 'var(--gray)'; }
+      showToast(t('match_sent'));
+      loadItems();
+    } else {
+      showToast(t('toast_error'));
+    }
+  } catch(e) {
+    showToast(t('toast_error'));
+  }
+}
+
+function seeMatchOnMap(matchId) {
+  const r = (matchesData || []).find(x => x.match_id === matchId);
+  if (!r) return;
+  const otherItem = {
+    id: r.other_item_id, title: r.other_item_title, category: r.other_item_category,
+    description: r.other_item_description, image_url: r.other_item_image_url,
+    lat: r.other_item_lat, lon: r.other_item_lon, post_type: r.other_post_type,
+    device_id: r.other_device_id, nickname: r.other_nickname, request_count: 0
+  };
+  document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
+  goToItemPin(otherItem);
+}
+
 // ── Give/take matches: notify both sides once, link to the other pin ──
 async function checkForMatches() {
   try {
     const res = await fetch(`${API_BASE}/my-matches/${deviceId}`);
     if (!res.ok) return;
     const rows = await res.json();
+
+    // Passive red dot on the Matches button for any not-yet-viewed match.
+    try {
+      const seen = getSeenMatchIds();
+      setMatchesDot(rows.some(r => !seen.has(r.match_id)));
+    } catch(e) {}
 
     const storedRaw = localStorage.getItem('ineed_notified_match_ids');
     const isFirstRun = storedRaw === null;
