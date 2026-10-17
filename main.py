@@ -595,8 +595,9 @@ async def suggest_item(image: UploadFile = File(...), language: str = Form("il")
 
 @app.post("/suggest-search")
 def suggest_search(body: SuggestSearchBody):
-    """Turn a free-text description of a NEED into the simple common item name,
-    so a searcher who types 'a tool to hang a picture' gets 'hammer'. Best-effort."""
+    """Turn a free-text description ("a tool to hang a picture") into the 3 most
+    likely specific items, each with a simple name, a category, and a one-line
+    description — so the user picks one and we fill the whole form. Best-effort."""
     client = _openai_client()
     if not client or not (body.text or "").strip():
         return {"ok": False}
@@ -604,21 +605,43 @@ def suggest_search(body: SuggestSearchBody):
         lang = normalize_lang(body.language)
         lang_name = {"il": "Hebrew", "en": "English", "cs": "Czech", "ru": "Russian"}.get(lang, "Hebrew")
         prompt = (
-            "A user of a give-and-take app is describing something they are "
-            "looking for. Give the single simplest common item name they most "
-            "likely mean — the plain word a person would search for. "
-            f'Reply in {lang_name}, with ONLY that short name (1-3 words), nothing else.\n\n'
+            "A user of a neighborhood give-and-take app typed a rough description "
+            "of an item. Suggest the 3 most likely SPECIFIC items they mean. "
+            "Return JSON of exactly this shape:\n"
+            '{"suggestions":[{"title": "...", "category": "...", "description": "..."}, ...]}\n'
+            '  title: the SIMPLE common name a person would search (1-3 words, '
+            "everyday language, no brands).\n"
+            '  category: EXACTLY ONE of: furniture, electronics, clothing, books, '
+            "kitchen, toys, sports, garden, other.\n"
+            '  description: one short natural sentence.\n'
+            f"Write title and description in {lang_name}; keep category an English "
+            "key. Give exactly 3 distinct suggestions. Respond with ONLY the JSON.\n\n"
             f'They wrote: "{body.text.strip()}"'
         )
         resp = client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=20,
+            max_tokens=300,
         )
-        suggestion = (resp.choices[0].message.content or "").strip().strip('".')[:80]
-        if not suggestion:
+        parsed = _parse_json_reply(resp.choices[0].message.content)
+        raw = (parsed or {}).get("suggestions") if isinstance(parsed, dict) else None
+        if not raw:
             return {"ok": False}
-        return {"ok": True, "suggestion": suggestion}
+        out = []
+        for s in raw[:3]:
+            if not isinstance(s, dict):
+                continue
+            cat = str(s.get("category", "")).strip().lower()
+            if cat not in CATEGORY_KEYS:
+                cat = "other"
+            title = (s.get("title") or "").strip()[:80]
+            if not title:
+                continue
+            out.append({"title": title, "category": cat,
+                        "description": (s.get("description") or "").strip()[:300]})
+        if not out:
+            return {"ok": False}
+        return {"ok": True, "suggestions": out}
     except Exception as e:
         print("suggest-search failed:", e)
         return {"ok": False}

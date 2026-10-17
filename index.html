@@ -230,6 +230,18 @@
     }
     .ai-chip:active { opacity:0.8; }
     .ai-chip:disabled { opacity:0.5; cursor:default; }
+    .ai-options {
+      margin-top:8px; border:1px solid #f5c6cb; border-radius:10px;
+      overflow:hidden; background:#fff;
+    }
+    .ai-option {
+      padding:11px 14px; cursor:pointer; display:flex; align-items:center;
+      justify-content:space-between; gap:8px; border-bottom:1px solid #f3f3f3;
+    }
+    .ai-option:last-child { border-bottom:none; }
+    .ai-option:active { background:#fdecea; }
+    .ai-option-title { font-weight:700; color:var(--dark); font-size:14px; }
+    .ai-option-cat { font-size:12px; color:var(--gray); flex-shrink:0; }
     .ai-autofill-btn {
       width:100%; background:var(--accent); color:#fff; border:none;
       border-radius:12px; padding:13px; font-size:15px; font-weight:700;
@@ -973,7 +985,8 @@
     <div class="form-group">
       <label class="form-label" data-i18n="post_title_label">כותרת *</label>
       <input type="text" class="form-input" id="post-title" data-i18n-ph="post_title_ph" placeholder="מה אתה נותן / מחפש?" maxlength="80"/>
-      <button type="button" id="ai-suggest-name-btn" class="ai-chip" onclick="aiSuggestName()">✨ <span data-i18n="ai_suggest_name">הצע שם פשוט יותר</span></button>
+      <button type="button" id="ai-suggest-name-btn" class="ai-chip" onclick="aiSuggestOptions()">✨ <span data-i18n="ai_suggest_name">לא בטוח? הצע פריטים</span></button>
+      <div id="ai-name-options" class="ai-options" style="display:none;"></div>
     </div>
     <div class="form-group">
       <label class="form-label" data-i18n="post_category_label">קטגוריה *</label>
@@ -1487,7 +1500,7 @@ const I18N = {
     ai_failed: 'לא הצלחתי לנתח את התמונה, נסה שוב',
     ai_analyzing: 'מנתח את התמונה...',
     ai_filled: 'מולא אוטומטית — אפשר לערוך',
-    ai_suggest_name: 'הצע שם פשוט יותר',
+    ai_suggest_name: 'לא בטוח? הצע פריטים',
     ai_need_text: 'כתוב קודם מה אתה מחפש',
     ai_suggested: 'עודכן לפי ההצעה',
     go_there: 'נווט לשם',
@@ -1716,7 +1729,7 @@ const I18N = {
     ai_failed: "Couldn't analyze the photo, try again",
     ai_analyzing: 'Analyzing photo...',
     ai_filled: 'Auto-filled — you can edit',
-    ai_suggest_name: 'Suggest a simpler name',
+    ai_suggest_name: 'Not sure? Suggest items',
     ai_need_text: 'Type what you want first',
     ai_suggested: 'Updated with the suggestion',
     go_there: 'Go There',
@@ -1945,7 +1958,7 @@ const I18N = {
     ai_failed: 'Fotku se nepodařilo analyzovat, zkuste to znovu',
     ai_analyzing: 'Analyzuji fotku...',
     ai_filled: 'Předvyplněno — lze upravit',
-    ai_suggest_name: 'Navrhnout jednodušší název',
+    ai_suggest_name: 'Nevíte? Navrhnout položky',
     ai_need_text: 'Nejdřív napiš, co hledáš',
     ai_suggested: 'Aktualizováno podle návrhu',
     go_there: 'Navigovat tam',
@@ -2174,7 +2187,7 @@ const I18N = {
     ai_failed: 'Не удалось проанализировать фото, попробуйте снова',
     ai_analyzing: 'Анализирую фото...',
     ai_filled: 'Заполнено автоматически — можно изменить',
-    ai_suggest_name: 'Предложить простое название',
+    ai_suggest_name: 'Не уверены? Предложить варианты',
     ai_need_text: 'Сначала напишите, что ищете',
     ai_suggested: 'Обновлено по предложению',
     go_there: 'Проложить маршрут',
@@ -3044,11 +3057,14 @@ async function aiSuggestFromPhoto(file) {
 
 // AI: turn whatever the user typed in the title ("a tool to hang a picture")
 // into the simple common name ("hammer"). Replaces the title; it stays editable.
-async function aiSuggestName() {
+// Text helper: the user types a rough description in the title, taps the chip,
+// and gets 3 suggested items in a dropdown. Tapping one fills ALL fields.
+async function aiSuggestOptions() {
   const titleEl = document.getElementById('post-title');
   const text = (titleEl && titleEl.value || '').trim();
   if (!text) { showToast(t('ai_need_text')); return; }
   const btn = document.getElementById('ai-suggest-name-btn');
+  const box = document.getElementById('ai-name-options');
   if (btn) btn.disabled = true;
   try {
     const res = await fetch(`${API_BASE}/suggest-search`, {
@@ -3056,17 +3072,40 @@ async function aiSuggestName() {
       body: JSON.stringify({ text: text, language: aiLang() })
     });
     const data = await res.json();
-    if (data && data.ok && data.suggestion) {
-      titleEl.value = data.suggestion;
-      showToast(t('ai_suggested'));
-    } else {
-      showToast(t('toast_error'));
+    if (!data || !data.ok || !data.suggestions || !data.suggestions.length) {
+      showToast(t('ai_failed'));
+      if (box) box.style.display = 'none';
+      return;
     }
+    window._aiOptions = data.suggestions;
+    box.innerHTML = data.suggestions.map((s, i) => {
+      const cat = catLabel(s.category) || '';
+      return `<div class="ai-option" onclick="applyAiOption(${i})">
+        <span class="ai-option-title">${s.title}</span>
+        ${cat ? `<span class="ai-option-cat">${cat}</span>` : ''}
+      </div>`;
+    }).join('');
+    box.style.display = 'block';
   } catch (e) {
-    showToast(t('toast_error'));
+    showToast(t('ai_failed'));
   } finally {
     if (btn) btn.disabled = false;
   }
+}
+
+// Apply a chosen suggestion: fill title, category and description, close the list.
+function applyAiOption(i) {
+  const s = (window._aiOptions || [])[i];
+  if (!s) return;
+  const titleEl = document.getElementById('post-title');
+  const catEl = document.getElementById('post-category');
+  const descEl = document.getElementById('post-desc');
+  if (titleEl && s.title) titleEl.value = s.title;
+  if (catEl && s.category) catEl.value = s.category;
+  if (descEl && s.description) descEl.value = s.description;
+  const box = document.getElementById('ai-name-options');
+  if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+  showToast(t('ai_suggested'));
 }
 
 async function submitItem() {
