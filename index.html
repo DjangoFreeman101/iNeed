@@ -494,6 +494,47 @@
       cursor:pointer; flex-shrink:0;
     }
 
+    /* ── Guest / browse-first ── */
+    #guest-signup-btn {
+      align-items:center; gap:4px;
+      background:var(--accent); color:#fff; border:none;
+      border-radius:16px; height:30px; padding:0 12px;
+      font-family:'Heebo',sans-serif; font-size:13px; font-weight:700;
+      cursor:pointer; white-space:nowrap;
+    }
+    #auth-close {
+      position:absolute; top:14px; inset-inline-end:16px; z-index:5;
+      width:36px; height:36px; border-radius:50%;
+      background:rgba(255,255,255,0.12); color:#fff; border:none;
+      font-size:18px; line-height:1; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+    }
+    #guest-gate-overlay {
+      display:none; position:fixed; inset:0; z-index:99990;
+      background:rgba(0,0,0,0.55);
+      align-items:center; justify-content:center; padding:24px;
+    }
+    #guest-gate-modal {
+      background:#fff; border-radius:18px; padding:26px 22px;
+      width:100%; max-width:340px; text-align:center;
+      box-shadow:0 10px 40px rgba(0,0,0,0.3);
+    }
+    #guest-gate-logo {
+      font-family:'Roboto',sans-serif; color:var(--accent);
+      font-size:30px; font-weight:900; direction:ltr; margin-bottom:10px;
+    }
+    #guest-gate-title { font-size:19px; font-weight:800; color:var(--dark); margin-bottom:8px; }
+    #guest-gate-text { font-size:14px; color:var(--gray); line-height:1.5; margin-bottom:20px; }
+    .guest-gate-signup {
+      width:100%; background:var(--accent); color:#fff; border:none;
+      border-radius:12px; padding:14px; font-size:16px; font-weight:700;
+      cursor:pointer; font-family:'Heebo',sans-serif;
+    }
+    .guest-gate-cancel {
+      width:100%; background:none; color:var(--gray); border:none;
+      padding:12px 0 0; font-size:15px; cursor:pointer; font-family:'Heebo',sans-serif;
+    }
+
     /* ── Loading ── */
     #loading {
       position:fixed; top:0; left:0; right:0; bottom:0;
@@ -768,15 +809,14 @@
   window._loadingTimer = setTimeout(function() {
     var el = document.getElementById('loading');
     if (el) el.remove();
-    var auth = document.getElementById('auth-screen');
-    // If no user saved, show the auth gate
-    if (!localStorage.getItem('ineed_user') && auth) {
-      auth.style.display = 'flex';
-    }
+    // Browse-first: never force the auth gate here. Guests see the map; the
+    // sign-up button + locked-feature popup handle auth from there.
   }, 4000);
 </script>
 
 <div id="auth-screen">
+
+  <button id="auth-close" onclick="closeAuthScreen()" title="✕">✕</button>
 
   <!-- Step: gate -->
   <div class="auth-step" id="auth-step-gate" style="display:flex;">
@@ -902,6 +942,7 @@
     </button>
   </div>
   <div id="header-actions">
+    <button id="guest-signup-btn" style="display:none;" onclick="openAuthScreen('gate')" data-i18n="guest_signup">הרשמה</button>
     <button class="header-btn" onclick="openFilterPanel()" style="position:relative;" title="סינון">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
       <span id="filter-active-dot" style="display:none; position:absolute; top:2px; right:2px; width:8px; height:8px; background:#e74c3c; border-radius:50%; border:1.5px solid white;"></span>
@@ -946,6 +987,17 @@
 <div id="upload-overlay">
   <div id="upload-spinner"></div>
   <div id="upload-overlay-text" data-i18n="uploading">מעלה...</div>
+</div>
+
+<!-- Guest sign-up prompt (shown when a guest taps a locked feature) -->
+<div id="guest-gate-overlay" onclick="if(event.target===this) closeGuestGate()">
+  <div id="guest-gate-modal">
+    <div id="guest-gate-logo">iNeed</div>
+    <div id="guest-gate-title" data-i18n="guest_gate_title">נדרש חשבון</div>
+    <div id="guest-gate-text" data-i18n="guest_gate_text">כדי להשתמש בתכונה הזו צריך חשבון. ההרשמה מהירה וחינמית.</div>
+    <button class="guest-gate-signup" data-i18n="guest_gate_signup" onclick="guestGateSignup()">הרשמה / התחברות</button>
+    <button class="guest-gate-cancel" data-i18n="guest_gate_cancel" onclick="closeGuestGate()">לא עכשיו</button>
+  </div>
 </div>
 
 <!-- Report reasons modal -->
@@ -1344,6 +1396,11 @@ const I18N = {
     gate_tagline: 'תן וקח בשכונה שלך',
     gate_signup: 'הרשמה',
     gate_login: 'התחברות',
+    guest_signup: 'הרשמה',
+    guest_gate_title: 'נדרש חשבון',
+    guest_gate_text: 'כדי להשתמש בתכונה הזו צריך חשבון. ההרשמה מהירה וחינמית.',
+    guest_gate_signup: 'הרשמה / התחברות',
+    guest_gate_cancel: 'לא עכשיו',
     signup_name_title: 'איך קוראים לך?',
     signup_name_ph: 'השם שלך',
     btn_next: 'המשך ←',
@@ -1586,6 +1643,11 @@ const I18N = {
     gate_signup: 'Sign up',
     gate_tagline: 'Give and take in your neighborhood',
     gate_login: 'Log in',
+    guest_signup: 'Sign up',
+    guest_gate_title: 'Account needed',
+    guest_gate_text: 'You need an account to use this feature. Signing up is quick and free.',
+    guest_gate_signup: 'Sign up / Log in',
+    guest_gate_cancel: 'Not now',
     signup_name_title: "What's your name?",
     signup_name_ph: 'Your name',
     btn_next: 'Continue →',
@@ -1828,6 +1890,11 @@ const I18N = {
     gate_signup: 'Registrace',
     gate_tagline: 'Dej a vezmi ve svém okolí',
     gate_login: 'Přihlášení',
+    guest_signup: 'Registrace',
+    guest_gate_title: 'Vyžaduje účet',
+    guest_gate_text: 'K použití této funkce potřebujete účet. Registrace je rychlá a zdarma.',
+    guest_gate_signup: 'Registrace / Přihlášení',
+    guest_gate_cancel: 'Teď ne',
     signup_name_title: 'Jak se jmenuješ?',
     signup_name_ph: 'Tvoje jméno',
     btn_next: 'Pokračovat →',
@@ -2069,6 +2136,11 @@ const I18N = {
   ru: {
     gate_signup: 'Регистрация',
     gate_login: 'Вход',
+    guest_signup: 'Регистрация',
+    guest_gate_title: 'Нужен аккаунт',
+    guest_gate_text: 'Для этой функции нужен аккаунт. Регистрация быстрая и бесплатная.',
+    guest_gate_signup: 'Регистрация / Вход',
+    guest_gate_cancel: 'Не сейчас',
     gate_tagline: 'Отдавай и бери по соседству',
     signup_name_title: 'Как тебя зовут?',
     signup_name_ph: 'Твоё имя',
@@ -2482,6 +2554,59 @@ async function initDeviceId() {
 // ── User state ─────────────────────────────────────────
 let currentUser = null;
 let userLat = null, userLon = null;
+// Guest/browse-first state.
+let pendingGuestAction = null;   // action to resume right after a guest signs in
+let appStarted = false;          // map/boot done once
+let userServicesStarted = false; // account-only polling loops started once
+
+function isGuest() { return !currentUser; }
+
+// Gate an account-only action. Logged in -> run it (returns true). Guest ->
+// remember it, show the sign-up popup, return false so the caller bails out.
+function requireAuth(action) {
+  if (currentUser) return true;
+  pendingGuestAction = (typeof action === 'function') ? action : null;
+  showGuestGate();
+  return false;
+}
+function resumePendingAction() {
+  const a = pendingGuestAction; pendingGuestAction = null;
+  if (typeof a === 'function') { try { a(); } catch(e) {} }
+}
+
+// Sign-up popup (shown when a guest taps a locked feature).
+function showGuestGate() {
+  const o = document.getElementById('guest-gate-overlay');
+  if (o) o.style.display = 'flex';
+}
+function closeGuestGate() {
+  const o = document.getElementById('guest-gate-overlay');
+  if (o) o.style.display = 'none';
+  pendingGuestAction = null;
+}
+function guestGateSignup() {           // "Sign up / Log in" in the popup
+  const o = document.getElementById('guest-gate-overlay');
+  if (o) o.style.display = 'none';     // keep pendingGuestAction to resume after auth
+  openAuthScreen('gate');
+}
+
+// The full-screen auth flow is now optional (guests can back out of it).
+function openAuthScreen(step) {
+  const scr = document.getElementById('auth-screen');
+  if (scr) scr.style.display = 'flex';
+  goToAuthStep(step || 'gate');
+}
+function closeAuthScreen() {
+  const scr = document.getElementById('auth-screen');
+  if (scr) scr.style.display = 'none';
+  pendingGuestAction = null;
+}
+
+// Show/hide the guest-only header sign-up button.
+function updateAuthUI() {
+  const b = document.getElementById('guest-signup-btn');
+  if (b) b.style.display = currentUser ? 'none' : 'inline-flex';
+}
 
 // ── Map ────────────────────────────────────────────────
 const map = L.map('map').setView([31.9730, 34.7895], 14);
@@ -2975,6 +3100,7 @@ function showItemInfo(itemId) {
 
 // ── Interest ───────────────────────────────────────────
 async function expressInterest(itemId) {
+  if (!requireAuth(() => expressInterest(itemId))) return;
   const res = await fetch(`${API_BASE}/request`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
@@ -3006,6 +3132,7 @@ async function cancelInterest(itemId) {
 let reportingItemId = null;
 
 function reportImage(itemId) {
+  if (!requireAuth(() => reportImage(itemId))) return;
   reportingItemId = itemId;
   // Reset the form each time it opens
   document.querySelectorAll('#report-modal input[type=checkbox]').forEach(cb => cb.checked = false);
@@ -3288,6 +3415,7 @@ let myItemsData = [];
 let myRequestsData = [];
 
 async function openMyRequests(expandItemId) {
+  if (!requireAuth(() => openMyRequests(expandItemId))) return;
   document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
   openPanel('my-requests-panel');
   const body = document.getElementById('my-requests-body');
@@ -3456,6 +3584,7 @@ function openPrivacy() {
 
 // ── History ────────────────────────────────────────────
 async function openHistory() {
+  if (!requireAuth(openHistory)) return;
   document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
   closeMenu();
   openPanel('history-panel');
@@ -3533,6 +3662,7 @@ async function cancelRequestFromList(itemId) {
 }
 
 async function openMyItems() {
+  if (!requireAuth(openMyItems)) return;
   // Close any open panels first
   document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
   closeMenu();
@@ -3793,6 +3923,7 @@ async function submitEditItem() {
 
 // ── Settings ───────────────────────────────────────────
 function openSettings() {
+  if (!requireAuth(openSettings)) return;
   closeMenu();
   if (currentUser) {
     document.getElementById('settings-nickname').value = currentUser.nickname || '';
@@ -3981,6 +4112,7 @@ async function completeSignup() {
     localStorage.setItem('ineed_user', JSON.stringify(currentUser));
     document.getElementById('auth-screen').style.display = 'none';
     startApp();
+    resumePendingAction();
   } catch(e) {
     authError('signup-final-error', 'שגיאת חיבור — נסה שוב');
   } finally {
@@ -4019,6 +4151,7 @@ async function doLogin() {
     document.getElementById('auth-screen').style.display = 'none';
     await syncMyRequests();
     startApp();
+    resumePendingAction();
   } catch(e) {
     authError('login-error', 'שגיאת חיבור — נסה שוב');
   } finally {
@@ -4279,6 +4412,7 @@ async function geocodeAddress() {
 }
 
 function openPostPanel() {
+  if (!requireAuth(openPostPanel)) return;
   currentPostStep = 1;
   selectedPostType = null;
   if (document.getElementById('btn-give')) document.getElementById('btn-give').className = 'type-btn';
@@ -4567,6 +4701,7 @@ function markMatchesSeen(rows) {
 }
 
 async function openMatches() {
+  if (!requireAuth(openMatches)) return;
   document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
   closeMenu();
   openPanel('matches-panel');
@@ -4844,8 +4979,18 @@ function setPendingExchangeDot(show) {
   // Note: we don't force-hide here, since unread interest may also want it on.
 }
 
+// Boot the app. The MAP runs for everyone (guests included); the account-only
+// polling loops only start once there's a logged-in user. Both halves are
+// idempotent, so this is safe to call again right after a guest signs in.
 function startApp() {
-  // Remove loading screen immediately - don't wait for data
+  startMap();
+  if (currentUser) startUserServices();
+  updateAuthUI();
+}
+
+function startMap() {
+  if (appStarted) return;
+  appStarted = true;
   const loadingEl = document.getElementById('loading');
   if (loadingEl) loadingEl.remove();
   startLocation();
@@ -4862,6 +5007,11 @@ function startApp() {
   });
 
   requestNotificationPermission();
+}
+
+function startUserServices() {
+  if (userServicesStarted || !currentUser) return;
+  userServicesStarted = true;
   setUnreadDot(localStorage.getItem('ineed_has_unread_interest') === '1');
   checkForNewInterest();
   setInterval(checkForNewInterest, 20000);
@@ -4900,24 +5050,27 @@ async function init() {
       if (res.ok) {
         currentUser = await res.json();
         localStorage.setItem('ineed_user', JSON.stringify(currentUser));
-        document.getElementById('loading').remove();
         await syncMyRequests();
-        startApp();
-        return;
+      } else {
+        // Saved account no longer exists on the server — fall back to guest.
+        currentUser = null;
+        localStorage.removeItem('ineed_user');
       }
-    } catch(e) {}
+    } catch(e) {
+      // Offline: keep the optimistic currentUser from localStorage.
+    }
   }
-  // No account on this device — show the auth gate (sign-up / log-in)
-  document.getElementById('loading').remove();
-  document.getElementById('auth-screen').style.display = 'flex';
+  // Everyone boots straight into the map. Guests browse; the auth gate is now
+  // on-demand (header "Sign up" button, or the popup on a locked feature).
+  startApp();
 }
 
 initDeviceId().then(init).catch(e => {
   console.error('Init error:', e);
   const loadingEl = document.getElementById('loading');
   if (loadingEl) loadingEl.remove();
-  const auth = document.getElementById('auth-screen');
-  if (!localStorage.getItem('ineed_user') && auth) auth.style.display = 'flex';
+  // Even on init failure, boot into the map as a guest rather than walling off.
+  try { startApp(); } catch(_) {}
 });
 </script>
 </body>
