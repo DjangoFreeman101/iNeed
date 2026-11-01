@@ -535,35 +535,6 @@
       padding:12px 0 0; font-size:15px; cursor:pointer; font-family:'Heebo',sans-serif;
     }
 
-    /* ── Share sheet ── */
-    #share-overlay {
-      display:none; position:fixed; inset:0; z-index:99990;
-      background:rgba(0,0,0,0.55);
-      align-items:center; justify-content:center; padding:24px;
-    }
-    #share-modal {
-      background:#fff; border-radius:18px; padding:20px 18px;
-      width:100%; max-width:340px;
-      box-shadow:0 10px 40px rgba(0,0,0,0.3);
-    }
-    #share-title { font-size:17px; font-weight:800; color:var(--dark); text-align:center; margin-bottom:14px; }
-    .share-opt {
-      display:block; width:100%; box-sizing:border-box;
-      text-align:center; text-decoration:none;
-      padding:13px; border-radius:12px; margin-bottom:10px;
-      font-size:15px; font-weight:700; color:#fff; border:none; cursor:pointer;
-      font-family:'Heebo',sans-serif;
-    }
-    .share-wa { background:#25D366; }
-    .share-tg { background:#2AABEE; }
-    .share-fb { background:#1877F2; }
-    .share-copy { background:#f0f0f0; color:var(--dark); }
-    .share-more { background:var(--dark); }
-    .share-cancel {
-      width:100%; background:none; color:var(--gray); border:none;
-      padding:8px 0 0; font-size:15px; cursor:pointer; font-family:'Heebo',sans-serif;
-    }
-
     /* ── Loading ── */
     #loading {
       position:fixed; top:0; left:0; right:0; bottom:0;
@@ -1031,19 +1002,6 @@
     <div id="guest-gate-text" data-i18n="guest_gate_text">כדי להשתמש בתכונה הזו צריך חשבון. ההרשמה מהירה וחינמית.</div>
     <button class="guest-gate-signup" data-i18n="guest_gate_signup" onclick="guestGateSignup()">הרשמה / התחברות</button>
     <button class="guest-gate-cancel" data-i18n="guest_gate_cancel" onclick="closeGuestGate()">לא עכשיו</button>
-  </div>
-</div>
-
-<!-- Share item sheet -->
-<div id="share-overlay" onclick="if(event.target===this) closeShareSheet()">
-  <div id="share-modal">
-    <div id="share-title" data-i18n="pop_share">שתף פריט</div>
-    <a id="share-wa" class="share-opt share-wa" target="_blank" rel="noopener" onclick="setTimeout(closeShareSheet,300)">WhatsApp</a>
-    <a id="share-tg" class="share-opt share-tg" target="_blank" rel="noopener" onclick="setTimeout(closeShareSheet,300)">Telegram</a>
-    <a id="share-fb" class="share-opt share-fb" target="_blank" rel="noopener" onclick="setTimeout(closeShareSheet,300)">Facebook</a>
-    <button class="share-opt share-copy" onclick="copyShareLink()" data-i18n="share_copy">העתק קישור</button>
-    <button id="share-more" class="share-opt share-more" onclick="shareMore()" data-i18n="share_more" style="display:none;">עוד אפליקציות…</button>
-    <button class="share-cancel" onclick="closeShareSheet()" data-i18n="guest_gate_cancel">לא עכשיו</button>
   </div>
 </div>
 
@@ -3193,45 +3151,30 @@ async function cancelInterest(itemId) {
 }
 
 // ── Share an item (deep link to it) ─────────────────────
-// Opens our own share sheet. The link always points at the PUBLIC site
-// (API_BASE), so it works in a browser and when shared from inside the app.
-// Custom targets (WhatsApp/Telegram/Facebook) are plain https links, which
-// Capacitor hands off to the right app — no native plugin, no resubmission.
-let _shareUrl = '';
-function shareItem(itemId) {
+// Opens the NATIVE Android share sheet directly. Link always points at the
+// PUBLIC site (API_BASE) so it resolves in a browser and in the app.
+//   - In the app: Capacitor Share plugin (needs @capacitor/share installed +
+//     a Play resubmission). Until then it falls through to copy.
+//   - In a browser: navigator.share (the OS app list).
+//   - Neither available: copy the link so there's never a dead end.
+async function shareItem(itemId) {
   const url = `${API_BASE}/?item=${itemId}`;
-  _shareUrl = url;
   const item = (itemsData || []).find(i => i.id === itemId);
-  const title = item ? item.title : 'iNeed';
-  const textUrl = encodeURIComponent(title + ' ' + url);
-  const encUrl = encodeURIComponent(url);
-  const encText = encodeURIComponent(title);
-  document.getElementById('share-wa').href = `https://wa.me/?text=${textUrl}`;
-  document.getElementById('share-tg').href = `https://t.me/share/url?url=${encUrl}&text=${encText}`;
-  document.getElementById('share-fb').href = `https://www.facebook.com/sharer/sharer.php?u=${encUrl}`;
-  // "More apps…" only where the OS share sheet actually exists.
-  const moreBtn = document.getElementById('share-more');
-  if (moreBtn) {
-    moreBtn.style.display = navigator.share ? 'block' : 'none';
-    window._shareTitle = title;
+  const payload = { title: 'iNeed', text: item ? item.title : 'iNeed', url };
+
+  const cap = window.Capacitor;
+  const hasCapShare = cap && cap.isNativePlatform && cap.isNativePlatform()
+                      && cap.Plugins && cap.Plugins.Share;
+  if (hasCapShare) {
+    try { await cap.Plugins.Share.share(payload); } catch (e) {}  // open or cancel -> done
+    return;
   }
-  document.getElementById('share-overlay').style.display = 'flex';
-}
-function closeShareSheet() {
-  const o = document.getElementById('share-overlay');
-  if (o) o.style.display = 'none';
-}
-async function copyShareLink() {
-  try { await navigator.clipboard.writeText(_shareUrl); showToast(t('share_copied')); }
-  catch (e) { showToast(_shareUrl); }
-  closeShareSheet();
-}
-async function shareMore() {   // native OS sheet, when available (adds IG/Stories/etc.)
   if (navigator.share) {
-    try { await navigator.share({ title: 'iNeed', text: window._shareTitle || '', url: _shareUrl }); }
-    catch (e) {}
+    try { await navigator.share(payload); } catch (e) {}          // the "open in other apps" sheet
+    return;
   }
-  closeShareSheet();
+  try { await navigator.clipboard.writeText(url); showToast(t('share_copied')); }
+  catch (e) { showToast(url); }
 }
 
 // On load, if the URL carries ?item=<id>, open that exact item on the map and
