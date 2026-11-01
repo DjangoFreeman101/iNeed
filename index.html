@@ -535,6 +535,35 @@
       padding:12px 0 0; font-size:15px; cursor:pointer; font-family:'Heebo',sans-serif;
     }
 
+    /* ── Share sheet ── */
+    #share-overlay {
+      display:none; position:fixed; inset:0; z-index:99990;
+      background:rgba(0,0,0,0.55);
+      align-items:center; justify-content:center; padding:24px;
+    }
+    #share-modal {
+      background:#fff; border-radius:18px; padding:20px 18px;
+      width:100%; max-width:340px;
+      box-shadow:0 10px 40px rgba(0,0,0,0.3);
+    }
+    #share-title { font-size:17px; font-weight:800; color:var(--dark); text-align:center; margin-bottom:14px; }
+    .share-opt {
+      display:block; width:100%; box-sizing:border-box;
+      text-align:center; text-decoration:none;
+      padding:13px; border-radius:12px; margin-bottom:10px;
+      font-size:15px; font-weight:700; color:#fff; border:none; cursor:pointer;
+      font-family:'Heebo',sans-serif;
+    }
+    .share-wa { background:#25D366; }
+    .share-tg { background:#2AABEE; }
+    .share-fb { background:#1877F2; }
+    .share-copy { background:#f0f0f0; color:var(--dark); }
+    .share-more { background:var(--dark); }
+    .share-cancel {
+      width:100%; background:none; color:var(--gray); border:none;
+      padding:8px 0 0; font-size:15px; cursor:pointer; font-family:'Heebo',sans-serif;
+    }
+
     /* ── Loading ── */
     #loading {
       position:fixed; top:0; left:0; right:0; bottom:0;
@@ -1002,6 +1031,19 @@
     <div id="guest-gate-text" data-i18n="guest_gate_text">כדי להשתמש בתכונה הזו צריך חשבון. ההרשמה מהירה וחינמית.</div>
     <button class="guest-gate-signup" data-i18n="guest_gate_signup" onclick="guestGateSignup()">הרשמה / התחברות</button>
     <button class="guest-gate-cancel" data-i18n="guest_gate_cancel" onclick="closeGuestGate()">לא עכשיו</button>
+  </div>
+</div>
+
+<!-- Share item sheet -->
+<div id="share-overlay" onclick="if(event.target===this) closeShareSheet()">
+  <div id="share-modal">
+    <div id="share-title" data-i18n="pop_share">שתף פריט</div>
+    <a id="share-wa" class="share-opt share-wa" target="_blank" rel="noopener" onclick="setTimeout(closeShareSheet,300)">WhatsApp</a>
+    <a id="share-tg" class="share-opt share-tg" target="_blank" rel="noopener" onclick="setTimeout(closeShareSheet,300)">Telegram</a>
+    <a id="share-fb" class="share-opt share-fb" target="_blank" rel="noopener" onclick="setTimeout(closeShareSheet,300)">Facebook</a>
+    <button class="share-opt share-copy" onclick="copyShareLink()" data-i18n="share_copy">העתק קישור</button>
+    <button id="share-more" class="share-opt share-more" onclick="shareMore()" data-i18n="share_more" style="display:none;">עוד אפליקציות…</button>
+    <button class="share-cancel" onclick="closeShareSheet()" data-i18n="guest_gate_cancel">לא עכשיו</button>
   </div>
 </div>
 
@@ -1549,6 +1591,8 @@ const I18N = {
     pop_report: 'דווח על תמונה',
     pop_share: 'שתף פריט',
     share_copied: 'הקישור הועתק',
+    share_copy: 'העתק קישור',
+    share_more: 'עוד אפליקציות…',
     pop_your_item: 'זה הפריט שלך',
     pop_i_have: 'יש לי את זה!',
     pop_i_want: 'אני רוצה את זה!',
@@ -1798,6 +1842,8 @@ const I18N = {
     pop_report: 'Report photo',
     pop_share: 'Share item',
     share_copied: 'Link copied',
+    share_copy: 'Copy link',
+    share_more: 'More apps…',
     pop_your_item: 'This is your item',
     pop_i_have: 'I have this!',
     pop_i_want: 'I want this!',
@@ -2047,6 +2093,8 @@ const I18N = {
     pop_report: 'Nahlásit fotografii',
     pop_share: 'Sdílet položku',
     share_copied: 'Odkaz zkopírován',
+    share_copy: 'Kopírovat odkaz',
+    share_more: 'Další aplikace…',
     pop_your_item: 'Toto je vaše položka',
     pop_i_have: 'Mám to!',
     pop_i_want: 'Chci to!',
@@ -2296,6 +2344,8 @@ const I18N = {
     pop_report: 'Пожаловаться на фото',
     pop_share: 'Поделиться',
     share_copied: 'Ссылка скопирована',
+    share_copy: 'Копировать ссылку',
+    share_more: 'Другие приложения…',
     pop_your_item: 'Это ваша вещь',
     pop_i_have: 'У меня это есть!',
     pop_i_want: 'Хочу это!',
@@ -3143,39 +3193,65 @@ async function cancelInterest(itemId) {
 }
 
 // ── Share an item (deep link to it) ─────────────────────
-// Always points at the PUBLIC site (API_BASE), so the link works both in a
-// browser and when shared from inside the installed app.
-async function shareItem(itemId) {
+// Opens our own share sheet. The link always points at the PUBLIC site
+// (API_BASE), so it works in a browser and when shared from inside the app.
+// Custom targets (WhatsApp/Telegram/Facebook) are plain https links, which
+// Capacitor hands off to the right app — no native plugin, no resubmission.
+let _shareUrl = '';
+function shareItem(itemId) {
   const url = `${API_BASE}/?item=${itemId}`;
+  _shareUrl = url;
   const item = (itemsData || []).find(i => i.id === itemId);
   const title = item ? item.title : 'iNeed';
+  const textUrl = encodeURIComponent(title + ' ' + url);
+  const encUrl = encodeURIComponent(url);
+  const encText = encodeURIComponent(title);
+  document.getElementById('share-wa').href = `https://wa.me/?text=${textUrl}`;
+  document.getElementById('share-tg').href = `https://t.me/share/url?url=${encUrl}&text=${encText}`;
+  document.getElementById('share-fb').href = `https://www.facebook.com/sharer/sharer.php?u=${encUrl}`;
+  // "More apps…" only where the OS share sheet actually exists.
+  const moreBtn = document.getElementById('share-more');
+  if (moreBtn) {
+    moreBtn.style.display = navigator.share ? 'block' : 'none';
+    window._shareTitle = title;
+  }
+  document.getElementById('share-overlay').style.display = 'flex';
+}
+function closeShareSheet() {
+  const o = document.getElementById('share-overlay');
+  if (o) o.style.display = 'none';
+}
+async function copyShareLink() {
+  try { await navigator.clipboard.writeText(_shareUrl); showToast(t('share_copied')); }
+  catch (e) { showToast(_shareUrl); }
+  closeShareSheet();
+}
+async function shareMore() {   // native OS sheet, when available (adds IG/Stories/etc.)
   if (navigator.share) {
-    try {
-      await navigator.share({ title: 'iNeed', text: title, url });
-      return;
-    } catch (e) {
-      if (e && e.name === 'AbortError') return;   // user cancelled the sheet
-      // any other error -> fall through to copy
-    }
+    try { await navigator.share({ title: 'iNeed', text: window._shareTitle || '', url: _shareUrl }); }
+    catch (e) {}
   }
-  try {
-    await navigator.clipboard.writeText(url);
-    showToast(t('share_copied'));
-  } catch (e) {
-    showToast(url);   // last resort: show the link so it can be copied manually
-  }
+  closeShareSheet();
 }
 
-// On load, if the URL carries ?item=<id>, open that exact item on the map.
+// On load, if the URL carries ?item=<id>, open that exact item on the map and
+// STAY on it — suppress the one-time auto-center on the user's own location.
 async function handleDeepLink() {
+  const itemId = new URLSearchParams(location.search).get('item');
+  if (!itemId) return;
+  centeredOnUser = true;   // block startLocation's first-fix recenter
   try {
-    const itemId = new URLSearchParams(location.search).get('item');
-    if (!itemId) return;
     const res = await fetch(`${API_BASE}/item/${encodeURIComponent(itemId)}`);
-    if (!res.ok) return;                 // gone/taken -> just show the normal map
+    if (!res.ok) { centeredOnUser = false; return; }   // gone/taken -> normal map
     const item = await res.json();
-    if (item && item.id) setTimeout(() => goToItemPin(item), 500);
-  } catch (e) {}
+    if (item && item.id) {
+      setTimeout(() => goToItemPin(item), 500);
+    } else {
+      centeredOnUser = false;
+    }
+  } catch (e) {
+    centeredOnUser = false;
+  }
 }
 
 // ── Report image ───────────────────────────────────────
