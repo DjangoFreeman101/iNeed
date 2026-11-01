@@ -638,6 +638,11 @@
       padding:6px; font-size:12px; cursor:pointer; margin-top:4px;
       font-family:'Heebo',sans-serif;
     }
+    .item-popup-share {
+      width:100%; background:#f0f0f0; color:var(--dark); border:none;
+      padding:9px; border-radius:8px; font-size:13px; font-weight:700;
+      cursor:pointer; margin-top:6px; font-family:'Heebo',sans-serif;
+    }
     .item-popup-info {
       width:100%; background:#f0f0f0; color:var(--dark); border:none;
       padding:8px; border-radius:8px; font-size:13px; font-weight:600;
@@ -1542,6 +1547,8 @@ const I18N = {
     pop_by: 'מאת',
     pop_approved: 'אושר!',
     pop_report: 'דווח על תמונה',
+    pop_share: 'שתף פריט',
+    share_copied: 'הקישור הועתק',
     pop_your_item: 'זה הפריט שלך',
     pop_i_have: 'יש לי את זה!',
     pop_i_want: 'אני רוצה את זה!',
@@ -1556,7 +1563,7 @@ const I18N = {
     notif_multi_updates: 'יש {n} עדכונים חדשים על הפריטים שלך',
     notif_found_title: 'מישהו מצא את מה שחיפשת!',
     notif_interested_title: 'מישהו מעוניין בפריט שלך!',
-    notif_match_single: 'נמצאה התאמה! {name} — "{item}"',
+    notif_match_single: 'נמצאה התאמה לפריט שלך „{item}“!',
     notif_match_multi: 'נמצאו {n} התאמות חדשות',
     notif_match_title: 'נמצאה התאמה!',
     notif_approved_single: '{name} אישר את הבקשה שלך ל"{item}"',
@@ -1789,6 +1796,8 @@ const I18N = {
     pop_by: 'By',
     pop_approved: 'Approved!',
     pop_report: 'Report photo',
+    pop_share: 'Share item',
+    share_copied: 'Link copied',
     pop_your_item: 'This is your item',
     pop_i_have: 'I have this!',
     pop_i_want: 'I want this!',
@@ -1803,7 +1812,7 @@ const I18N = {
     notif_multi_updates: 'You have {n} new updates on your items',
     notif_found_title: 'Someone found what you were looking for!',
     notif_interested_title: 'Someone is interested in your item!',
-    notif_match_single: 'Match found! {name} — "{item}"',
+    notif_match_single: 'Match found for your “{item}”!',
     notif_match_multi: '{n} new matches found',
     notif_match_title: 'Match found!',
     notif_approved_single: '{name} approved your request for "{item}"',
@@ -2036,6 +2045,8 @@ const I18N = {
     pop_by: 'Od',
     pop_approved: 'Schváleno!',
     pop_report: 'Nahlásit fotografii',
+    pop_share: 'Sdílet položku',
+    share_copied: 'Odkaz zkopírován',
     pop_your_item: 'Toto je vaše položka',
     pop_i_have: 'Mám to!',
     pop_i_want: 'Chci to!',
@@ -2050,7 +2061,7 @@ const I18N = {
     notif_multi_updates: 'Máš {n} nových aktualizací u svých položek',
     notif_found_title: 'Někdo našel to, co jsi hledal!',
     notif_interested_title: 'Někdo má zájem o tvoji položku!',
-    notif_match_single: 'Nalezena shoda! {name} — „{item}“',
+    notif_match_single: 'Nalezena shoda pro vaši položku „{item}“!',
     notif_match_multi: 'Nalezeno {n} nových shod',
     notif_match_title: 'Nalezena shoda!',
     notif_approved_single: '{name} schválil tvoji žádost o „{item}“',
@@ -2283,6 +2294,8 @@ const I18N = {
     pop_by: 'От',
     pop_approved: 'Одобрено!',
     pop_report: 'Пожаловаться на фото',
+    pop_share: 'Поделиться',
+    share_copied: 'Ссылка скопирована',
     pop_your_item: 'Это ваша вещь',
     pop_i_have: 'У меня это есть!',
     pop_i_want: 'Хочу это!',
@@ -2297,7 +2310,7 @@ const I18N = {
     notif_multi_updates: 'У вас {n} новых обновлений по вашим вещам',
     notif_found_title: 'Кто-то нашёл то, что вы искали!',
     notif_interested_title: 'Кто-то интересуется вашей вещью!',
-    notif_match_single: 'Найдено совпадение! {name} — «{item}»',
+    notif_match_single: 'Найдено совпадение для вашей вещи «{item}»!',
     notif_match_multi: 'Найдено {n} новых совпадений',
     notif_match_title: 'Найдено совпадение!',
     notif_approved_single: '{name} одобрил ваш запрос на «{item}»',
@@ -2887,6 +2900,7 @@ function buildItemPopup(item) {
         </button>
         ${item.image_url ? `<button class="item-popup-report" onclick="reportImage(${item.id})"> ${t('pop_report')}</button>` : ''}
       ` : `<div style="font-size:12px;color:var(--gray);text-align:center;padding:8px;">${t('pop_your_item')}</div>`}
+      <button class="item-popup-share" onclick="event.stopPropagation(); shareItem(${item.id})">🔗 ${t('pop_share')}</button>
     </div>`;
 }
 
@@ -3126,6 +3140,42 @@ async function cancelInterest(itemId) {
   showToast('בוטל');
   map.closePopup();
   loadItems();
+}
+
+// ── Share an item (deep link to it) ─────────────────────
+// Always points at the PUBLIC site (API_BASE), so the link works both in a
+// browser and when shared from inside the installed app.
+async function shareItem(itemId) {
+  const url = `${API_BASE}/?item=${itemId}`;
+  const item = (itemsData || []).find(i => i.id === itemId);
+  const title = item ? item.title : 'iNeed';
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'iNeed', text: title, url });
+      return;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;   // user cancelled the sheet
+      // any other error -> fall through to copy
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast(t('share_copied'));
+  } catch (e) {
+    showToast(url);   // last resort: show the link so it can be copied manually
+  }
+}
+
+// On load, if the URL carries ?item=<id>, open that exact item on the map.
+async function handleDeepLink() {
+  try {
+    const itemId = new URLSearchParams(location.search).get('item');
+    if (!itemId) return;
+    const res = await fetch(`${API_BASE}/item/${encodeURIComponent(itemId)}`);
+    if (!res.ok) return;                 // gone/taken -> just show the normal map
+    const item = await res.json();
+    if (item && item.id) setTimeout(() => goToItemPin(item), 500);
+  } catch (e) {}
 }
 
 // ── Report image ───────────────────────────────────────
@@ -4845,7 +4895,7 @@ async function checkForMatches() {
     };
 
     const message = newRows.length === 1
-      ? t('notif_match_single').replace('{name}', single.other_nickname).replace('{item}', single.my_item_title)
+      ? t('notif_match_single').replace('{item}', single.my_item_title)   // always the viewer's OWN item
       : t('notif_match_multi').replace('{n}', newRows.length);
 
     showInterestBanner(message, 'map-pin', null, newRows.length === 1 ? otherItem : null);
@@ -5007,6 +5057,7 @@ function startMap() {
   });
 
   requestNotificationPermission();
+  handleDeepLink();   // if opened via …/?item=<id>, jump to that item
 }
 
 function startUserServices() {

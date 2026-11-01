@@ -860,6 +860,28 @@ def get_items(
     conn.close()
     return items
 
+@app.get("/item/{item_id}")
+def get_single_item(item_id: int):
+    """One available item by id, regardless of map viewport — used by shared
+    deep links (…/?item=<id>) so the page can open that exact item."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT i.*, u.nickname,
+               COUNT(r.id) as request_count
+        FROM items i
+        JOIN users u ON i.device_id = u.device_id
+        LEFT JOIN requests r ON r.item_id = i.id
+        WHERE i.id = %s AND i.status = 'available'
+        GROUP BY i.id, u.nickname
+    """, (item_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Item not found or no longer available")
+    return dict(row)
+
 @app.get("/my-items/{device_id}")
 def get_my_items(device_id: str):
     conn = get_db()
