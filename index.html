@@ -1318,6 +1318,9 @@
     <button class="panel-back" onclick="closePanel('my-items-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
     <span class="panel-title" data-i18n="myitems_title">הפריטים שלי</span>
   </div>
+  <div id="my-items-search-row" style="padding:10px 16px 0;">
+    <input type="search" id="my-items-search" class="form-input" data-i18n-ph="myitems_search_ph" placeholder="חיפוש בפריטים שלי..." oninput="filterMyItems()" style="margin:0;"/>
+  </div>
   <div class="panel-body" id="my-items-body">
     <p style="color:var(--gray); text-align:center;" data-i18n="loading">טוען...</p>
   </div>
@@ -1768,6 +1771,8 @@ const I18N = {
     edit_photo_add: 'לחץ להוספת תמונה',
     edit_save: 'שמור שינויים',
     myitems_title: 'הפריטים שלי',
+    myitems_search_ph: 'חיפוש בפריטים שלי...',
+    myitems_no_results: 'לא נמצאו פריטים תואמים',
     myrequests_title: 'הבקשות שלי',
     history_title: 'היסטוריה',
     mycard_i_need: 'אני צריך',
@@ -2028,6 +2033,8 @@ const I18N = {
     edit_photo_add: 'Tap to add a photo',
     edit_save: 'Save changes',
     myitems_title: 'My items',
+    myitems_search_ph: 'Search my items...',
+    myitems_no_results: 'No matching items',
     myrequests_title: 'My requests',
     history_title: 'History',
     mycard_i_need: 'I need',
@@ -2288,6 +2295,8 @@ const I18N = {
     edit_photo_add: 'Klikni pro přidání fotografie',
     edit_save: 'Uložit změny',
     myitems_title: 'Moje položky',
+    myitems_search_ph: 'Hledat v mých položkách...',
+    myitems_no_results: 'Žádné odpovídající položky',
     myrequests_title: 'Moje žádosti',
     history_title: 'Historie',
     mycard_i_need: 'Hledám',
@@ -2548,6 +2557,8 @@ const I18N = {
     edit_photo_add: 'Нажмите, чтобы добавить фото',
     edit_save: 'Сохранить изменения',
     myitems_title: 'Мои вещи',
+    myitems_search_ph: 'Поиск по моим вещам...',
+    myitems_no_results: 'Ничего не найдено',
     myrequests_title: 'Мои запросы',
     history_title: 'История',
     mycard_i_need: 'Ищу',
@@ -4075,6 +4086,8 @@ async function openMyItems() {
   closeMenu();
   setUnreadDot(false);
   openPanel('my-items-panel');
+  const search = document.getElementById('my-items-search');
+  if (search) search.value = '';   // start unfiltered each open
   const body = document.getElementById('my-items-body');
   body.innerHTML = '<p style="color:var(--gray);text-align:center;">' + t('loading') + '</p>';
 
@@ -4082,6 +4095,22 @@ async function openMyItems() {
   const items = await res.json();
   myItemsData = items;
   renderMyItemsList(items);
+}
+
+// Filter My Items by words in the title or description (client-side).
+function filterMyItems() {
+  const q = (document.getElementById('my-items-search').value || '').trim().toLowerCase();
+  const all = myItemsData || [];
+  if (!q) { renderMyItemsList(all); return; }
+  const filtered = all.filter(it =>
+    (it.title || '').toLowerCase().includes(q) ||
+    (it.description || '').toLowerCase().includes(q));
+  if (filtered.length === 0) {
+    document.getElementById('my-items-body').innerHTML =
+      '<p style="color:var(--gray);text-align:center;margin-top:40px;">' + t('myitems_no_results') + '</p>';
+    return;
+  }
+  renderMyItemsList(filtered);
 }
 
 function renderMyItemsList(items) {
