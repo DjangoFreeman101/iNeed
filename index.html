@@ -535,6 +535,46 @@
       padding:12px 0 0; font-size:15px; cursor:pointer; font-family:'Heebo',sans-serif;
     }
 
+    /* ── Pin-on-map picker ── */
+    .pin-btn {
+      flex:0 0 auto; width:48px; border:1px solid var(--accent);
+      background:#fff; color:var(--accent); border-radius:10px;
+      display:flex; align-items:center; justify-content:center; cursor:pointer;
+    }
+    #map-picker {
+      display:none; position:fixed; inset:0; z-index:9000; background:#fff;
+      flex-direction:column;
+    }
+    #map-picker-map { position:absolute; inset:0; }
+    /* Fixed crosshair pinned to the map's visual center; tip points at center. */
+    #map-picker-crosshair {
+      position:absolute; top:50%; left:50%;
+      transform:translate(-50%, -100%);   /* pin tip sits on the exact center */
+      z-index:9002; pointer-events:none;
+      filter:drop-shadow(0 2px 3px rgba(0,0,0,0.4));
+    }
+    #map-picker-hint {
+      position:absolute; top:16px; left:50%; transform:translateX(-50%);
+      z-index:9002; background:rgba(0,0,0,0.75); color:#fff;
+      padding:8px 14px; border-radius:20px; font-size:13px; font-weight:600;
+      max-width:90%; text-align:center; pointer-events:none;
+    }
+    #map-picker-actions {
+      position:absolute; bottom:0; left:0; right:0; z-index:9002;
+      display:flex; gap:10px; padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+      background:linear-gradient(to top, rgba(255,255,255,0.95), rgba(255,255,255,0));
+    }
+    #map-picker-confirm {
+      flex:1; background:var(--accent); color:#fff; border:none;
+      padding:14px; border-radius:12px; font-size:16px; font-weight:700;
+      cursor:pointer; font-family:'Heebo',sans-serif;
+    }
+    #map-picker-cancel {
+      flex:0 0 auto; background:#fff; color:var(--dark); border:1px solid #ddd;
+      padding:14px 18px; border-radius:12px; font-size:16px; font-weight:700;
+      cursor:pointer; font-family:'Heebo',sans-serif;
+    }
+
     /* ── Loading ── */
     #loading {
       position:fixed; top:0; left:0; right:0; bottom:0;
@@ -1005,6 +1045,19 @@
   </div>
 </div>
 
+<!-- Map location picker (drop a pin) -->
+<div id="map-picker">
+  <div id="map-picker-map"></div>
+  <div id="map-picker-crosshair">
+    <svg viewBox="0 0 24 24" width="40" height="40" fill="#F44336" stroke="#fff" stroke-width="1.5"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7z"></path><circle cx="12" cy="9" r="2.5" fill="#fff" stroke="none"></circle></svg>
+  </div>
+  <div id="map-picker-hint" data-i18n="pin_hint">הזיזו את המפה כך שהסמן יהיה על המיקום</div>
+  <div id="map-picker-actions">
+    <button id="map-picker-cancel" onclick="closeMapPicker()" data-i18n="pin_cancel">ביטול</button>
+    <button id="map-picker-confirm" onclick="confirmMapPicker()" data-i18n="pin_confirm">אישור מיקום</button>
+  </div>
+</div>
+
 <!-- Report reasons modal -->
 <div id="photo-lightbox" onclick="if(event.target===this) closePhotoLightbox()">
   <button id="photo-lightbox-close" onclick="closePhotoLightbox()">✕</button>
@@ -1120,7 +1173,12 @@
         <button type="button" class="type-btn" id="loc-address-btn" data-i18n="post_loc_address" onclick="selectLocationMode('address')">הזן כתובת</button>
       </div>
       <div id="loc-address-row" style="display:none; flex-direction:column; margin-top:10px; gap:8px;">
-        <input type="text" class="form-input" id="post-address" data-i18n-ph="post_address_ph" placeholder="לדוגמה: הרצל 10, תל אביב"/>
+        <div style="display:flex; gap:8px; align-items:stretch;">
+          <input type="text" class="form-input" id="post-address" data-i18n-ph="post_address_ph" placeholder="לדוגמה: הרצל 10, תל אביב" style="flex:1; margin:0;"/>
+          <button type="button" id="pin-map-btn" class="pin-btn" data-i18n-title="post_pick_map" title="בחר/י נקודה על המפה" onclick="openMapPicker()">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+          </button>
+        </div>
         <button type="button" class="btn-secondary" style="margin-top:8px;" data-i18n="post_geocode" onclick="geocodeAddress()">אתר כתובת על המפה</button>
       </div>
       <div id="loc-status" style="font-size:13px; color:var(--gray); margin-top:8px;"></div>
@@ -1518,6 +1576,11 @@ const I18N = {
     post_loc_address: 'הזן כתובת',
     post_address_ph: 'לדוגמה: הרצל 10, תל אביב',
     post_geocode: 'אתר כתובת על המפה',
+    post_pick_map: 'בחר/י נקודה על המפה',
+    pin_hint: 'הזיזו את המפה כך שהסמן יהיה על המיקום',
+    pin_confirm: 'אישור מיקום',
+    pin_cancel: 'ביטול',
+    loc_pinned: 'המיקום נבחר על המפה ✓',
     post_photo_gallery: 'מהגלריה',
     post_photo_camera: 'צלם תמונה',
     post_photo_remove: 'הסר תמונה',
@@ -1769,6 +1832,11 @@ const I18N = {
     post_loc_address: 'Enter an address',
     post_address_ph: 'e.g. 10 Herzl St, Tel Aviv',
     post_geocode: 'Find address on map',
+    post_pick_map: 'Pick a point on the map',
+    pin_hint: 'Move the map so the pin is on your spot',
+    pin_confirm: 'Confirm location',
+    pin_cancel: 'Cancel',
+    loc_pinned: 'Location set on the map ✓',
     post_photo_gallery: 'From gallery',
     post_photo_camera: 'Take a photo',
     post_photo_remove: 'Remove photo',
@@ -2020,6 +2088,11 @@ const I18N = {
     post_loc_address: 'Zadat adresu',
     post_address_ph: 'např. Václavské náměstí 1, Praha',
     post_geocode: 'Najít adresu na mapě',
+    post_pick_map: 'Vyberte bod na mapě',
+    pin_hint: 'Posuňte mapu tak, aby byl špendlík na místě',
+    pin_confirm: 'Potvrdit polohu',
+    pin_cancel: 'Zrušit',
+    loc_pinned: 'Poloha nastavena na mapě ✓',
     post_photo_gallery: 'Z galerie',
     post_photo_camera: 'Vyfotit',
     post_photo_remove: 'Odebrat fotografii',
@@ -2271,6 +2344,11 @@ const I18N = {
     post_loc_address: 'Ввести адрес',
     post_address_ph: 'например: ул. Ленина 10, Москва',
     post_geocode: 'Найти адрес на карте',
+    post_pick_map: 'Выберите точку на карте',
+    pin_hint: 'Подвиньте карту, чтобы метка была на нужном месте',
+    pin_confirm: 'Подтвердить место',
+    pin_cancel: 'Отмена',
+    loc_pinned: 'Место выбрано на карте ✓',
     post_photo_gallery: 'Из галереи',
     post_photo_camera: 'Сделать фото',
     post_photo_remove: 'Убрать фото',
@@ -2436,6 +2514,10 @@ function applyLanguage() {
   // Fill placeholders
   document.querySelectorAll('[data-i18n-ph]').forEach(el => {
     el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph')));
+  });
+  // Fill title/tooltip attributes
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
   });
   // Document direction: Hebrew is RTL, English LTR
   document.documentElement.setAttribute('dir', currentLang === 'he' ? 'rtl' : 'ltr');
@@ -4478,6 +4560,40 @@ async function geocodeAddress() {
   } catch (e) {
     status.textContent = t('loc_geocode_error');
   }
+}
+
+// ── Pin-on-map location picker ──────────────────────────
+let mapPicker = null;
+function openMapPicker() {
+  const overlay = document.getElementById('map-picker');
+  overlay.style.display = 'flex';
+  // Start centered on the best guess we have.
+  let c;
+  if (itemLat !== null && itemLon !== null) c = [itemLat, itemLon];
+  else if (userLat !== null && userLon !== null) c = [userLat, userLon];
+  else if (typeof map !== 'undefined' && map) { const m = map.getCenter(); c = [m.lat, m.lng]; }
+  else c = [31.9730, 34.7895];
+  if (!mapPicker) {
+    mapPicker = L.map('map-picker-map', { zoomControl: true, attributionControl: false });
+    L.tileLayer(cartoUrl(darkMap ? MAP_STYLE_DARK : MAP_STYLE_LIGHT),
+                { subdomains: 'abcd', maxZoom: 20 }).addTo(mapPicker);
+  }
+  mapPicker.setView(c, 16);
+  // The div had no size while hidden — recalc once it's visible.
+  setTimeout(() => mapPicker.invalidateSize(), 120);
+}
+function closeMapPicker() {
+  document.getElementById('map-picker').style.display = 'none';
+}
+function confirmMapPicker() {
+  if (mapPicker) {
+    const ctr = mapPicker.getCenter();
+    itemLat = ctr.lat;
+    itemLon = ctr.lng;
+    const status = document.getElementById('loc-status');
+    if (status) status.textContent = t('loc_pinned');
+  }
+  closeMapPicker();
 }
 
 function openPostPanel() {
