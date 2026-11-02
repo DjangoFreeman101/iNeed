@@ -485,7 +485,9 @@
       margin-top:4px; text-decoration:none;
     }
 
-    .leaflet-top.leaflet-left { top: 58px !important; }
+    .leaflet-top.leaflet-left { top: 58px !important; transition: top 0.25s ease; }
+    /* While the "get the app" bar is expanded, drop the zoom control below it. */
+    body.getapp-open .leaflet-top.leaflet-left { top: 108px !important; }
 
     /* ── Progress bar ── */
     #post-progress {
@@ -607,6 +609,13 @@
     #get-app-close {
       flex:0 0 auto; background:none; border:none; color:#fff; font-size:16px;
       cursor:pointer; padding:2px 4px; line-height:1;
+    }
+    /* Collapsed tab (top edge, opposite the zoom control) */
+    #get-app-tab {
+      display:none; position:fixed; top:50px; inset-inline-end:10px; z-index:490;
+      width:34px; height:24px; border:none; border-radius:0 0 10px 10px;
+      background:#000; color:#fff; cursor:pointer;
+      align-items:center; justify-content:center; box-shadow:0 2px 6px rgba(0,0,0,0.3);
     }
 
     /* ── Pin-on-map picker ── */
@@ -1085,6 +1094,10 @@
   <a id="get-app-install" href="https://play.google.com/store/apps/details?id=com.djangofreeman.ineed" target="_blank" rel="noopener" data-i18n="getapp_install">התקנה</a>
   <button id="get-app-close" onclick="dismissGetAppBar()" aria-label="close">✕</button>
 </div>
+<!-- Collapsed state: a small tab that re-opens the bar -->
+<button id="get-app-tab" onclick="expandGetAppBar()" data-i18n-title="getapp_text" title="קבלו את אפליקציית iNeed">
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+</button>
 
 <div id="map"></div>
 
@@ -5435,20 +5448,32 @@ function startMap() {
   maybeShowGetAppBar();
 }
 
-// Show a "get the app" bar ONLY to browser visitors on Android (never inside
+// "Get the app" bar, shown ONLY to browser visitors on Android (never inside
 // the installed app, and not on iPhone/desktop where a Play link is useless).
-function dismissGetAppBar() {
-  const b = document.getElementById('get-app-bar');
-  if (b) b.style.display = 'none';
-  try { localStorage.setItem('ineed_hide_app_banner', '1'); } catch (e) {}
+// Closing it doesn't remove it — it collapses to a small arrow tab that
+// re-opens it. The zoom control drops below the bar only while it's expanded.
+function _setGetAppExpanded(expanded) {
+  const bar = document.getElementById('get-app-bar');
+  const tab = document.getElementById('get-app-tab');
+  if (bar) bar.style.display = expanded ? 'flex' : 'none';
+  if (tab) tab.style.display = expanded ? 'none' : 'flex';
+  document.body.classList.toggle('getapp-open', expanded);
+}
+function dismissGetAppBar() {          // × -> collapse to the arrow tab
+  try { localStorage.setItem('ineed_getapp_collapsed', '1'); } catch (e) {}
+  _setGetAppExpanded(false);
+}
+function expandGetAppBar() {           // arrow tab -> re-open the bar
+  try { localStorage.removeItem('ineed_getapp_collapsed'); } catch (e) {}
+  _setGetAppExpanded(true);
 }
 function maybeShowGetAppBar() {
   const cap = window.Capacitor;
   if (cap && cap.isNativePlatform && cap.isNativePlatform()) return;  // already in the app
   if (!/Android/i.test(navigator.userAgent || '')) return;           // Play link is Android-only
-  try { if (localStorage.getItem('ineed_hide_app_banner') === '1') return; } catch (e) {}
-  const b = document.getElementById('get-app-bar');
-  if (b) b.style.display = 'flex';
+  let collapsed = false;
+  try { collapsed = localStorage.getItem('ineed_getapp_collapsed') === '1'; } catch (e) {}
+  _setGetAppExpanded(!collapsed);      // remembers the user's last choice across visits
 }
 
 function startUserServices() {
