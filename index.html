@@ -1645,6 +1645,7 @@ const I18N = {
     loc_pinned: 'המיקום נבחר על המפה ✓',
     post_photo_gallery: 'מהגלריה',
     photo_cover: 'ראשי',
+    photo_max: 'ניתן להעלות עד {n} תמונות',
     post_photo_camera: 'צלם תמונה',
     post_photo_remove: 'הסר תמונה',
     post_submit: 'פרסם פריט',
@@ -1902,6 +1903,7 @@ const I18N = {
     loc_pinned: 'Location set on the map ✓',
     post_photo_gallery: 'From gallery',
     photo_cover: 'Main',
+    photo_max: 'You can upload up to {n} photos',
     post_photo_camera: 'Take a photo',
     post_photo_remove: 'Remove photo',
     post_submit: 'Post item',
@@ -2159,6 +2161,7 @@ const I18N = {
     loc_pinned: 'Poloha nastavena na mapě ✓',
     post_photo_gallery: 'Z galerie',
     photo_cover: 'Hlavní',
+    photo_max: 'Můžete nahrát až {n} fotek',
     post_photo_camera: 'Vyfotit',
     post_photo_remove: 'Odebrat fotografii',
     post_submit: 'Přidat položku',
@@ -2416,6 +2419,7 @@ const I18N = {
     loc_pinned: 'Место выбрано на карте ✓',
     post_photo_gallery: 'Из галереи',
     photo_cover: 'Главное',
+    photo_max: 'Можно загрузить до {n} фото',
     post_photo_camera: 'Сделать фото',
     post_photo_remove: 'Убрать фото',
     post_submit: 'Разместить вещь',
@@ -3524,10 +3528,12 @@ let _thumbUrls = [];      // object URLs currently rendered (revoked on re-rende
 
 function addPhotos(input) {
   const files = Array.from(input.files || []);
-  for (const f of files) {
-    if (_postPhotos.length >= MAX_PHOTOS) break;
-    _postPhotos.push(f);
+  const room = MAX_PHOTOS - _postPhotos.length;
+  if (files.length > room) {
+    // Tell the user instead of silently dropping the extras.
+    showToast(t('photo_max').replace('{n}', MAX_PHOTOS));
   }
+  files.slice(0, Math.max(room, 0)).forEach(f => _postPhotos.push(f));
   input.value = '';   // let the same file be picked again and re-fire onchange
   renderPhotoThumbs();
 }
@@ -3562,7 +3568,12 @@ function renderPhotoThumbs() {
            `<button type="button" class="thumb-x" onclick="removePhotoAt(${i})">✕</button></div>`;
   }).join('');
   if (area) area.style.display = _postPhotos.length >= MAX_PHOTOS ? 'none' : 'flex';
-  if (hint) { hint.style.display = 'block'; hint.textContent = _postPhotos.length + '/' + MAX_PHOTOS; }
+  if (hint) {
+    hint.style.display = 'block';
+    hint.textContent = _postPhotos.length >= MAX_PHOTOS
+      ? t('photo_max').replace('{n}', MAX_PHOTOS)
+      : _postPhotos.length + '/' + MAX_PHOTOS;
+  }
 }
 // Kept as an alias so any old caller still works.
 function removePhoto() { resetPostPhotos(); }
@@ -3579,6 +3590,7 @@ async function aiAutoFillPhoto(input) {
   // The captured photo becomes the item's cover photo (if there's room), so
   // the user doesn't have to shoot it twice.
   if (_postPhotos.length < MAX_PHOTOS) _postPhotos.unshift(file);
+  else showToast(t('photo_max').replace('{n}', MAX_PHOTOS));
   renderPhotoThumbs();
   input.value = '';
 
