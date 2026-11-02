@@ -239,7 +239,9 @@
     .myitems-search input {
       flex:1; min-width:0; background:none; border:none; outline:none;
       color:#fff; font-size:14px; font-family:'Heebo',sans-serif;
+      direction:rtl; text-align:right;   /* default (Hebrew) */
     }
+    html[dir="ltr"] .myitems-search input { direction:ltr; text-align:left; }
     .myitems-search input::placeholder { color:rgba(255,255,255,0.7); }
 
     /* ── Forms ── */
