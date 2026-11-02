@@ -360,7 +360,52 @@
     #photo-lightbox-close {
       position:absolute; top:16px; left:16px; background:rgba(255,255,255,0.15);
       color:white; border:none; border-radius:50%; width:36px; height:36px;
-      font-size:18px; cursor:pointer;
+      font-size:18px; cursor:pointer; z-index:2;
+    }
+    .gallery-nav {
+      position:absolute; top:50%; transform:translateY(-50%);
+      background:rgba(255,255,255,0.18); color:#fff; border:none;
+      width:44px; height:44px; border-radius:50%; font-size:28px; line-height:1;
+      cursor:pointer; z-index:2; display:flex; align-items:center; justify-content:center;
+    }
+    #gallery-prev { left:12px; }
+    #gallery-next { right:12px; }
+    #gallery-counter {
+      position:absolute; top:20px; left:50%; transform:translateX(-50%);
+      color:#fff; font-size:14px; font-weight:700; z-index:2;
+      background:rgba(0,0,0,0.5); padding:4px 12px; border-radius:14px;
+    }
+    #gallery-dots {
+      position:absolute; bottom:24px; left:50%; transform:translateX(-50%);
+      display:flex; gap:7px; z-index:2;
+    }
+    #gallery-dots span {
+      width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,0.4);
+    }
+    #gallery-dots span.active { background:#fff; }
+
+    /* Upload thumbnails */
+    .photo-thumb {
+      position:relative; width:72px; height:72px; border-radius:10px; overflow:hidden;
+      flex:0 0 auto; background:#eee;
+    }
+    .photo-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+    .photo-thumb .thumb-x {
+      position:absolute; top:2px; inset-inline-end:2px;
+      width:22px; height:22px; border-radius:50%; border:none;
+      background:rgba(0,0,0,0.6); color:#fff; font-size:12px; cursor:pointer;
+      display:flex; align-items:center; justify-content:center; line-height:1;
+    }
+    .photo-thumb .thumb-cover {
+      position:absolute; bottom:0; left:0; right:0; text-align:center;
+      background:rgba(244,67,54,0.9); color:#fff; font-size:10px; font-weight:700; padding:1px 0;
+    }
+    /* Popup image + count badge */
+    .item-popup-imgwrap { position:relative; }
+    .item-popup-imgwrap .img-count-badge {
+      position:absolute; bottom:8px; inset-inline-end:8px;
+      background:rgba(0,0,0,0.65); color:#fff; font-size:12px; font-weight:700;
+      padding:2px 9px; border-radius:12px; pointer-events:none;
     }
 
     /* ── Item card (my items) ── */
@@ -1061,7 +1106,11 @@
 <!-- Report reasons modal -->
 <div id="photo-lightbox" onclick="if(event.target===this) closePhotoLightbox()">
   <button id="photo-lightbox-close" onclick="closePhotoLightbox()">✕</button>
-  <img id="photo-lightbox-img" src=""/>
+  <button id="gallery-prev" class="gallery-nav" onclick="event.stopPropagation(); galleryStep(-1)">‹</button>
+  <img id="photo-lightbox-img" src="" onclick="event.stopPropagation()"/>
+  <button id="gallery-next" class="gallery-nav" onclick="event.stopPropagation(); galleryStep(1)">›</button>
+  <div id="gallery-counter"></div>
+  <div id="gallery-dots"></div>
 </div>
 
 <div id="report-overlay" onclick="if(event.target===this) closeReportModal()">
@@ -1198,12 +1247,10 @@
           📷<br/><span data-i18n="post_photo_camera">צלם תמונה</span>
         </div>
       </div>
-      <input type="file" id="photo-input" accept="image/*" style="display:none" onchange="previewPhoto(this)"/>
-      <input type="file" id="photo-camera-input" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto(this)"/>
-      <div id="photo-preview-container" style="display:none; position:relative; margin-top:10px;">
-        <img id="photo-preview" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover;display:block;"/>
-        <button onclick="removePhoto()" data-i18n="post_photo_remove" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.65);color:white;border:none;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:Heebo,sans-serif;">הסר תמונה</button>
-      </div>
+      <input type="file" id="photo-input" accept="image/*" multiple style="display:none" onchange="addPhotos(this)"/>
+      <input type="file" id="photo-camera-input" accept="image/*" capture="environment" style="display:none" onchange="addPhotos(this)"/>
+      <div id="photo-thumbs" style="display:none; flex-wrap:wrap; gap:8px; margin-top:10px;"></div>
+      <div id="photo-count-hint" style="display:none; font-size:12px; color:var(--gray); margin-top:6px;"></div>
       <div id="ai-suggest-status" style="display:none;font-size:13px;color:var(--accent);font-weight:700;margin-top:8px;">✨ <span id="ai-suggest-status-text"></span></div>
       <button class="btn-primary" data-i18n="post_submit" onclick="submitItem()">פרסם פריט</button>
   </div>
@@ -1582,6 +1629,7 @@ const I18N = {
     pin_cancel: 'ביטול',
     loc_pinned: 'המיקום נבחר על המפה ✓',
     post_photo_gallery: 'מהגלריה',
+    photo_cover: 'ראשי',
     post_photo_camera: 'צלם תמונה',
     post_photo_remove: 'הסר תמונה',
     post_submit: 'פרסם פריט',
@@ -1838,6 +1886,7 @@ const I18N = {
     pin_cancel: 'Cancel',
     loc_pinned: 'Location set on the map ✓',
     post_photo_gallery: 'From gallery',
+    photo_cover: 'Main',
     post_photo_camera: 'Take a photo',
     post_photo_remove: 'Remove photo',
     post_submit: 'Post item',
@@ -2094,6 +2143,7 @@ const I18N = {
     pin_cancel: 'Zrušit',
     loc_pinned: 'Poloha nastavena na mapě ✓',
     post_photo_gallery: 'Z galerie',
+    photo_cover: 'Hlavní',
     post_photo_camera: 'Vyfotit',
     post_photo_remove: 'Odebrat fotografii',
     post_submit: 'Přidat položku',
@@ -2350,6 +2400,7 @@ const I18N = {
     pin_cancel: 'Отмена',
     loc_pinned: 'Место выбрано на карте ✓',
     post_photo_gallery: 'Из галереи',
+    photo_cover: 'Главное',
     post_photo_camera: 'Сделать фото',
     post_photo_remove: 'Убрать фото',
     post_submit: 'Разместить вещь',
@@ -2975,7 +3026,7 @@ function buildItemPopup(item) {
   return `
     <div class="item-popup" style="direction:${dir}; text-align:${align};">
       <div class="item-popup-top"><span class="item-badge ${isTakePost(item) ? 'take' : 'give'}">${isTakePost(item) ? t('badge_need') : t('badge_give')}</span></div>
-      ${item.image_url ? `<img src="${item.image_url}" class="item-popup-img" style="cursor:pointer;" onclick="openPhotoLightbox('${item.image_url}')"/>` : ''}
+      ${(() => { const imgs = itemImages(item); if (!imgs.length) return ''; return `<div class="item-popup-imgwrap" onclick="openItemGallery(${item.id},0)"><img src="${imgs[0]}" class="item-popup-img" style="cursor:pointer;"/>${imgs.length > 1 ? `<span class="img-count-badge">1/${imgs.length}</span>` : ''}</div>`; })()}
       <div class="item-popup-title">${item.title}</div>
       <div class="item-popup-cat">${catLabel(item.category)}</div>
       ${!isTakePost(item) && conditionLabel(item) ? `<div class="item-popup-cat">${t('pop_condition')}: ${conditionLabel(item)}</div>` : ''}
@@ -3128,14 +3179,80 @@ function attachGroupSwipe(wrap) {
 }
 
 // ── Photo lightbox (enlarge a tapped photo) ─────────────
-function openPhotoLightbox(url) {
-  document.getElementById('photo-lightbox-img').src = url;
+// An item's photos: the JSON array if present, else [cover], else [].
+function itemImages(item) {
+  if (item && item.image_urls) {
+    try { const a = JSON.parse(item.image_urls); if (Array.isArray(a) && a.length) return a; } catch (e) {}
+  }
+  return (item && item.image_url) ? [item.image_url] : [];
+}
+
+// Open the swipeable gallery for an item (looked up in the loaded set).
+function openItemGallery(itemId, startIdx) {
+  const item = (itemsData || []).find(i => i.id === itemId);
+  const imgs = itemImages(item);
+  if (imgs.length) openGallery(imgs, startIdx || 0);
+}
+
+// ── Swipeable full-screen gallery ───────────────────────
+let _galleryImgs = [];
+let _galleryIdx = 0;
+function openGallery(urls, idx) {
+  _galleryImgs = urls || [];
+  _galleryIdx = Math.min(Math.max(idx || 0, 0), _galleryImgs.length - 1);
+  renderGallery();
   document.getElementById('photo-lightbox').classList.add('show');
+}
+function renderGallery() {
+  const img = document.getElementById('photo-lightbox-img');
+  const prev = document.getElementById('gallery-prev');
+  const next = document.getElementById('gallery-next');
+  const counter = document.getElementById('gallery-counter');
+  const dots = document.getElementById('gallery-dots');
+  const n = _galleryImgs.length;
+  if (img) img.src = _galleryImgs[_galleryIdx] || '';
+  const multi = n > 1;
+  if (prev) prev.style.display = multi ? 'flex' : 'none';
+  if (next) next.style.display = multi ? 'flex' : 'none';
+  if (counter) {
+    counter.style.display = multi ? 'block' : 'none';
+    counter.textContent = (_galleryIdx + 1) + ' / ' + n;
+  }
+  if (dots) {
+    dots.style.display = multi ? 'flex' : 'none';
+    dots.innerHTML = _galleryImgs.map((_, i) =>
+      `<span class="${i === _galleryIdx ? 'active' : ''}"></span>`).join('');
+  }
+}
+function galleryStep(dir) {
+  const n = _galleryImgs.length;
+  if (n < 2) return;
+  _galleryIdx = (_galleryIdx + dir + n) % n;
+  renderGallery();
 }
 function closePhotoLightbox() {
   document.getElementById('photo-lightbox').classList.remove('show');
   document.getElementById('photo-lightbox-img').src = '';
+  _galleryImgs = [];
 }
+// Back-compat: single-image callers still work.
+function openPhotoLightbox(url) { openGallery([url], 0); }
+
+// Swipe left/right on the lightbox to page through the gallery.
+(function () {
+  const lb = document.getElementById('photo-lightbox');
+  if (!lb) return;
+  let x0 = null;
+  lb.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
+  lb.addEventListener('touchend', e => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0;
+    x0 = null;
+    if (Math.abs(dx) < 40) return;
+    // Swipe right -> previous, swipe left -> next (flip for RTL feel is unnecessary here).
+    galleryStep(dx < 0 ? 1 : -1);
+  }, { passive: true });
+})();
 
 // ── Refresh ──────────────────────────────────────────────
 function refreshItems() {
@@ -3336,27 +3453,55 @@ async function submitReport() {
 }
 
 // ── Post item ──────────────────────────────────────────
-function removePhoto() {
-  document.getElementById('photo-input').value = '';
-  document.getElementById('photo-camera-input').value = '';
-  const aip = document.getElementById('ai-photo-input'); if (aip) aip.value = '';
-  window._aiCapturedPhoto = null;
-  document.getElementById('photo-preview').src = '';
-  document.getElementById('photo-preview-container').style.display = 'none';
-  document.getElementById('photo-upload-area').style.display = 'flex';
-}
+// ── Multi-photo upload (up to MAX_PHOTOS) ───────────────
+const MAX_PHOTOS = 5;
+let _postPhotos = [];     // File objects, in order; [0] is the cover
+let _thumbUrls = [];      // object URLs currently rendered (revoked on re-render)
 
-function previewPhoto(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    document.getElementById('photo-preview').src = e.target.result;
-    document.getElementById('photo-preview-container').style.display = 'block';
-    document.getElementById('photo-upload-area').style.display = 'none';
-  };
-  reader.readAsDataURL(file);
+function addPhotos(input) {
+  const files = Array.from(input.files || []);
+  for (const f of files) {
+    if (_postPhotos.length >= MAX_PHOTOS) break;
+    _postPhotos.push(f);
+  }
+  input.value = '';   // let the same file be picked again and re-fire onchange
+  renderPhotoThumbs();
 }
+function removePhotoAt(i) {
+  _postPhotos.splice(i, 1);
+  renderPhotoThumbs();
+}
+function resetPostPhotos() {
+  _postPhotos = [];
+  renderPhotoThumbs();
+}
+function renderPhotoThumbs() {
+  const wrap = document.getElementById('photo-thumbs');
+  const area = document.getElementById('photo-upload-area');
+  const hint = document.getElementById('photo-count-hint');
+  if (!wrap) return;
+  _thumbUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch (e) {} });
+  _thumbUrls = [];
+  if (_postPhotos.length === 0) {
+    wrap.style.display = 'none';
+    wrap.innerHTML = '';
+    if (area) area.style.display = 'flex';
+    if (hint) hint.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'flex';
+  wrap.innerHTML = _postPhotos.map((f, i) => {
+    const url = URL.createObjectURL(f);
+    _thumbUrls.push(url);
+    const cover = i === 0 ? `<span class="thumb-cover">${t('photo_cover')}</span>` : '';
+    return `<div class="photo-thumb"><img src="${url}"/>${cover}` +
+           `<button type="button" class="thumb-x" onclick="removePhotoAt(${i})">✕</button></div>`;
+  }).join('');
+  if (area) area.style.display = _postPhotos.length >= MAX_PHOTOS ? 'none' : 'flex';
+  if (hint) { hint.style.display = 'block'; hint.textContent = _postPhotos.length + '/' + MAX_PHOTOS; }
+}
+// Kept as an alias so any old caller still works.
+function removePhoto() { resetPostPhotos(); }
 
 // Maps the app language to the stored code the backend expects ('he' -> 'il').
 function aiLang() { return currentLang === 'he' ? 'il' : currentLang; }
@@ -3367,18 +3512,11 @@ function aiLang() { return currentLang === 'he' ? 'il' : currentLang; }
 async function aiAutoFillPhoto(input) {
   const file = input.files[0];
   if (!file) return;
-  window._aiCapturedPhoto = file;   // reuse as the item's photo at submit time
-  // Show it in the Step 3 photo preview too.
-  const reader = new FileReader();
-  reader.onload = e => {
-    const pv = document.getElementById('photo-preview');
-    if (pv) pv.src = e.target.result;
-    const pc = document.getElementById('photo-preview-container');
-    if (pc) pc.style.display = 'block';
-    const ua = document.getElementById('photo-upload-area');
-    if (ua) ua.style.display = 'none';
-  };
-  reader.readAsDataURL(file);
+  // The captured photo becomes the item's cover photo (if there's room), so
+  // the user doesn't have to shoot it twice.
+  if (_postPhotos.length < MAX_PHOTOS) _postPhotos.unshift(file);
+  renderPhotoThumbs();
+  input.value = '';
 
   const box = document.getElementById('ai-autofill-status');
   const txt = document.getElementById('ai-autofill-status-text');
@@ -3493,15 +3631,11 @@ async function submitItem() {
   const category = document.getElementById('post-category').value;
   const condition = document.getElementById('post-condition').value;
   const desc = document.getElementById('post-desc').value.trim();
-  const photoInput = document.getElementById('photo-input');
-  const photoCameraInput = document.getElementById('photo-camera-input');
 
   if (!selectedPostType) { showToast(t('toast_pick_type')); return; }
   if (!title || !category) { showToast(t('toast_title_cat')); return; }
   if (selectedPostType === 'give' && !condition) { showToast(t('toast_pick_condition')); return; }
   if (itemLat === null || itemLon === null) { showToast(t('toast_set_location')); return; }
-
-  const photoFile = (photoInput.files[0]) || (photoCameraInput.files[0]) || window._aiCapturedPhoto || null;
 
   const form = new FormData();
   form.append('device_id', deviceId);
@@ -3512,7 +3646,7 @@ async function submitItem() {
   if (selectedPostType === 'give') form.append('condition', condition);
   form.append('lat', itemLat);
   form.append('lon', itemLon);
-  if (photoFile) form.append('image', photoFile);
+  _postPhotos.slice(0, MAX_PHOTOS).forEach(f => form.append('images', f));
 
   const btn = document.querySelector('#post-panel .btn-primary');
   btn.textContent = 'מפרסם...';
@@ -3547,9 +3681,7 @@ async function submitItem() {
     document.getElementById('post-desc').value = '';
     document.getElementById('photo-input').value = '';
     const aip2 = document.getElementById('ai-photo-input'); if (aip2) aip2.value = '';
-    window._aiCapturedPhoto = null;
-    const pc = document.getElementById('photo-preview-container'); if(pc) pc.style.display = 'none';
-    document.getElementById('photo-upload-area').style.display = 'flex';
+    resetPostPhotos();
     selectedPostType = null;
     document.getElementById('btn-give').className = 'type-btn';
     document.getElementById('btn-take').className = 'type-btn';
@@ -4610,8 +4742,8 @@ function openPostPanel() {
   document.getElementById('post-address').value = '';
   document.getElementById('photo-input').value = '';
   document.getElementById('photo-camera-input').value = '';
-  const pc = document.getElementById('photo-preview-container'); if(pc) pc.style.display = 'none';
-  document.getElementById('photo-upload-area').style.display = 'flex';
+  const aip = document.getElementById('ai-photo-input'); if (aip) aip.value = '';
+  resetPostPhotos();
   selectLocationMode('current');
   showPostStep(1);
   openPanel('post-panel');

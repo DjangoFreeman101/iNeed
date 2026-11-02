@@ -2,7 +2,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import psycopg2, psycopg2.extras, time, os, cloudinary, cloudinary.uploader, requests, re, math, bcrypt, random, string, secrets, threading, json, base64
 from datetime import datetime, timezone, timedelta
 
@@ -139,6 +139,14 @@ def init_db():
     # but are hidden from /my-matches.
     cur.execute("""
         ALTER TABLE matches ADD COLUMN IF NOT EXISTS dismissed BOOLEAN NOT NULL DEFAULT FALSE
+    """)
+
+    # Multiple photos per item: JSON array of Cloudinary URLs. image_url stays
+    # the COVER (first photo) for backward compatibility with every existing
+    # screen; image_urls holds the full gallery. Old items have NULL here and
+    # the client falls back to [image_url].
+    cur.execute("""
+        ALTER TABLE items ADD COLUMN IF NOT EXISTS image_urls TEXT
     """)
 
     # Email verification codes (sign-up) — one active code per email.
@@ -637,6 +645,22 @@ CONDITION_OPTIONS = {"new", "like_new", "used", "bad"}
 CATEGORY_KEYS = {"furniture", "electronics", "clothing", "books",
                  "kitchen", "toys", "sports", "garden", "other"}
 
+MAX_ITEM_IMAGES = 5
+async def _upload_images(files):
+    """Upload up to MAX_ITEM_IMAGES files to Cloudinary; return their URLs in
+    order. Best-effort per file — a failed upload is skipped, not fatal."""
+    urls = []
+    for f in (files or [])[:MAX_ITEM_IMAGES]:
+        try:
+            data = await f.read()
+            result = cloudinary.uploader.upload(data, folder="ineed")
+            u = result.get("secure_url")
+            if u:
+                urls.append(u)
+        except Exception as e:
+            print("Image upload failed:", e)
+    return urls
+
 # ── AI assist (OpenAI) ───────────────────────────────────
 # Both the model and the key are env vars so the model can be swapped without a
 # code change. All AI calls are BEST-EFFORT: any failure returns a null result
@@ -800,7 +824,8 @@ async def post_item(
     condition: Optional[str] = Form(None),
     lat: float = Form(...),
     lon: float = Form(...),
-    image: Optional[UploadFile] = File(None)
+    image: Optional[UploadFile] = File(None),          # legacy single photo
+    images: Optional[List[UploadFile]] = File(None)    # new: up to MAX_ITEM_IMAGES
 ):
     # Condition is only meaningful (and required) for "give" posts — a "take"
     # post has no physical item yet, so there's nothing to describe the state of.
@@ -810,20 +835,22 @@ async def post_item(
     else:
         condition = None
 
-    image_url = None
-    if image and image.filename:
-        data = await image.read()
-        result = cloudinary.uploader.upload(data, folder="ineed")
-        image_url = result.get("secure_url")
+    # Prefer the new multi-image field; fall back to the legacy single `image`.
+    uploads = [f for f in (images or []) if f and f.filename]
+    if not uploads and image and image.filename:
+        uploads = [image]
+    urls = await _upload_images(uploads)
+    image_url = urls[0] if urls else None
+    image_urls = json.dumps(urls) if urls else None
 
     conn = get_db()
     cur = conn.cursor()
     now = time.time()
     cur.execute("""
-        INSERT INTO items (device_id, post_type, title, description, category, condition, image_url, lat, lon, created_at, last_confirmed_at, lifecycle_token)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO items (device_id, post_type, title, description, category, condition, image_url, image_urls, lat, lon, created_at, last_confirmed_at, lifecycle_token)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
-    """, (device_id, post_type, title, description, category, condition, image_url, lat, lon, now, now, secrets.token_urlsafe(24)))
+    """, (device_id, post_type, title, description, category, condition, image_url, image_urls, lat, lon, now, now, secrets.token_urlsafe(24)))
     item_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
@@ -946,13 +973,14 @@ async def edit_item(
         image_url = result.get("secure_url")
 
     if image_url:
+        # New photo replaces the whole gallery (edit is single-image for now).
         cur.execute("""
-            UPDATE items SET title=%s, description=%s, category=%s, image_url=%s
+            UPDATE items SET title=%s, description=%s, category=%s, image_url=%s, image_urls=%s
             WHERE id=%s AND device_id=%s
-        """, (title, description, category, image_url, item_id, device_id))
+        """, (title, description, category, image_url, json.dumps([image_url]), item_id, device_id))
     elif remove_image == 'true':
         cur.execute("""
-            UPDATE items SET title=%s, description=%s, category=%s, image_url=NULL
+            UPDATE items SET title=%s, description=%s, category=%s, image_url=NULL, image_urls=NULL
             WHERE id=%s AND device_id=%s
         """, (title, description, category, item_id, device_id))
     else:
