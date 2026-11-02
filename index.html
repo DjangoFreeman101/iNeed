@@ -486,8 +486,10 @@
     }
 
     .leaflet-top.leaflet-left { top: 58px !important; transition: top 0.25s ease; }
-    /* While the "get the app" bar is expanded, drop the zoom control below it. */
+    /* Expanded bar: drop the zoom control well below it. */
     body.getapp-open .leaflet-top.leaflet-left { top: 108px !important; }
+    /* Collapsed tab: drop the zoom control below the tab so they don't touch. */
+    body.getapp-collapsed .leaflet-top.leaflet-left { top: 92px !important; }
 
     /* ── Progress bar ── */
     #post-progress {
@@ -613,8 +615,9 @@
     /* Collapsed tab (top edge, opposite the zoom control) */
     #get-app-tab {
       display:none; position:fixed; top:50px; inset-inline-end:10px; z-index:490;
-      width:34px; height:24px; border:none; border-radius:0 0 10px 10px;
-      background:#000; color:#fff; cursor:pointer;
+      height:28px; padding:0 12px; gap:5px; border:none; border-radius:0 0 12px 12px;
+      background:#000; color:#fff; cursor:pointer; font-size:12px; font-weight:700;
+      font-family:'Heebo',sans-serif;
       align-items:center; justify-content:center; box-shadow:0 2px 6px rgba(0,0,0,0.3);
     }
 
@@ -1096,7 +1099,8 @@
 </div>
 <!-- Collapsed state: a small tab that re-opens the bar -->
 <button id="get-app-tab" onclick="expandGetAppBar()" data-i18n-title="getapp_text" title="קבלו את אפליקציית iNeed">
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+  <span data-i18n="getapp_install">התקנה</span>
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
 </button>
 
 <div id="map"></div>
@@ -5458,6 +5462,7 @@ function _setGetAppExpanded(expanded) {
   if (bar) bar.style.display = expanded ? 'flex' : 'none';
   if (tab) tab.style.display = expanded ? 'none' : 'flex';
   document.body.classList.toggle('getapp-open', expanded);
+  document.body.classList.toggle('getapp-collapsed', !expanded);
 }
 function dismissGetAppBar() {          // × -> collapse to the arrow tab
   try { localStorage.setItem('ineed_getapp_collapsed', '1'); } catch (e) {}
