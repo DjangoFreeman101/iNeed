@@ -593,6 +593,22 @@
       padding:12px 0 0; font-size:15px; cursor:pointer; font-family:'Heebo',sans-serif;
     }
 
+    /* ── Browser "get the app" bar ── */
+    #get-app-bar {
+      display:none; position:fixed; top:50px; left:0; right:0; z-index:490;
+      background:#000; color:#fff; align-items:center; gap:10px;
+      padding:9px 14px; font-size:13px; box-shadow:0 2px 8px rgba(0,0,0,0.25);
+    }
+    #get-app-text { flex:1; line-height:1.3; }
+    #get-app-install {
+      flex:0 0 auto; background:var(--accent); color:#fff; text-decoration:none;
+      font-weight:700; padding:7px 16px; border-radius:16px; font-size:13px; white-space:nowrap;
+    }
+    #get-app-close {
+      flex:0 0 auto; background:none; border:none; color:#fff; font-size:16px;
+      cursor:pointer; padding:2px 4px; line-height:1;
+    }
+
     /* ── Pin-on-map picker ── */
     .pin-btn {
       flex:0 0 auto; width:48px; border:1px solid var(--accent);
@@ -1063,6 +1079,13 @@
   </div>
 </div>
 
+<!-- Browser-only "get the app" bar (hidden inside the installed app) -->
+<div id="get-app-bar">
+  <span id="get-app-text" data-i18n="getapp_text">קבלו את אפליקציית iNeed</span>
+  <a id="get-app-install" href="https://play.google.com/store/apps/details?id=com.djangofreeman.ineed" target="_blank" rel="noopener" data-i18n="getapp_install">התקנה</a>
+  <button id="get-app-close" onclick="dismissGetAppBar()" aria-label="close">✕</button>
+</div>
+
 <div id="map"></div>
 
 <button id="matches-btn" onclick="openMatches()">
@@ -1522,6 +1545,8 @@ const I18N = {
     gate_signup: 'הרשמה',
     gate_login: 'התחברות',
     guest_signup: 'הרשמה',
+    getapp_text: 'קבלו את אפליקציית iNeed',
+    getapp_install: 'התקנה',
     guest_gate_title: 'נדרש חשבון',
     guest_gate_text: 'כדי להשתמש בתכונה הזו צריך חשבון. ההרשמה מהירה וחינמית.',
     guest_gate_signup: 'הרשמה / התחברות',
@@ -1780,6 +1805,8 @@ const I18N = {
     gate_tagline: 'Give and take in your neighborhood',
     gate_login: 'Log in',
     guest_signup: 'Sign up',
+    getapp_text: 'Get the iNeed app',
+    getapp_install: 'Install',
     guest_gate_title: 'Account needed',
     guest_gate_text: 'You need an account to use this feature. Signing up is quick and free.',
     guest_gate_signup: 'Sign up / Log in',
@@ -2038,6 +2065,8 @@ const I18N = {
     gate_tagline: 'Dej a vezmi ve svém okolí',
     gate_login: 'Přihlášení',
     guest_signup: 'Registrace',
+    getapp_text: 'Získejte aplikaci iNeed',
+    getapp_install: 'Instalovat',
     guest_gate_title: 'Vyžaduje účet',
     guest_gate_text: 'K použití této funkce potřebujete účet. Registrace je rychlá a zdarma.',
     guest_gate_signup: 'Registrace / Přihlášení',
@@ -2295,6 +2324,8 @@ const I18N = {
     gate_signup: 'Регистрация',
     gate_login: 'Вход',
     guest_signup: 'Регистрация',
+    getapp_text: 'Установите приложение iNeed',
+    getapp_install: 'Установить',
     guest_gate_title: 'Нужен аккаунт',
     guest_gate_text: 'Для этой функции нужен аккаунт. Регистрация быстрая и бесплатная.',
     guest_gate_signup: 'Регистрация / Вход',
@@ -5401,6 +5432,23 @@ function startMap() {
 
   requestNotificationPermission();
   handleDeepLink();   // if opened via …/?item=<id>, jump to that item
+  maybeShowGetAppBar();
+}
+
+// Show a "get the app" bar ONLY to browser visitors on Android (never inside
+// the installed app, and not on iPhone/desktop where a Play link is useless).
+function dismissGetAppBar() {
+  const b = document.getElementById('get-app-bar');
+  if (b) b.style.display = 'none';
+  try { localStorage.setItem('ineed_hide_app_banner', '1'); } catch (e) {}
+}
+function maybeShowGetAppBar() {
+  const cap = window.Capacitor;
+  if (cap && cap.isNativePlatform && cap.isNativePlatform()) return;  // already in the app
+  if (!/Android/i.test(navigator.userAgent || '')) return;           // Play link is Android-only
+  try { if (localStorage.getItem('ineed_hide_app_banner') === '1') return; } catch (e) {}
+  const b = document.getElementById('get-app-bar');
+  if (b) b.style.display = 'flex';
 }
 
 function startUserServices() {
