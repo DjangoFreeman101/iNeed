@@ -230,6 +230,18 @@
     .panel-title { font-size:17px; font-weight:700; }
     .panel-body { padding:20px 16px; flex:1; }
 
+    /* Search pill inside the My Items header bar */
+    .myitems-search {
+      flex:1; min-width:0; display:flex; align-items:center; gap:6px;
+      background:rgba(255,255,255,0.15); border-radius:18px; padding:6px 12px;
+    }
+    .myitems-search .search-icon { width:16px; height:16px; flex:0 0 auto; color:rgba(255,255,255,0.8); }
+    .myitems-search input {
+      flex:1; min-width:0; background:none; border:none; outline:none;
+      color:#fff; font-size:14px; font-family:'Heebo',sans-serif;
+    }
+    .myitems-search input::placeholder { color:rgba(255,255,255,0.7); }
+
     /* ── Forms ── */
     .form-group { margin-bottom:16px; }
     .form-label { font-size:13px; color:var(--gray); margin-bottom:6px; display:block; font-weight:600; }
@@ -1317,9 +1329,10 @@
   <div class="panel-header">
     <button class="panel-back" onclick="closePanel('my-items-panel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
     <span class="panel-title" data-i18n="myitems_title">הפריטים שלי</span>
-  </div>
-  <div id="my-items-search-row" style="padding:10px 16px 0;">
-    <input type="search" id="my-items-search" class="form-input" data-i18n-ph="myitems_search_ph" placeholder="חיפוש בפריטים שלי..." oninput="filterMyItems()" style="margin:0;"/>
+    <div class="myitems-search">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input type="search" id="my-items-search" data-i18n-ph="myitems_search_ph" placeholder="חיפוש" oninput="filterMyItems()"/>
+    </div>
   </div>
   <div class="panel-body" id="my-items-body">
     <p style="color:var(--gray); text-align:center;" data-i18n="loading">טוען...</p>
@@ -1771,7 +1784,7 @@ const I18N = {
     edit_photo_add: 'לחץ להוספת תמונה',
     edit_save: 'שמור שינויים',
     myitems_title: 'הפריטים שלי',
-    myitems_search_ph: 'חיפוש בפריטים שלי...',
+    myitems_search_ph: 'חיפוש',
     myitems_no_results: 'לא נמצאו פריטים תואמים',
     myrequests_title: 'הבקשות שלי',
     history_title: 'היסטוריה',
@@ -2033,7 +2046,7 @@ const I18N = {
     edit_photo_add: 'Tap to add a photo',
     edit_save: 'Save changes',
     myitems_title: 'My items',
-    myitems_search_ph: 'Search my items...',
+    myitems_search_ph: 'Search',
     myitems_no_results: 'No matching items',
     myrequests_title: 'My requests',
     history_title: 'History',
@@ -2295,7 +2308,7 @@ const I18N = {
     edit_photo_add: 'Klikni pro přidání fotografie',
     edit_save: 'Uložit změny',
     myitems_title: 'Moje položky',
-    myitems_search_ph: 'Hledat v mých položkách...',
+    myitems_search_ph: 'Hledat',
     myitems_no_results: 'Žádné odpovídající položky',
     myrequests_title: 'Moje žádosti',
     history_title: 'Historie',
@@ -2557,7 +2570,7 @@ const I18N = {
     edit_photo_add: 'Нажмите, чтобы добавить фото',
     edit_save: 'Сохранить изменения',
     myitems_title: 'Мои вещи',
-    myitems_search_ph: 'Поиск по моим вещам...',
+    myitems_search_ph: 'Поиск',
     myitems_no_results: 'Ничего не найдено',
     myrequests_title: 'Мои запросы',
     history_title: 'История',
