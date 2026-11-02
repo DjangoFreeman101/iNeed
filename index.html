@@ -356,7 +356,20 @@
       cursor:pointer;
     }
     #photo-lightbox.show { display:flex; }
-    #photo-lightbox img { max-width:100%; max-height:100%; border-radius:8px; object-fit:contain; }
+    #gallery-viewport { position:absolute; inset:0; overflow:hidden; }
+    #gallery-track {
+      display:flex; height:100%; direction:ltr;   /* keep slide math LTR even in RTL UI */
+      will-change:transform; transform:translateX(0);
+    }
+    #gallery-track.animate { transition:transform 0.3s cubic-bezier(0.22,0.61,0.36,1); }
+    .gallery-slide {
+      flex:0 0 100%; height:100%;
+      display:flex; align-items:center; justify-content:center; padding:20px; box-sizing:border-box;
+    }
+    .gallery-slide img {
+      max-width:100%; max-height:100%; border-radius:8px; object-fit:contain;
+      -webkit-user-drag:none; user-select:none;
+    }
     #photo-lightbox-close {
       position:absolute; top:16px; left:16px; background:rgba(255,255,255,0.15);
       color:white; border:none; border-radius:50%; width:36px; height:36px;
@@ -1107,7 +1120,9 @@
 <div id="photo-lightbox" onclick="if(event.target===this) closePhotoLightbox()">
   <button id="photo-lightbox-close" onclick="closePhotoLightbox()">✕</button>
   <button id="gallery-prev" class="gallery-nav" onclick="event.stopPropagation(); galleryStep(-1)">‹</button>
-  <img id="photo-lightbox-img" src="" onclick="event.stopPropagation()"/>
+  <div id="gallery-viewport" onclick="if(event.target===this) closePhotoLightbox()">
+    <div id="gallery-track"></div>
+  </div>
   <button id="gallery-next" class="gallery-nav" onclick="event.stopPropagation(); galleryStep(1)">›</button>
   <div id="gallery-counter"></div>
   <div id="gallery-dots"></div>
@@ -3195,22 +3210,38 @@ function openItemGallery(itemId, startIdx) {
 }
 
 // ── Swipeable full-screen gallery ───────────────────────
+// A horizontal track of slides; translateX follows the finger during a drag
+// and animates the snap to the chosen slide on release.
 let _galleryImgs = [];
 let _galleryIdx = 0;
+
 function openGallery(urls, idx) {
   _galleryImgs = urls || [];
-  _galleryIdx = Math.min(Math.max(idx || 0, 0), _galleryImgs.length - 1);
-  renderGallery();
+  _galleryIdx = Math.min(Math.max(idx || 0, 0), Math.max(_galleryImgs.length - 1, 0));
+  const track = document.getElementById('gallery-track');
+  if (track) {
+    track.classList.remove('animate');
+    track.innerHTML = _galleryImgs.map(u =>
+      `<div class="gallery-slide"><img src="${u}" onclick="event.stopPropagation()"/></div>`).join('');
+  }
+  positionTrack(0);
+  renderGalleryChrome();
   document.getElementById('photo-lightbox').classList.add('show');
 }
-function renderGallery() {
-  const img = document.getElementById('photo-lightbox-img');
+function vpWidth() {
+  const vp = document.getElementById('gallery-viewport');
+  return vp ? vp.clientWidth : window.innerWidth;
+}
+function positionTrack(dragDx) {
+  const track = document.getElementById('gallery-track');
+  if (track) track.style.transform = `translateX(${-_galleryIdx * vpWidth() + (dragDx || 0)}px)`;
+}
+function renderGalleryChrome() {
   const prev = document.getElementById('gallery-prev');
   const next = document.getElementById('gallery-next');
   const counter = document.getElementById('gallery-counter');
   const dots = document.getElementById('gallery-dots');
   const n = _galleryImgs.length;
-  if (img) img.src = _galleryImgs[_galleryIdx] || '';
   const multi = n > 1;
   if (prev) prev.style.display = multi ? 'flex' : 'none';
   if (next) next.style.display = multi ? 'flex' : 'none';
@@ -3228,30 +3259,63 @@ function galleryStep(dir) {
   const n = _galleryImgs.length;
   if (n < 2) return;
   _galleryIdx = (_galleryIdx + dir + n) % n;
-  renderGallery();
+  const track = document.getElementById('gallery-track');
+  if (track) track.classList.add('animate');
+  positionTrack(0);
+  renderGalleryChrome();
 }
 function closePhotoLightbox() {
   document.getElementById('photo-lightbox').classList.remove('show');
-  document.getElementById('photo-lightbox-img').src = '';
+  const track = document.getElementById('gallery-track');
+  if (track) track.innerHTML = '';
   _galleryImgs = [];
 }
 // Back-compat: single-image callers still work.
 function openPhotoLightbox(url) { openGallery([url], 0); }
 
-// Swipe left/right on the lightbox to page through the gallery.
+// Finger-following swipe with an animated snap on release.
 (function () {
-  const lb = document.getElementById('photo-lightbox');
-  if (!lb) return;
-  let x0 = null;
-  lb.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
-  lb.addEventListener('touchend', e => {
-    if (x0 === null) return;
-    const dx = e.changedTouches[0].clientX - x0;
-    x0 = null;
-    if (Math.abs(dx) < 40) return;
-    // Swipe right -> previous, swipe left -> next (flip for RTL feel is unnecessary here).
-    galleryStep(dx < 0 ? 1 : -1);
+  const vp = document.getElementById('gallery-viewport');
+  if (!vp) return;
+  let x0 = 0, y0 = 0, w = 0, dragging = false, horizontal = false;
+  const track = () => document.getElementById('gallery-track');
+
+  vp.addEventListener('touchstart', e => {
+    if (_galleryImgs.length < 2) return;
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+    w = vpWidth(); dragging = true; horizontal = false;
+    const t = track(); if (t) t.classList.remove('animate');
   }, { passive: true });
+
+  vp.addEventListener('touchmove', e => {
+    if (!dragging) return;
+    const dx = e.touches[0].clientX - x0;
+    const dy = e.touches[0].clientY - y0;
+    if (!horizontal) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      horizontal = Math.abs(dx) > Math.abs(dy);
+      if (!horizontal) { dragging = false; return; }   // vertical gesture -> ignore
+    }
+    // Resistance at the ends so you can't drag into empty space.
+    let eff = dx;
+    if ((_galleryIdx === 0 && dx > 0) ||
+        (_galleryIdx === _galleryImgs.length - 1 && dx < 0)) eff = dx * 0.35;
+    positionTrack(eff);
+  }, { passive: true });
+
+  vp.addEventListener('touchend', e => {
+    if (!dragging) return;
+    dragging = false;
+    const dx = e.changedTouches[0].clientX - x0;
+    const t = track(); if (t) t.classList.add('animate');
+    if (horizontal && Math.abs(dx) > w * 0.2) galleryStep(dx < 0 ? 1 : -1);
+    else positionTrack(0);   // snap back to current
+  }, { passive: true });
+
+  // Keep the current slide aligned if the viewport resizes (rotation, etc.).
+  window.addEventListener('resize', () => {
+    if (document.getElementById('photo-lightbox').classList.contains('show')) positionTrack(0);
+  });
 })();
 
 // ── Refresh ──────────────────────────────────────────────
