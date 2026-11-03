@@ -675,6 +675,81 @@
       cursor:pointer; font-family:'Heebo',sans-serif;
     }
 
+    /* ── "Waiting for your answer" popup ── */
+    #action-popup {
+      position:fixed; top:0; left:0; right:0; z-index:9500;
+      display:flex; justify-content:center;
+      padding:max(14px,env(safe-area-inset-top,0px)) 14px 0;
+      transform:translateY(-130%); transition:transform 0.32s cubic-bezier(0.22,0.61,0.36,1);
+      pointer-events:none;
+    }
+    #action-popup.show { transform:translateY(0); pointer-events:auto; }
+    @media (prefers-reduced-motion:reduce){ #action-popup { transition:none; } }
+    #action-popup-card {
+      width:100%; max-width:420px; background:#fff; border-radius:16px;
+      border:2px solid var(--accent);
+      box-shadow:0 10px 36px rgba(0,0,0,0.35);
+      padding:14px 16px 16px; text-align:center;
+      will-change:transform;
+    }
+    #action-popup-grip {
+      width:40px; height:4px; border-radius:3px; background:#d9dde2;
+      margin:0 auto 10px;
+    }
+    #action-popup-title { font-size:17px; font-weight:900; color:var(--accent); margin-bottom:6px; }
+    #action-popup-msg { font-size:15px; color:var(--dark); line-height:1.5; margin-bottom:14px; }
+    #action-popup-actions { display:flex; gap:10px; }
+    #action-popup-view {
+      flex:1; background:var(--accent); color:#fff; border:none; border-radius:12px;
+      padding:13px; font-size:15px; font-weight:800; cursor:pointer; font-family:'Heebo',sans-serif;
+    }
+    #action-popup-later {
+      flex:0 0 auto; background:#f0f0f0; color:var(--dark); border:none; border-radius:12px;
+      padding:13px 16px; font-size:15px; font-weight:700; cursor:pointer; font-family:'Heebo',sans-serif;
+    }
+
+    /* ── Jump-to-area search ── */
+    #map-search-btn {
+      position:fixed; top:62px; left:50%; transform:translateX(-50%); z-index:450;
+      display:flex; align-items:center; gap:6px;
+      background:#fff; color:var(--accent); border:none;
+      border-radius:20px; height:36px; padding:0 15px; cursor:pointer;
+      font-family:'Heebo',sans-serif; font-size:14px; font-weight:700;
+      box-shadow:0 3px 12px rgba(0,0,0,0.22); transition:top 0.25s ease;
+    }
+    #map-search-btn svg { width:17px; height:17px; flex:0 0 auto; }
+    /* Drop it below the "get the app" bar when that bar is expanded. */
+    body.getapp-open #map-search-btn { top:104px; }
+
+    #area-search-overlay {
+      display:none; position:fixed; inset:0; z-index:9400;
+      background:rgba(0,0,0,0.5);
+      flex-direction:column; align-items:center;
+      padding:76px 16px 0;
+    }
+    #area-search-box {
+      width:100%; max-width:420px; display:flex; align-items:center; gap:8px;
+      background:#fff; border-radius:14px; padding:8px 10px;
+      box-shadow:0 8px 30px rgba(0,0,0,0.3);
+    }
+    #area-search-box .as-icon { width:18px; height:18px; flex:0 0 auto; color:#8a9099; }
+    #area-search-input {
+      flex:1; min-width:0; border:none; outline:none; background:none;
+      font-family:'Heebo',sans-serif; font-size:15px; color:var(--dark);
+    }
+    #area-search-go {
+      flex:0 0 auto; background:var(--accent); color:#fff; border:none;
+      border-radius:10px; padding:8px 14px; font-size:14px; font-weight:700;
+      cursor:pointer; font-family:'Heebo',sans-serif;
+    }
+    #area-search-x {
+      flex:0 0 auto; background:none; border:none; color:var(--gray);
+      font-size:16px; cursor:pointer; padding:4px 6px;
+    }
+    #area-search-status {
+      color:#fff; font-size:13px; margin-top:10px; min-height:18px; text-align:center;
+    }
+
     /* ── Loading ── */
     #loading {
       position:fixed; top:0; left:0; right:0; bottom:0;
@@ -1024,9 +1099,9 @@
   <div class="auth-step" id="auth-step-signup-radius">
     <h1 data-i18n="signup_radius_title">רדיוס חיפוש</h1>
     <p data-i18n="signup_radius_sub">באיזה רדיוס תרצה לראות פריטים?</p>
-    <div id="signup-radius-display">5 ק"מ</div>
+    <div id="signup-radius-display">150 ק"מ</div>
     <div class="radius-row">
-      <input type="range" id="signup-radius" min="1" max="100" value="5"/>
+      <input type="range" id="signup-radius" min="1" max="150" value="150"/>
       <div class="radius-arrows">
         <button type="button" class="radius-arrow" onclick="adjustSignupRadius(1)">←</button>
         <button type="button" class="radius-arrow" onclick="adjustSignupRadius(-1)">→</button>
@@ -1119,6 +1194,21 @@
 
 <div id="map"></div>
 
+<!-- Jump to an area (geocode + fly the map there) -->
+<button id="map-search-btn" onclick="openAreaSearch()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+  <span data-i18n="area_search_btn">קפוץ לאזור</span>
+</button>
+<div id="area-search-overlay" onclick="if(event.target===this) closeAreaSearch()">
+  <div id="area-search-box">
+    <svg class="as-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    <input id="area-search-input" type="search" data-i18n-ph="area_search_ph" placeholder="עיר או כתובת (למשל: אריאל)" onkeydown="if(event.key==='Enter'){event.preventDefault();doAreaSearch();}"/>
+    <button id="area-search-go" onclick="doAreaSearch()" data-i18n="area_search_go">חפש</button>
+    <button id="area-search-x" onclick="closeAreaSearch()" aria-label="close">✕</button>
+  </div>
+  <div id="area-search-status"></div>
+</div>
+
 <button id="matches-btn" onclick="openMatches()">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>
   <span data-i18n="matches_btn">התאמות</span>
@@ -1134,6 +1224,19 @@
 <div id="interest-banner" onclick="dismissInterestBanner(true)">
   <span id="interest-banner-text"></span>
   <button onclick="event.stopPropagation(); dismissInterestBanner(false)">✕</button>
+</div>
+
+<!-- Prominent "someone is waiting for your answer" popup (giver side) -->
+<div id="action-popup" role="alertdialog" aria-live="assertive">
+  <div id="action-popup-card">
+    <div id="action-popup-grip"></div>
+    <div id="action-popup-title">⏳ <span data-i18n="pending_title">מישהו מחכה לתשובה שלך!</span></div>
+    <div id="action-popup-msg"></div>
+    <div id="action-popup-actions">
+      <button id="action-popup-view" onclick="actionPopupView()" data-i18n="pending_view">צפייה ומענה</button>
+      <button id="action-popup-later" onclick="hideActionPopup()" data-i18n="pending_later">אחר כך</button>
+    </div>
+  </div>
 </div>
 
 <div id="undo-bar">
@@ -1499,9 +1602,9 @@
     </div>
     <div class="form-group">
       <label class="form-label" data-i18n="settings_radius">רדיוס חיפוש</label>
-      <div id="settings-radius-display">5 ק"מ</div>
+      <div id="settings-radius-display">150 ק"מ</div>
       <div class="radius-row">
-        <input type="range" id="settings-radius" min="1" max="100" value="5"/>
+        <input type="range" id="settings-radius" min="1" max="150" value="150"/>
         <div class="radius-arrows">
           <button type="button" class="radius-arrow" onclick="adjustRadius(1)">←</button>
           <button type="button" class="radius-arrow" onclick="adjustRadius(-1)">→</button>
@@ -1698,6 +1801,12 @@ const I18N = {
     post_loc_address: 'הזן כתובת',
     post_address_ph: 'לדוגמה: הרצל 10, תל אביב',
     post_geocode: 'אתר כתובת על המפה',
+    area_search_btn: 'קפוץ לאזור',
+    area_search_ph: 'עיר או כתובת (למשל: אריאל)',
+    area_search_go: 'חפש',
+    area_searching: 'מחפש...',
+    area_search_notfound: 'לא נמצא מיקום כזה',
+    area_search_error: 'שגיאה בחיפוש. בדוק/י את החיבור ונסה/י שוב.',
     post_pick_map: 'בחר/י נקודה על המפה',
     pin_hint: 'הזיזו את המפה כך שהסמן יהיה על המיקום',
     pin_confirm: 'אישור מיקום',
@@ -1749,6 +1858,9 @@ const I18N = {
     pop_who_wants: 'מי רוצה',
     notif_has_for_you: 'ל{name} יש "{item}" בשבילך',
     notif_interested_in: '{name} מעוניין ב"{item}"',
+    pending_title: 'מישהו מחכה לתשובה שלך!',
+    pending_view: 'צפייה ומענה',
+    pending_later: 'אחר כך',
     notif_multi_updates: 'יש {n} עדכונים חדשים על הפריטים שלך',
     notif_found_title: 'מישהו מצא את מה שחיפשת!',
     notif_interested_title: 'מישהו מעוניין בפריט שלך!',
@@ -1960,6 +2072,12 @@ const I18N = {
     post_loc_address: 'Enter an address',
     post_address_ph: 'e.g. 10 Herzl St, Tel Aviv',
     post_geocode: 'Find address on map',
+    area_search_btn: 'Jump to area',
+    area_search_ph: 'City or address (e.g. Ariel)',
+    area_search_go: 'Go',
+    area_searching: 'Searching...',
+    area_search_notfound: 'No such place found',
+    area_search_error: 'Search error. Check your connection and try again.',
     post_pick_map: 'Pick a point on the map',
     pin_hint: 'Move the map so the pin is on your spot',
     pin_confirm: 'Confirm location',
@@ -2011,6 +2129,9 @@ const I18N = {
     pop_who_wants: 'Who wants',
     notif_has_for_you: '{name} has "{item}" for you',
     notif_interested_in: '{name} is interested in "{item}"',
+    pending_title: 'Someone is waiting for your answer!',
+    pending_view: 'View & respond',
+    pending_later: 'Later',
     notif_multi_updates: 'You have {n} new updates on your items',
     notif_found_title: 'Someone found what you were looking for!',
     notif_interested_title: 'Someone is interested in your item!',
@@ -2222,6 +2343,12 @@ const I18N = {
     post_loc_address: 'Zadat adresu',
     post_address_ph: 'např. Václavské náměstí 1, Praha',
     post_geocode: 'Najít adresu na mapě',
+    area_search_btn: 'Skočit na oblast',
+    area_search_ph: 'Město nebo adresa (např. Ariel)',
+    area_search_go: 'Hledat',
+    area_searching: 'Hledám...',
+    area_search_notfound: 'Místo nenalezeno',
+    area_search_error: 'Chyba hledání. Zkontrolujte připojení a zkuste to znovu.',
     post_pick_map: 'Vyberte bod na mapě',
     pin_hint: 'Posuňte mapu tak, aby byl špendlík na místě',
     pin_confirm: 'Potvrdit polohu',
@@ -2273,6 +2400,9 @@ const I18N = {
     pop_who_wants: 'Kdo chce',
     notif_has_for_you: '{name} má „{item}“ pro tebe',
     notif_interested_in: '{name} má zájem o „{item}“',
+    pending_title: 'Někdo čeká na vaši odpověď!',
+    pending_view: 'Zobrazit a odpovědět',
+    pending_later: 'Později',
     notif_multi_updates: 'Máš {n} nových aktualizací u svých položek',
     notif_found_title: 'Někdo našel to, co jsi hledal!',
     notif_interested_title: 'Někdo má zájem o tvoji položku!',
@@ -2484,6 +2614,12 @@ const I18N = {
     post_loc_address: 'Ввести адрес',
     post_address_ph: 'например: ул. Ленина 10, Москва',
     post_geocode: 'Найти адрес на карте',
+    area_search_btn: 'Перейти к району',
+    area_search_ph: 'Город или адрес (напр. Ариэль)',
+    area_search_go: 'Найти',
+    area_searching: 'Поиск...',
+    area_search_notfound: 'Место не найдено',
+    area_search_error: 'Ошибка поиска. Проверьте подключение и повторите.',
     post_pick_map: 'Выберите точку на карте',
     pin_hint: 'Подвиньте карту, чтобы метка была на нужном месте',
     pin_confirm: 'Подтвердить место',
@@ -2535,6 +2671,9 @@ const I18N = {
     pop_who_wants: 'Кто хочет',
     notif_has_for_you: 'У {name} есть «{item}» для вас',
     notif_interested_in: '{name} интересуется «{item}»',
+    pending_title: 'Кто-то ждёт вашего ответа!',
+    pending_view: 'Открыть и ответить',
+    pending_later: 'Позже',
     notif_multi_updates: 'У вас {n} новых обновлений по вашим вещам',
     notif_found_title: 'Кто-то нашёл то, что вы искали!',
     notif_interested_title: 'Кто-то интересуется вашей вещью!',
@@ -2960,7 +3099,7 @@ function distanceKm(lat1, lon1, lat2, lon2) {
 
 function getRadiusKm() {
   const r = currentUser && currentUser.radius_km;
-  return (typeof r === 'number' && r > 0) ? r : 5;
+  return (typeof r === 'number' && r > 0) ? r : 150;   // default: max reach
 }
 
 function filterByRadius(items) {
@@ -2970,6 +3109,41 @@ function filterByRadius(items) {
   if (userLat === null || userLon === null) return items;
   const radius = getRadiusKm();
   return items.filter(i => distanceKm(userLat, userLon, i.lat, i.lon) <= radius);
+}
+
+// ── Jump to an area: geocode the typed place and fly the map there ──
+function openAreaSearch() {
+  const o = document.getElementById('area-search-overlay');
+  if (o) o.style.display = 'flex';
+  const status = document.getElementById('area-search-status');
+  if (status) status.textContent = '';
+  const inp = document.getElementById('area-search-input');
+  if (inp) setTimeout(() => { try { inp.focus(); } catch (e) {} }, 60);
+}
+function closeAreaSearch() {
+  const o = document.getElementById('area-search-overlay');
+  if (o) o.style.display = 'none';
+}
+async function doAreaSearch() {
+  const q = (document.getElementById('area-search-input').value || '').trim();
+  const status = document.getElementById('area-search-status');
+  if (!q) return;
+  if (status) status.textContent = t('area_searching');
+  try {
+    // Bias to Israel so ambiguous names resolve locally.
+    const params = new URLSearchParams({ format: 'json', q, limit: '1', countrycodes: 'il' });
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`);
+    const results = await res.json();
+    if (results && results.length > 0) {
+      const lat = parseFloat(results[0].lat), lon = parseFloat(results[0].lon);
+      closeAreaSearch();
+      map.flyTo([lat, lon], 14);   // loadItems fires on the map's moveend
+    } else if (status) {
+      status.textContent = t('area_search_notfound');
+    }
+  } catch (e) {
+    if (status) status.textContent = t('area_search_error');
+  }
 }
 
 // Active map filter. null in each slot means "no constraint on this field".
@@ -4378,8 +4552,8 @@ function openSettings() {
   closeMenu();
   if (currentUser) {
     document.getElementById('settings-nickname').value = currentUser.nickname || '';
-    document.getElementById('settings-radius').value = currentUser.radius_km || 5;
-    document.getElementById('settings-radius-display').textContent = (currentUser.radius_km || 5) + ' ' + t('km_unit');
+    document.getElementById('settings-radius').value = currentUser.radius_km || 150;
+    document.getElementById('settings-radius-display').textContent = (currentUser.radius_km || 150) + ' ' + t('km_unit');
     document.getElementById('settings-email').value = currentUser.email || '';
     document.getElementById('settings-phone').value = currentUser.phone || '';
   }
@@ -4966,6 +5140,91 @@ function vibrateOnce() {
   } catch (e) {}
 }
 
+// A stronger, double-buzz for the "someone is waiting" alert.
+function strongVibrate() {
+  try {
+    const cap = window.Capacitor;
+    if (cap && cap.isNativePlatform && cap.isNativePlatform() && cap.Plugins && cap.Plugins.Haptics) {
+      cap.Plugins.Haptics.notification({ type: 'SUCCESS' });
+      return;
+    }
+  } catch (e) {}
+  try { if (navigator.vibrate) navigator.vibrate([0, 140, 70, 140]); } catch (e) {}
+}
+
+// ── A short, pleasant chime via Web Audio ───────────────
+// Browsers block audio until the user interacts, so we resume the context on
+// the first tap and keep it warm for later alerts.
+let _audioCtx = null;
+function _ensureAudio() {
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    return _audioCtx;
+  } catch (e) { return null; }
+}
+['pointerdown', 'touchstart', 'click'].forEach(ev =>
+  window.addEventListener(ev, () => _ensureAudio(), { once: true, passive: true }));
+function playChime() {
+  const ctx = _ensureAudio();
+  if (!ctx) return;
+  try {
+    const now = ctx.currentTime;
+    [[880, now], [1174.66, now + 0.13]].forEach(([freq, t]) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.22, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(t); o.stop(t + 0.32);
+    });
+  } catch (e) {}
+}
+
+// ── Prominent "someone is waiting for your answer" popup ──
+let _actionPopupOnView = null;
+function showActionPopup(message, onView) {
+  _actionPopupOnView = (typeof onView === 'function') ? onView : null;
+  const msgEl = document.getElementById('action-popup-msg');
+  if (msgEl) msgEl.textContent = message || '';
+  const el = document.getElementById('action-popup');
+  if (el) el.classList.add('show');
+  strongVibrate();
+  playChime();
+}
+function hideActionPopup() {
+  const el = document.getElementById('action-popup');
+  if (el) el.classList.remove('show');
+  const card = document.getElementById('action-popup-card');
+  if (card) card.style.transform = '';
+}
+function actionPopupView() {
+  const fn = _actionPopupOnView; _actionPopupOnView = null;
+  hideActionPopup();
+  if (fn) fn(); else openMyItems();
+}
+// Swipe up on the card to dismiss.
+(function () {
+  const card = document.getElementById('action-popup-card');
+  if (!card) return;
+  let y0 = 0, dragging = false;
+  card.addEventListener('touchstart', e => { y0 = e.touches[0].clientY; dragging = true; card.style.transition = 'none'; }, { passive: true });
+  card.addEventListener('touchmove', e => {
+    if (!dragging) return;
+    const dy = e.touches[0].clientY - y0;
+    if (dy < 0) card.style.transform = `translateY(${dy}px)`;   // only upward
+  }, { passive: true });
+  card.addEventListener('touchend', e => {
+    if (!dragging) return;
+    dragging = false;
+    card.style.transition = '';
+    const dy = e.changedTouches[0].clientY - y0;
+    if (dy < -50) hideActionPopup();
+    else card.style.transform = '';
+  }, { passive: true });
+})();
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -5145,7 +5404,9 @@ async function checkForNewInterest() {
           ? t('notif_has_for_you').replace('{name}', single.requester_name).replace('{item}', single.item_title)
           : t('notif_interested_in').replace('{name}', single.requester_name).replace('{item}', single.item_title))
       : t('notif_multi_updates').replace('{n}', newRows.length);
-    showInterestBanner(message, 'my-items');
+    // Prominent popup (vibration + sound + swipe-to-dismiss) so the giver
+    // actually answers — that's how the requester finally hears back.
+    showActionPopup(message, () => openMyItems());
 
     const notifTitle = newRows.length === 1 && singleIsTake
       ? t('notif_found_title')
