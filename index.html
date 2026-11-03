@@ -4412,6 +4412,20 @@ function renderMyItemsList(items) {
   }
 
   const unreadItemIds = getUnreadItemIds();
+
+  // Float items people are interested in to the top, regardless of upload date:
+  // pending (someone waiting for your answer) first, new/unread ahead of seen,
+  // then more requests, then everything else by newest.
+  const pendingOf = it => Math.max(0, (it.request_count || 0) - (it.approved_count || 0));
+  items = items.slice().sort((a, b) => {
+    const pa = pendingOf(a), pb = pendingOf(b);
+    if ((pb > 0) !== (pa > 0)) return (pb > 0 ? 1 : 0) - (pa > 0 ? 1 : 0);
+    const ua = unreadItemIds.has(a.id) ? 1 : 0, ub = unreadItemIds.has(b.id) ? 1 : 0;
+    if (ub !== ua) return ub - ua;
+    if (pb !== pa) return pb - pa;
+    return (b.created_at || 0) - (a.created_at || 0);
+  });
+
   body.innerHTML = items.map(item => {
     const swipeable = (item.approved_count || 0) > 0;
     const revealLabel = isTakePost(item) ? 'לקחתי' : 'מסרתי';
