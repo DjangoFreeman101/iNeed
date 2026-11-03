@@ -675,6 +675,29 @@
       cursor:pointer; font-family:'Heebo',sans-serif;
     }
 
+    /* ── Reject reason modal ── */
+    #reject-reason-overlay {
+      display:none; position:fixed; inset:0; z-index:99991;
+      background:rgba(0,0,0,0.55);
+      align-items:center; justify-content:center; padding:24px;
+    }
+    #reject-reason-modal {
+      background:#fff; border-radius:18px; padding:22px 20px;
+      width:100%; max-width:360px; box-shadow:0 10px 40px rgba(0,0,0,0.3);
+      display:flex; flex-direction:column; gap:10px;
+    }
+    #reject-reason-title { font-size:17px; font-weight:800; color:var(--dark); text-align:center; margin-bottom:4px; }
+    .reject-reason-opt {
+      width:100%; background:#f4f5f6; color:var(--dark); border:1px solid var(--line, #e3e6ea);
+      border-radius:12px; padding:14px; font-size:15px; font-weight:700;
+      cursor:pointer; font-family:'Heebo',sans-serif;
+    }
+    .reject-reason-opt:active { background:#e7e9eb; }
+    .reject-reason-cancel {
+      width:100%; background:none; color:var(--gray); border:none;
+      padding:8px 0 0; font-size:15px; cursor:pointer; font-family:'Heebo',sans-serif;
+    }
+
     /* ── "Waiting for your answer" popup ── */
     #action-popup {
       position:fixed; top:0; left:0; right:0; z-index:9500;
@@ -1270,6 +1293,17 @@
     <div id="guest-gate-text" data-i18n="guest_gate_text">כדי להשתמש בתכונה הזו צריך חשבון. ההרשמה מהירה וחינמית.</div>
     <button class="guest-gate-signup" data-i18n="guest_gate_signup" onclick="guestGateSignup()">הרשמה / התחברות</button>
     <button class="guest-gate-cancel" data-i18n="guest_gate_cancel" onclick="closeGuestGate()">לא עכשיו</button>
+  </div>
+</div>
+
+<!-- Reject reason (shown after "Are you sure?") -->
+<div id="reject-reason-overlay" onclick="if(event.target===this) closeRejectReason()">
+  <div id="reject-reason-modal">
+    <div id="reject-reason-title" data-i18n="reject_reason_title">סיבת הדחייה</div>
+    <button class="reject-reason-opt" onclick="doReject('given')" data-i18n="reject_reason_given">הפריט כבר נמסר למישהו אחר</button>
+    <button class="reject-reason-opt" onclick="doReject('unavailable')" data-i18n="reject_reason_unavailable">הפריט כבר לא זמין</button>
+    <button class="reject-reason-opt" onclick="doReject('irrelevant')" data-i18n="reject_reason_irrelevant">לא רלוונטי</button>
+    <button class="reject-reason-cancel" onclick="closeRejectReason()" data-i18n="guest_gate_cancel">ביטול</button>
   </div>
 </div>
 
@@ -1890,6 +1924,10 @@ const I18N = {
     req_approved_label: 'מאושר ✓',
     req_approved_toast: 'הבקשה אושרה! מספר הטלפון יופיע כעת',
     req_reject_confirm: 'האם אתה בטוח?',
+    reject_reason_title: 'סיבת הדחייה',
+    reject_reason_given: 'הפריט כבר נמסר למישהו אחר',
+    reject_reason_unavailable: 'הפריט כבר לא זמין',
+    reject_reason_irrelevant: 'לא רלוונטי',
     req_rejected_toast: 'הבקשה נדחתה',
     undo_taken: 'סומן כנלקח',
     undo_btn: 'ביטול',
@@ -2163,6 +2201,10 @@ const I18N = {
     req_approved_label: 'Approved ✓',
     req_approved_toast: 'Request approved! The phone number will now appear',
     req_reject_confirm: 'Are you sure?',
+    reject_reason_title: 'Reason for declining',
+    reject_reason_given: 'Already given to someone else',
+    reject_reason_unavailable: 'No longer available',
+    reject_reason_irrelevant: 'Not relevant',
     req_rejected_toast: 'Request rejected',
     undo_taken: 'Marked as taken',
     undo_btn: 'Undo',
@@ -2436,6 +2478,10 @@ const I18N = {
     req_approved_label: 'Schváleno ✓',
     req_approved_toast: 'Žádost schválena! Nyní se zobrazí telefonní číslo',
     req_reject_confirm: 'Opravdu?',
+    reject_reason_title: 'Důvod zamítnutí',
+    reject_reason_given: 'Již darováno někomu jinému',
+    reject_reason_unavailable: 'Již není k dispozici',
+    reject_reason_irrelevant: 'Nerelevantní',
     req_rejected_toast: 'Žádost odmítnuta',
     undo_taken: 'Označeno jako převzaté',
     undo_btn: 'Zpět',
@@ -2709,6 +2755,10 @@ const I18N = {
     req_approved_label: 'Одобрено ✓',
     req_approved_toast: 'Запрос одобрен! Теперь появится номер телефона',
     req_reject_confirm: 'Вы уверены?',
+    reject_reason_title: 'Причина отказа',
+    reject_reason_given: 'Уже отдали другому',
+    reject_reason_unavailable: 'Больше недоступно',
+    reject_reason_irrelevant: 'Не актуально',
     req_rejected_toast: 'Запрос отклонён',
     undo_taken: 'Отмечено как взято',
     undo_btn: 'Отменить',
@@ -4536,13 +4586,34 @@ async function approveRequest(requestId, itemId) {
   }
 }
 
+let _rejectCtx = null;
 async function rejectRequest(requestId, itemId) {
   if (!confirm(t('req_reject_confirm'))) return;
+  // After confirming, ask for a reason. Closing the popup cancels the reject,
+  // so a reason is always attached to a rejection that goes through.
+  _rejectCtx = { requestId, itemId };
+  const o = document.getElementById('reject-reason-overlay');
+  if (o) o.style.display = 'flex';
+}
+function closeRejectReason() {
+  const o = document.getElementById('reject-reason-overlay');
+  if (o) o.style.display = 'none';
+  _rejectCtx = null;   // cancelled
+}
+async function doReject(reason) {
+  const ctx = _rejectCtx;
+  const o = document.getElementById('reject-reason-overlay');
+  if (o) o.style.display = 'none';
+  _rejectCtx = null;
+  if (!ctx) return;
   try {
-    const res = await fetch(`${API_BASE}/request/${requestId}/reject?device_id=${encodeURIComponent(deviceId)}`, { method: 'POST' });
+    const res = await fetch(
+      `${API_BASE}/request/${ctx.requestId}/reject?device_id=${encodeURIComponent(deviceId)}&reason=${encodeURIComponent(reason)}`,
+      { method: 'POST' }
+    );
     if (!res.ok) { showToast(t('toast_error')); return; }
     showToast(t('req_rejected_toast'));
-    viewRequesters(itemId); // refresh — the rejected person drops off the list
+    viewRequesters(ctx.itemId); // refresh — the rejected person drops off the list
   } catch (e) {
     showToast(t('toast_error'));
   }
@@ -5810,7 +5881,8 @@ async function checkForRejections() {
     if (!rows || rows.length === 0) return;
     // Show one banner per notice (usually just one).
     rows.forEach(r => {
-      const message = t('notif_declined').replace('{item}', r.item_title);
+      let message = t('notif_declined').replace('{item}', r.item_title);
+      if (r.reason) message += ' · ' + t('reject_reason_' + r.reason);
       showInterestBanner(message, 'my-requests');
       if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
         try {

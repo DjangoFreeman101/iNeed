@@ -236,6 +236,8 @@ def init_db():
             created_at DOUBLE PRECISION NOT NULL
         )
     """)
+    # Optional reason code the poster picked (given / unavailable / irrelevant).
+    cur.execute("ALTER TABLE rejections ADD COLUMN IF NOT EXISTS reason TEXT")
 
     conn.commit()
     cur.close()
@@ -1668,12 +1670,32 @@ REJECT_EMAIL = {
     "ru": {"subject": "Ваш запрос отклонён", "body": "Ваш запрос на \u00ab{item}\u00bb был отклонён.", "rtl": False},
 }
 
-def send_reject_email(to_addr, language, item_title):
+# Fixed reason codes + localized text, shown to the REJECTED user in their own
+# language (we store the code, not the poster's wording).
+REJECT_REASON_CODES = {"given", "unavailable", "irrelevant"}
+REJECT_REASON_LABEL = {"il": "סיבה:", "en": "Reason:", "cs": "Důvod:", "ru": "Причина:"}
+REJECT_REASONS = {
+    "il": {"given": "הפריט כבר נמסר למישהו אחר", "unavailable": "הפריט כבר לא זמין", "irrelevant": "לא רלוונטי"},
+    "en": {"given": "The item was already given to someone else", "unavailable": "The item is no longer available", "irrelevant": "Not relevant"},
+    "cs": {"given": "Položka již byla darována někomu jinému", "unavailable": "Položka již není k dispozici", "irrelevant": "Nerelevantní"},
+    "ru": {"given": "Вещь уже отдали другому человеку", "unavailable": "Вещь больше недоступна", "irrelevant": "Не актуально"},
+}
+def reject_reason_text(language, reason):
+    if not reason or reason not in REJECT_REASON_CODES:
+        return ""
+    lang = normalize_lang(language)
+    return REJECT_REASONS.get(lang, REJECT_REASONS["il"]).get(reason, "")
+
+def send_reject_email(to_addr, language, item_title, reason=None):
     if not to_addr:
         return False
     copy = REJECT_EMAIL.get(normalize_lang(language), REJECT_EMAIL["il"])
     align = "right" if copy["rtl"] else "left"
     html = f'<p style="font-size:17px;font-weight:700;margin:0;text-align:{align};">{copy["body"].format(item=item_title or "")}</p>'
+    rtext = reject_reason_text(language, reason)
+    if rtext:
+        label = REJECT_REASON_LABEL.get(normalize_lang(language), REJECT_REASON_LABEL["il"])
+        html += f'<p style="font-size:15px;margin:10px 0 0;text-align:{align};color:#555;">{label} {rtext}</p>'
     try:
         return send_simple_email(to_addr, copy["subject"], html, rtl=copy["rtl"])
     except Exception as e:
@@ -1681,7 +1703,7 @@ def send_reject_email(to_addr, language, item_title):
         return False
 
 @app.post("/request/{request_id}/reject")
-def reject_request(request_id: int, device_id: str):
+def reject_request(request_id: int, device_id: str, reason: Optional[str] = None):
     """The poster rejects an interested person's PENDING request. Verifies the
     caller owns the item, then deletes the request entirely (they may re-request
     later), records a rejection notice for the person's app to surface, and
@@ -1708,12 +1730,14 @@ def reject_request(request_id: int, device_id: str):
         cur.close(); conn.close()
         raise HTTPException(status_code=400, detail="Only pending requests can be rejected")
 
+    reason = reason if reason in REJECT_REASON_CODES else None
+
     # Clear FK dependents, delete the request, record the rejection notice.
     cur.execute("DELETE FROM exchange_reminders WHERE request_id = %s", (request_id,))
     cur.execute("DELETE FROM requests WHERE id = %s", (request_id,))
     cur.execute(
-        "INSERT INTO rejections (device_id, item_title, created_at) VALUES (%s, %s, %s)",
-        (row["requester_device_id"], row["item_title"], time.time())
+        "INSERT INTO rejections (device_id, item_title, reason, created_at) VALUES (%s, %s, %s, %s)",
+        (row["requester_device_id"], row["item_title"], reason, time.time())
     )
     conn.commit()
     cur.close()
@@ -1721,7 +1745,7 @@ def reject_request(request_id: int, device_id: str):
 
     # Best-effort email; never blocks the reject.
     try:
-        send_reject_email(row["requester_email"], row["requester_language"], row["item_title"])
+        send_reject_email(row["requester_email"], row["requester_language"], row["item_title"], reason)
     except Exception as e:
         print("Reject email dispatch failed:", e)
     return {"ok": True}
@@ -1732,7 +1756,7 @@ def get_rejections(device_id: str):
     deletes them (one-time delivery, like a mailbox)."""
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT id, item_title FROM rejections WHERE device_id = %s ORDER BY created_at",
+    cur.execute("SELECT id, item_title, reason FROM rejections WHERE device_id = %s ORDER BY created_at",
                 (device_id,))
     rows = [dict(r) for r in cur.fetchall()]
     if rows:
