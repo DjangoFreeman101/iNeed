@@ -697,6 +697,8 @@
       margin:0 auto 10px;
     }
     #action-popup-title { font-size:17px; font-weight:900; color:var(--accent); margin-bottom:6px; }
+    #action-popup-card.success { border-color:var(--green); }
+    #action-popup-card.success #action-popup-title { color:var(--green); }
     #action-popup-msg { font-size:15px; color:var(--dark); line-height:1.5; margin-bottom:14px; }
     #action-popup-actions { display:flex; gap:10px; }
     #action-popup-view {
@@ -746,6 +748,17 @@
       flex:0 0 auto; background:none; border:none; color:var(--gray);
       font-size:16px; cursor:pointer; padding:4px 6px;
     }
+    #area-search-results {
+      width:100%; max-width:420px; margin-top:8px;
+      max-height:50vh; overflow-y:auto;
+      display:flex; flex-direction:column; gap:6px;
+    }
+    .town-row {
+      width:100%; text-align:start; background:#fff; border:none; border-radius:10px;
+      padding:12px 14px; font-family:'Heebo',sans-serif; font-size:15px; font-weight:700;
+      color:var(--dark); cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.12);
+    }
+    .town-row .town-en { color:var(--gray); font-weight:500; font-size:13px; }
     #area-search-status {
       color:#fff; font-size:13px; margin-top:10px; min-height:18px; text-align:center;
     }
@@ -1202,10 +1215,10 @@
 <div id="area-search-overlay" onclick="if(event.target===this) closeAreaSearch()">
   <div id="area-search-box">
     <svg class="as-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-    <input id="area-search-input" type="search" data-i18n-ph="area_search_ph" placeholder="עיר או כתובת (למשל: אריאל)" onkeydown="if(event.key==='Enter'){event.preventDefault();doAreaSearch();}"/>
-    <button id="area-search-go" onclick="doAreaSearch()" data-i18n="area_search_go">חפש</button>
+    <input id="area-search-input" type="search" autocomplete="off" data-i18n-ph="area_search_ph" placeholder="שם עיר או יישוב" oninput="renderTownMatches()" onkeydown="if(event.key==='Enter'){event.preventDefault();pickFirstTown();}"/>
     <button id="area-search-x" onclick="closeAreaSearch()" aria-label="close">✕</button>
   </div>
+  <div id="area-search-results"></div>
   <div id="area-search-status"></div>
 </div>
 
@@ -1230,11 +1243,11 @@
 <div id="action-popup" role="alertdialog" aria-live="assertive">
   <div id="action-popup-card">
     <div id="action-popup-grip"></div>
-    <div id="action-popup-title">⏳ <span data-i18n="pending_title">מישהו מחכה לתשובה שלך!</span></div>
+    <div id="action-popup-title"><span id="action-popup-emoji">⏳</span> <span id="action-popup-title-text">מישהו מחכה לתשובה שלך!</span></div>
     <div id="action-popup-msg"></div>
     <div id="action-popup-actions">
-      <button id="action-popup-view" onclick="actionPopupView()" data-i18n="pending_view">צפייה ומענה</button>
-      <button id="action-popup-later" onclick="hideActionPopup()" data-i18n="pending_later">אחר כך</button>
+      <button id="action-popup-view" onclick="actionPopupView()">צפייה ומענה</button>
+      <button id="action-popup-later" onclick="hideActionPopup()">אחר כך</button>
     </div>
   </div>
 </div>
@@ -1802,10 +1815,10 @@ const I18N = {
     post_address_ph: 'לדוגמה: הרצל 10, תל אביב',
     post_geocode: 'אתר כתובת על המפה',
     area_search_btn: 'קפוץ לאזור',
-    area_search_ph: 'עיר או כתובת (למשל: אריאל)',
+    area_search_ph: 'שם עיר או יישוב',
     area_search_go: 'חפש',
     area_searching: 'מחפש...',
-    area_search_notfound: 'לא נמצא מיקום כזה',
+    area_search_notfound: 'לא נמצא יישוב כזה ברשימה',
     area_search_error: 'שגיאה בחיפוש. בדוק/י את החיבור ונסה/י שוב.',
     post_pick_map: 'בחר/י נקודה על המפה',
     pin_hint: 'הזיזו את המפה כך שהסמן יהיה על המיקום',
@@ -1861,6 +1874,8 @@ const I18N = {
     pending_title: 'מישהו מחכה לתשובה שלך!',
     pending_view: 'צפייה ומענה',
     pending_later: 'אחר כך',
+    req_sent_title: 'הבקשה נשלחה!',
+    req_sent_msg: '{name} יקבל התראה. נעדכן אותך כשיגיב.',
     notif_multi_updates: 'יש {n} עדכונים חדשים על הפריטים שלך',
     notif_found_title: 'מישהו מצא את מה שחיפשת!',
     notif_interested_title: 'מישהו מעוניין בפריט שלך!',
@@ -2073,10 +2088,10 @@ const I18N = {
     post_address_ph: 'e.g. 10 Herzl St, Tel Aviv',
     post_geocode: 'Find address on map',
     area_search_btn: 'Jump to area',
-    area_search_ph: 'City or address (e.g. Ariel)',
+    area_search_ph: 'Town or city name',
     area_search_go: 'Go',
     area_searching: 'Searching...',
-    area_search_notfound: 'No such place found',
+    area_search_notfound: 'No matching town in the list',
     area_search_error: 'Search error. Check your connection and try again.',
     post_pick_map: 'Pick a point on the map',
     pin_hint: 'Move the map so the pin is on your spot',
@@ -2132,6 +2147,8 @@ const I18N = {
     pending_title: 'Someone is waiting for your answer!',
     pending_view: 'View & respond',
     pending_later: 'Later',
+    req_sent_title: 'Request sent!',
+    req_sent_msg: '{name} will be notified. We\'ll let you know when they respond.',
     notif_multi_updates: 'You have {n} new updates on your items',
     notif_found_title: 'Someone found what you were looking for!',
     notif_interested_title: 'Someone is interested in your item!',
@@ -2344,10 +2361,10 @@ const I18N = {
     post_address_ph: 'např. Václavské náměstí 1, Praha',
     post_geocode: 'Najít adresu na mapě',
     area_search_btn: 'Skočit na oblast',
-    area_search_ph: 'Město nebo adresa (např. Ariel)',
+    area_search_ph: 'Název města nebo obce',
     area_search_go: 'Hledat',
     area_searching: 'Hledám...',
-    area_search_notfound: 'Místo nenalezeno',
+    area_search_notfound: 'Žádná odpovídající obec',
     area_search_error: 'Chyba hledání. Zkontrolujte připojení a zkuste to znovu.',
     post_pick_map: 'Vyberte bod na mapě',
     pin_hint: 'Posuňte mapu tak, aby byl špendlík na místě',
@@ -2403,6 +2420,8 @@ const I18N = {
     pending_title: 'Někdo čeká na vaši odpověď!',
     pending_view: 'Zobrazit a odpovědět',
     pending_later: 'Později',
+    req_sent_title: 'Žádost odeslána!',
+    req_sent_msg: '{name} dostane upozornění. Dáme vám vědět, až odpoví.',
     notif_multi_updates: 'Máš {n} nových aktualizací u svých položek',
     notif_found_title: 'Někdo našel to, co jsi hledal!',
     notif_interested_title: 'Někdo má zájem o tvoji položku!',
@@ -2615,10 +2634,10 @@ const I18N = {
     post_address_ph: 'например: ул. Ленина 10, Москва',
     post_geocode: 'Найти адрес на карте',
     area_search_btn: 'Перейти к району',
-    area_search_ph: 'Город или адрес (напр. Ариэль)',
+    area_search_ph: 'Название города',
     area_search_go: 'Найти',
     area_searching: 'Поиск...',
-    area_search_notfound: 'Место не найдено',
+    area_search_notfound: 'Город не найден в списке',
     area_search_error: 'Ошибка поиска. Проверьте подключение и повторите.',
     post_pick_map: 'Выберите точку на карте',
     pin_hint: 'Подвиньте карту, чтобы метка была на нужном месте',
@@ -2674,6 +2693,8 @@ const I18N = {
     pending_title: 'Кто-то ждёт вашего ответа!',
     pending_view: 'Открыть и ответить',
     pending_later: 'Позже',
+    req_sent_title: 'Запрос отправлен!',
+    req_sent_msg: '{name} получит уведомление. Мы сообщим, когда он ответит.',
     notif_multi_updates: 'У вас {n} новых обновлений по вашим вещам',
     notif_found_title: 'Кто-то нашёл то, что вы искали!',
     notif_interested_title: 'Кто-то интересуется вашей вещью!',
@@ -3111,39 +3132,113 @@ function filterByRadius(items) {
   return items.filter(i => distanceKm(userLat, userLon, i.lat, i.lon) <= radius);
 }
 
-// ── Jump to an area: geocode the typed place and fly the map there ──
+// ── Jump to an area: pick a real Israeli town from a finite list ──
+// Autocomplete over a bundled list — no free-text geocoding, so no ambiguous
+// matches (e.g. "אריאל" never resolves to a Jerusalem street). n=Hebrew name,
+// e=optional English alias, lat/lon=town center (±~1-2km is fine for browsing).
+const IL_TOWNS = [
+  {n:'ירושלים',e:'Jerusalem',lat:31.7683,lon:35.2137},{n:'תל אביב-יפו',e:'Tel Aviv',lat:32.0853,lon:34.7818},
+  {n:'חיפה',e:'Haifa',lat:32.7940,lon:34.9896},{n:'ראשון לציון',e:'Rishon LeZion',lat:31.9730,lon:34.7925},
+  {n:'פתח תקווה',e:'Petah Tikva',lat:32.0840,lon:34.8878},{n:'אשדוד',e:'Ashdod',lat:31.8014,lon:34.6435},
+  {n:'נתניה',e:'Netanya',lat:32.3215,lon:34.8532},{n:'באר שבע',e:'Beer Sheva',lat:31.2518,lon:34.7913},
+  {n:'בני ברק',e:'Bnei Brak',lat:32.0807,lon:34.8338},{n:'חולון',e:'Holon',lat:32.0167,lon:34.7792},
+  {n:'רמת גן',e:'Ramat Gan',lat:32.0700,lon:34.8235},{n:'אשקלון',e:'Ashkelon',lat:31.6688,lon:34.5715},
+  {n:'רחובות',e:'Rehovot',lat:31.8928,lon:34.8113},{n:'בת ים',e:'Bat Yam',lat:32.0171,lon:34.7457},
+  {n:'בית שמש',e:'Beit Shemesh',lat:31.7457,lon:34.9887},{n:'כפר סבא',e:'Kfar Saba',lat:32.1750,lon:34.9070},
+  {n:'הרצליה',e:'Herzliya',lat:32.1624,lon:34.8443},{n:'חדרה',e:'Hadera',lat:32.4340,lon:34.9196},
+  {n:'מודיעין מכבים רעות',e:'Modiin',lat:31.8928,lon:35.0105},{n:'נצרת',e:'Nazareth',lat:32.7021,lon:35.2978},
+  {n:'לוד',e:'Lod',lat:31.9510,lon:34.8953},{n:'רמלה',e:'Ramla',lat:31.9290,lon:34.8667},
+  {n:'רעננה',e:'Raanana',lat:32.1847,lon:34.8707},{n:'מודיעין עילית',e:'Modiin Illit',lat:31.9330,lon:35.0420},
+  {n:'ראש העין',e:'Rosh HaAyin',lat:32.0956,lon:34.9547},
+  {n:'רהט',e:'Rahat',lat:31.3927,lon:34.7544},{n:'הוד השרון',e:'Hod HaSharon',lat:32.1500,lon:34.8880},
+  {n:'גבעתיים',e:'Givatayim',lat:32.0719,lon:34.8103},{n:'קריית אתא',e:'Kiryat Ata',lat:32.8110,lon:35.1127},
+  {n:'נהריה',e:'Nahariya',lat:33.0085,lon:35.0948},{n:'ביתר עילית',e:'Beitar Illit',lat:31.6997,lon:35.1200},
+  {n:'אום אל-פחם',e:'Umm al-Fahm',lat:32.5160,lon:35.1520},{n:'קריית גת',e:'Kiryat Gat',lat:31.6100,lon:34.7642},
+  {n:'עפולה',e:'Afula',lat:32.6078,lon:35.2897},{n:'אילת',e:'Eilat',lat:29.5577,lon:34.9519},
+  {n:'נס ציונה',e:'Nes Ziona',lat:31.9293,lon:34.7983},{n:'עכו',e:'Akko',lat:32.9281,lon:35.0818},
+  {n:'אלעד',e:'Elad',lat:32.0520,lon:34.9510},{n:'רמת השרון',e:'Ramat HaSharon',lat:32.1462,lon:34.8397},
+  {n:'כרמיאל',e:'Karmiel',lat:32.9159,lon:35.2920},{n:'טבריה',e:'Tiberias',lat:32.7922,lon:35.5312},
+  {n:'יבנה',e:'Yavne',lat:31.8785,lon:34.7390},{n:'טייבה',e:'Tayibe',lat:32.2660,lon:35.0090},
+  {n:'קריית מוצקין',e:'Kiryat Motzkin',lat:32.8390,lon:35.0740},{n:'קריית ביאליק',e:'Kiryat Bialik',lat:32.8270,lon:35.0860},
+  {n:'קריית ים',e:'Kiryat Yam',lat:32.8480,lon:35.0700},{n:'קריית אונו',e:'Kiryat Ono',lat:32.0636,lon:34.8553},
+  {n:'אור יהודה',e:'Or Yehuda',lat:32.0300,lon:34.8500},{n:'דימונה',e:'Dimona',lat:31.0686,lon:35.0325},
+  {n:'טמרה',e:'Tamra',lat:32.8510,lon:35.2070},{n:'סח\'נין',e:'Sakhnin',lat:32.8647,lon:35.2971},
+  {n:'שפרעם',e:'Shefaram',lat:32.8056,lon:35.1700},{n:'גבעת שמואל',e:'Givat Shmuel',lat:32.0780,lon:34.8490},
+  {n:'טירת כרמל',e:'Tirat Carmel',lat:32.7606,lon:34.9718},{n:'מגדל העמק',e:'Migdal HaEmek',lat:32.6760,lon:35.2400},
+  {n:'יהוד-מונוסון',e:'Yehud',lat:32.0330,lon:34.8900},{n:'נתיבות',e:'Netivot',lat:31.4210,lon:34.5950},
+  {n:'שדרות',e:'Sderot',lat:31.5250,lon:34.5960},{n:'אופקים',e:'Ofakim',lat:31.3140,lon:34.6200},
+  {n:'ערד',e:'Arad',lat:31.2589,lon:35.2124},{n:'קריית שמונה',e:'Kiryat Shmona',lat:33.2074,lon:35.5700},
+  {n:'צפת',e:'Safed',lat:32.9650,lon:35.4983},{n:'כפר יונה',e:'Kfar Yona',lat:32.3170,lon:34.9340},
+  {n:'אריאל',e:'Ariel',lat:32.1056,lon:35.1878},{n:'מעלה אדומים',e:'Maale Adumim',lat:31.7730,lon:35.2980},
+  {n:'טירה',e:'Tira',lat:32.2340,lon:34.9510},{n:'קלנסווה',e:'Qalansawe',lat:32.2850,lon:34.9800},
+  {n:'אור עקיבא',e:'Or Akiva',lat:32.5100,lon:34.9150},{n:'זכרון יעקב',e:'Zichron Yaakov',lat:32.5720,lon:34.9530},
+  {n:'פרדס חנה-כרכור',e:'Pardes Hanna',lat:32.4720,lon:34.9730},{n:'בנימינה-גבעת עדה',e:'Binyamina',lat:32.5150,lon:34.9490},
+  {n:'יקנעם עילית',e:'Yokneam',lat:32.6580,lon:35.1100},{n:'בית שאן',e:'Beit Shean',lat:32.4968,lon:35.4997},
+  {n:'גן יבנה',e:'Gan Yavne',lat:31.7880,lon:34.7050},{n:'קדימה-צורן',e:'Kadima',lat:32.2800,lon:34.9170},
+  {n:'אבן יהודה',e:'Even Yehuda',lat:32.2710,lon:34.8880},{n:'תל מונד',e:'Tel Mond',lat:32.2500,lon:34.9170},
+  {n:'מבשרת ציון',e:'Mevaseret Zion',lat:31.8000,lon:35.1500},{n:'מיתר',e:'Meitar',lat:31.3190,lon:34.9360},
+  {n:'להבים',e:'Lehavim',lat:31.3720,lon:34.8170},{n:'עומר',e:'Omer',lat:31.2600,lon:34.8470},
+  {n:'מעלות-תרשיחא',e:'Maalot',lat:33.0160,lon:35.2870},{n:'שלומי',e:'Shlomi',lat:33.0720,lon:35.1450},
+  {n:'קצרין',e:'Katzrin',lat:32.9910,lon:35.6910},{n:'מג\'דל שמס',e:'Majdal Shams',lat:33.2680,lon:35.7720},
+  {n:'אורנית',e:'Oranit',lat:32.1258,lon:35.0303},{n:'אלקנה',e:'Elkana',lat:32.1110,lon:35.0470},
+  {n:'קרני שומרון',e:'Karnei Shomron',lat:32.1740,lon:35.1000},{n:'אפרת',e:'Efrat',lat:31.6540,lon:35.1510},
+  {n:'קריית ארבע',e:'Kiryat Arba',lat:31.5280,lon:35.1130},{n:'גבעת זאב',e:'Givat Zeev',lat:31.8600,lon:35.1680},
+  {n:'אלפי מנשה',e:'Alfei Menashe',lat:32.1650,lon:35.0330},{n:'כוכב יאיר-צור יגאל',e:'Kochav Yair',lat:32.2240,lon:35.0090},
+  {n:'שוהם',e:'Shoham',lat:31.9990,lon:34.9500},{n:'נוף הגליל',e:'Nof HaGalil',lat:32.7040,lon:35.3170},
+  {n:'מזכרת בתיה',e:'Mazkeret Batya',lat:31.8570,lon:34.8360},{n:'קריית מלאכי',e:'Kiryat Malachi',lat:31.7300,lon:34.7470},
+  {n:'גדרה',e:'Gedera',lat:31.8130,lon:34.7790},{n:'רמת ישי',e:'Ramat Yishai',lat:32.7050,lon:35.1730},
+  {n:'כפר ורדים',e:'Kfar Vradim',lat:32.9900,lon:35.2660},
+  {n:'באקה אל-גרבייה',e:'Baqa al-Gharbiyye',lat:32.4170,lon:35.0380},{n:'ג\'סר א-זרקא',e:'Jisr az-Zarqa',lat:32.5360,lon:34.9120},
+  {n:'דאלית אל-כרמל',e:'Daliyat al-Karmel',lat:32.6960,lon:35.0470},{n:'עוספיא',e:'Isfiya',lat:32.7050,lon:35.0670},
+  {n:'כפר קאסם',e:'Kafr Qasim',lat:32.1150,lon:34.9780},{n:'כפר קרע',e:'Kafr Qara',lat:32.5070,lon:35.0470},
+  {n:'ערערה',e:'Arara',lat:32.4940,lon:35.0450},{n:'כפר כנא',e:'Kafr Kanna',lat:32.7470,lon:35.3420},
+  {n:'יבנאל',e:'Yavniel',lat:32.7090,lon:35.5050},{n:'מגאר',e:'Maghar',lat:32.8900,lon:35.4070},
+  {n:'עראבה',e:'Arraba',lat:32.8510,lon:35.3380},{n:'רכסים',e:'Rekhasim',lat:32.7420,lon:35.1030}
+];
+
 function openAreaSearch() {
   const o = document.getElementById('area-search-overlay');
   if (o) o.style.display = 'flex';
-  const status = document.getElementById('area-search-status');
-  if (status) status.textContent = '';
   const inp = document.getElementById('area-search-input');
-  if (inp) setTimeout(() => { try { inp.focus(); } catch (e) {} }, 60);
+  if (inp) { inp.value = ''; setTimeout(() => { try { inp.focus(); } catch (e) {} }, 60); }
+  renderTownMatches();
 }
 function closeAreaSearch() {
   const o = document.getElementById('area-search-overlay');
   if (o) o.style.display = 'none';
 }
-async function doAreaSearch() {
-  const q = (document.getElementById('area-search-input').value || '').trim();
+function townMatches(q) {
+  const raw = (q || '').trim();
+  if (!raw) return [];
+  const ql = raw.toLowerCase();
+  return IL_TOWNS.filter(tn => tn.n.includes(raw) || (tn.e && tn.e.toLowerCase().includes(ql)));
+}
+function renderTownMatches() {
+  const input = document.getElementById('area-search-input');
+  const results = document.getElementById('area-search-results');
   const status = document.getElementById('area-search-status');
-  if (!q) return;
-  if (status) status.textContent = t('area_searching');
-  try {
-    // Bias to Israel so ambiguous names resolve locally.
-    const params = new URLSearchParams({ format: 'json', q, limit: '1', countrycodes: 'il' });
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`);
-    const results = await res.json();
-    if (results && results.length > 0) {
-      const lat = parseFloat(results[0].lat), lon = parseFloat(results[0].lon);
-      closeAreaSearch();
-      map.flyTo([lat, lon], 14);   // loadItems fires on the map's moveend
-    } else if (status) {
-      status.textContent = t('area_search_notfound');
-    }
-  } catch (e) {
-    if (status) status.textContent = t('area_search_error');
+  if (status) status.textContent = '';
+  if (!results) return;
+  const raw = (input.value || '').trim();
+  if (!raw) { results.innerHTML = ''; return; }
+  const matches = townMatches(raw).slice(0, 8);
+  if (matches.length === 0) {
+    results.innerHTML = '';
+    if (status) status.textContent = t('area_search_notfound');
+    return;
   }
+  results.innerHTML = matches.map(m =>
+    `<button class="town-row" onclick="flyToTown(${m.lat},${m.lon})">${m.n}${m.e ? ` <span class="town-en">${m.e}</span>` : ''}</button>`
+  ).join('');
+}
+function flyToTown(lat, lon) {
+  closeAreaSearch();
+  map.flyTo([lat, lon], 13);   // loadItems fires on the map's moveend
+}
+function pickFirstTown() {
+  const m = townMatches(document.getElementById('area-search-input').value)[0];
+  if (m) flyToTown(m.lat, m.lon);
+  else { const s = document.getElementById('area-search-status'); if (s) s.textContent = t('area_search_notfound'); }
 }
 
 // Active map filter. null in each slot means "no constraint on this field".
@@ -3649,9 +3744,16 @@ async function expressInterest(itemId) {
     myRequests[itemId] = true;
     localStorage.setItem('my_requests', JSON.stringify(myRequests));
     const item = itemsData.find(i => i.id === itemId);
-    showToast(isTakePost(item) ? 'עדכנו את המבקש שיש לך את הפריט!' : 'הבעת עניין! בעל הפריט יעודכן');
+    const otherName = (item && item.nickname) ? item.nickname : '';
     map.closePopup();
     loadItems();
+    // Reassure the taker: the other side was notified, and they'll hear back.
+    showActionPopup(
+      t('req_sent_msg').replace('{name}', otherName),
+      () => openMyRequests(),
+      { title: t('req_sent_title'), emoji: '✅', success: true,
+        viewLabel: t('myrequests_title'), laterLabel: t('pending_later') }
+    );
   }
 }
 
@@ -5184,10 +5286,21 @@ function playChime() {
 
 // ── Prominent "someone is waiting for your answer" popup ──
 let _actionPopupOnView = null;
-function showActionPopup(message, onView) {
+function showActionPopup(message, onView, opts) {
+  opts = opts || {};
   _actionPopupOnView = (typeof onView === 'function') ? onView : null;
+  const emojiEl = document.getElementById('action-popup-emoji');
+  const titleEl = document.getElementById('action-popup-title-text');
   const msgEl = document.getElementById('action-popup-msg');
+  const viewBtn = document.getElementById('action-popup-view');
+  const laterBtn = document.getElementById('action-popup-later');
+  const card = document.getElementById('action-popup-card');
+  if (emojiEl) emojiEl.textContent = opts.emoji || '⏳';
+  if (titleEl) titleEl.textContent = opts.title || t('pending_title');
   if (msgEl) msgEl.textContent = message || '';
+  if (viewBtn) viewBtn.textContent = opts.viewLabel || t('pending_view');
+  if (laterBtn) laterBtn.textContent = opts.laterLabel || t('pending_later');
+  if (card) card.classList.toggle('success', !!opts.success);
   const el = document.getElementById('action-popup');
   if (el) el.classList.add('show');
   strongVibrate();
