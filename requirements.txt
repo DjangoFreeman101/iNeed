@@ -6,3 +6,4 @@ python-multipart
 requests
 bcrypt
 openai
+firebase-admin
