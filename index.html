@@ -5465,6 +5465,58 @@ function handleNotificationTap(extra) {
   }
 }
 
+// ── FCM push (closed-app notifications) ─────────────────
+// Registers the device, sends its token to the backend, and routes taps.
+// No-op until the @capacitor/push-notifications plugin is installed natively.
+let _fcmToken = null;
+let _pushListenersAdded = false;
+async function registerPush() {
+  const cap = window.Capacitor;
+  if (!(cap && cap.isNativePlatform && cap.isNativePlatform())) return;
+  let tries = 0;
+  while (tries < 20 && !(cap.Plugins && cap.Plugins.PushNotifications)) {
+    await new Promise(r => setTimeout(r, 200)); tries++;
+  }
+  const Push = cap.Plugins && cap.Plugins.PushNotifications;
+  if (!Push) return;   // plugin not installed yet
+  try {
+    let perm = await Push.checkPermissions();
+    if (perm.receive !== 'granted') perm = await Push.requestPermissions();
+    if (perm.receive !== 'granted') return;
+    if (!_pushListenersAdded) {
+      _pushListenersAdded = true;
+      Push.addListener('registration', (token) => { _fcmToken = token && token.value; sendFcmToken(); });
+      Push.addListener('registrationError', (e) => console.log('push reg error', e));
+      Push.addListener('pushNotificationActionPerformed', (ev) =>
+        handlePushTap((ev && ev.notification && ev.notification.data) || {}));
+      // Foreground receipt: the in-app poll + popup already handle UX — no-op.
+      Push.addListener('pushNotificationReceived', () => {});
+    }
+    await Push.register();
+  } catch (e) { console.log('registerPush failed', e); }
+}
+function sendFcmToken() {
+  if (!_fcmToken || !deviceId) return;
+  fetch(`${API_BASE}/fcm-token`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ device_id: deviceId, token: _fcmToken })
+  }).catch(() => {});
+}
+async function handlePushTap(data) {
+  if (!data || !data.type) return;
+  document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
+  if (data.type === 'interest' && data.item_id) {
+    await openMyItems();
+    viewRequesters(parseInt(data.item_id, 10));   // open "who wants it?" for that item
+  } else if (data.type === 'match') {
+    openMatches();
+  } else if (data.type === 'approved' || data.type === 'rejected') {
+    openMyRequests();
+  } else {
+    openMyItems();
+  }
+}
+
 function setUnreadDot(show) {
   const dot = document.getElementById('my-items-dot');
   if (!dot) return;
@@ -5999,6 +6051,7 @@ function startUserServices() {
   setInterval(checkPendingExchanges, 25000);
   checkForMatches();
   setInterval(checkForMatches, 20000);
+  registerPush();   // FCM: closed-app notifications
 }
 
 async function syncMyRequests() {

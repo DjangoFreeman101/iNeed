@@ -239,6 +239,16 @@ def init_db():
     # Optional reason code the poster picked (given / unavailable / irrelevant).
     cur.execute("ALTER TABLE rejections ADD COLUMN IF NOT EXISTS reason TEXT")
 
+    # FCM push tokens — one row per app install; a device_id may have several
+    # (multiple phones on one account), and a token moves to the latest device_id.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS fcm_tokens (
+            token TEXT PRIMARY KEY,
+            device_id TEXT NOT NULL,
+            updated_at DOUBLE PRECISION NOT NULL
+        )
+    """)
+
     conn.commit()
     cur.close()
     conn.close()
@@ -376,6 +386,14 @@ def _email_both_sides(cur, item_a, item_b):
         item_b.get("title"), item_a.get("title"),
         recipient_is_taker=(item_b.get("post_type") == "take"),
     )
+    # Push both sides — each names their own item; tapping opens Matches.
+    try:
+        ta, ba = push_text("match", ua.get("language"), item=item_a.get("title") or "")
+        push_async(item_a["device_id"], ta, ba, {"type": "match"})
+        tb, bb = push_text("match", ub.get("language"), item=item_b.get("title") or "")
+        push_async(item_b["device_id"], tb, bb, {"type": "match"})
+    except Exception as e:
+        print("Match push dispatch failed:", e)
 
 def check_and_create_matches(item_id):
     """Given an item that just changed, find opposite-type items nearby that
@@ -1219,6 +1237,121 @@ def send_simple_email(to_addr, subject, html, rtl=True):
 
 PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.djangofreeman.ineed"
 
+# ── Push notifications via Firebase Cloud Messaging (FCM) ──────────────────
+# Delivers notifications even when the app is fully closed. FIREBASE_CREDENTIALS
+# is the service-account JSON (paste the whole file's contents into the env var).
+# Messaging itself is free. All sending is best-effort and never blocks a request.
+FIREBASE_CREDENTIALS = os.environ.get("FIREBASE_CREDENTIALS", "")
+_fcm_ready = False
+def _init_fcm():
+    global _fcm_ready
+    if _fcm_ready:
+        return True
+    if not FIREBASE_CREDENTIALS:
+        return False
+    try:
+        import firebase_admin
+        from firebase_admin import credentials
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(credentials.Certificate(json.loads(FIREBASE_CREDENTIALS)))
+        _fcm_ready = True
+        return True
+    except Exception as e:
+        print("FCM init failed:", e)
+        return False
+
+def _fcm_tokens_for(device_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT token FROM fcm_tokens WHERE device_id = %s", (device_id,))
+    toks = [r[0] for r in cur.fetchall()]
+    cur.close(); conn.close()
+    return toks
+
+def send_push(device_id, title, body, data=None):
+    """Send an FCM push to every token registered for this device. Prunes dead
+    tokens. Best-effort; silent if FCM isn't configured."""
+    if not _init_fcm():
+        return
+    toks = _fcm_tokens_for(device_id)
+    if not toks:
+        return
+    try:
+        from firebase_admin import messaging
+        payload = {k: str(v) for k, v in (data or {}).items()}
+        dead = []
+        for tk in toks:
+            try:
+                messaging.send(messaging.Message(
+                    token=tk,
+                    notification=messaging.Notification(title=title, body=body),
+                    data=payload,
+                    android=messaging.AndroidConfig(priority="high"),
+                ))
+            except messaging.UnregisteredError:
+                dead.append(tk)
+            except Exception as e:
+                print("FCM send error:", e)
+        if dead:
+            conn = get_db(); cur = conn.cursor()
+            cur.executemany("DELETE FROM fcm_tokens WHERE token = %s", [(t,) for t in dead])
+            conn.commit(); cur.close(); conn.close()
+    except Exception as e:
+        print("send_push failed:", e)
+
+def push_async(device_id, title, body, data=None):
+    """Fire-and-forget push so it never delays the HTTP response."""
+    threading.Thread(target=send_push, args=(device_id, title, body, data), daemon=True).start()
+
+# Localized push copy. Recipient sees their own language. {name}/{item} filled in.
+PUSH_TEXT = {
+    "interest":      {"il": {"t": "מישהו מעוניין בפריט שלך!", "b": "{name} מעוניין/ת ב„{item}“"},
+                      "en": {"t": "Someone wants your item!", "b": "{name} is interested in “{item}”"},
+                      "cs": {"t": "Někdo chce vaši položku!", "b": "{name} má zájem o „{item}“"},
+                      "ru": {"t": "Кто-то хочет вашу вещь!", "b": "{name} интересуется «{item}»"}},
+    "interest_take": {"il": {"t": "מצאו את מה שחיפשת!", "b": "ל{name} יש „{item}“ שחיפשת"},
+                      "en": {"t": "Found what you wanted!", "b": "{name} has “{item}” you were looking for"},
+                      "cs": {"t": "Našlo se, co jste hledali!", "b": "{name} má „{item}“, které jste hledali"},
+                      "ru": {"t": "Нашлось то, что вы искали!", "b": "У {name} есть «{item}», которую вы искали"}},
+    "match":         {"il": {"t": "נמצאה התאמה!", "b": "נמצאה התאמה לפריט שלך „{item}“"},
+                      "en": {"t": "Match found!", "b": "A match was found for your “{item}”"},
+                      "cs": {"t": "Nalezena shoda!", "b": "Byla nalezena shoda pro vaši položku „{item}“"},
+                      "ru": {"t": "Найдено совпадение!", "b": "Найдено совпадение для вашей вещи «{item}»"}},
+    "approved":      {"il": {"t": "הבקשה שלך אושרה!", "b": "הבקשה שלך עבור „{item}“ אושרה"},
+                      "en": {"t": "Your request was approved!", "b": "Your request for “{item}” was approved"},
+                      "cs": {"t": "Vaše žádost byla schválena!", "b": "Vaše žádost o „{item}“ byla schválena"},
+                      "ru": {"t": "Ваш запрос одобрен!", "b": "Ваш запрос на «{item}» одобрен"}},
+    "rejected":      {"il": {"t": "הבקשה שלך נדחתה", "b": "הבקשה שלך עבור „{item}“ נדחתה"},
+                      "en": {"t": "Your request was declined", "b": "Your request for “{item}” was declined"},
+                      "cs": {"t": "Vaše žádost byla zamítnuta", "b": "Vaše žádost o „{item}“ byla zamítnuta"},
+                      "ru": {"t": "Ваш запрос отклонён", "b": "Ваш запрос на «{item}» отклонён"}},
+}
+def push_text(kind, language, **fmt):
+    lang = normalize_lang(language)
+    block = PUSH_TEXT.get(kind, {})
+    copy = block.get(lang, block.get("il", {"t": "iNeed", "b": ""}))
+    return copy["t"], copy["b"].format(**fmt)
+
+class FcmToken(BaseModel):
+    device_id: str
+    token: str
+
+@app.post("/fcm-token")
+def save_fcm_token(body: FcmToken):
+    """The app registers its FCM token here after each launch/login."""
+    if not body.token or not body.device_id:
+        return {"ok": False}
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO fcm_tokens (token, device_id, updated_at)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (token) DO UPDATE SET device_id = EXCLUDED.device_id, updated_at = EXCLUDED.updated_at
+    """, (body.token, body.device_id, time.time()))
+    conn.commit()
+    cur.close(); conn.close()
+    return {"ok": True}
+
 # Localized copy for the "someone is interested in your item" email.
 # is_take=True means the poster was looking for something and another user
 # has it ("X has the item you wanted"); is_take=False is the classic
@@ -1621,8 +1754,8 @@ def request_item(req: ItemRequest):
         }
         # Email the poster (giver or taker) that someone's interested.
         # Best-effort — never let a failed email break the request.
+        is_take = (row.get("post_type") == "take")
         try:
-            is_take = (row.get("post_type") == "take")
             send_interest_email(
                 row.get("giver_email"),
                 row.get("giver_language"),
@@ -1632,6 +1765,17 @@ def request_item(req: ItemRequest):
             )
         except Exception as e:
             print("Interest email dispatch failed:", e)
+        # Push the poster — tapping opens that item's "who wants it?" list.
+        try:
+            title, body = push_text(
+                "interest_take" if is_take else "interest",
+                row.get("giver_language"),
+                name=row.get("requester_name") or "", item=row.get("title") or "",
+            )
+            push_async(row["giver_device_id"], title, body,
+                       {"type": "interest", "item_id": req.item_id})
+        except Exception as e:
+            print("Interest push dispatch failed:", e)
     return {"ok": True, "notification": notification_data}
 
 @app.post("/request/{request_id}/approve")
@@ -1640,11 +1784,13 @@ def approve_request(request_id: int, device_id: str):
     owns the item the request is on, then flips status to 'approved'."""
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    # Fetch the request together with the owning item's device_id
+    # Fetch the request together with the owning item + the requester to notify.
     cur.execute("""
-        SELECT r.id, i.device_id AS owner_device_id
+        SELECT r.id, r.device_id AS requester_device_id, i.device_id AS owner_device_id,
+               i.title AS item_title, u.language AS requester_language
         FROM requests r
         JOIN items i ON i.id = r.item_id
+        JOIN users u ON u.device_id = r.device_id
         WHERE r.id = %s
     """, (request_id,))
     row = cur.fetchone()
@@ -1660,6 +1806,12 @@ def approve_request(request_id: int, device_id: str):
     cur.close()
     conn.close()
     create_exchange_reminders(request_id)
+    # Push the taker — tapping opens "My requests".
+    try:
+        title, body = push_text("approved", row["requester_language"], item=row["item_title"] or "")
+        push_async(row["requester_device_id"], title, body, {"type": "approved"})
+    except Exception as e:
+        print("Approve push dispatch failed:", e)
     return {"ok": True}
 
 # Localized "your request was declined" email.
@@ -1748,6 +1900,12 @@ def reject_request(request_id: int, device_id: str, reason: Optional[str] = None
         send_reject_email(row["requester_email"], row["requester_language"], row["item_title"], reason)
     except Exception as e:
         print("Reject email dispatch failed:", e)
+    # Push the requester — tapping opens "My requests".
+    try:
+        title, body = push_text("rejected", row["requester_language"], item=row["item_title"] or "")
+        push_async(row["requester_device_id"], title, body, {"type": "rejected"})
+    except Exception as e:
+        print("Reject push dispatch failed:", e)
     return {"ok": True}
 
 @app.get("/rejections/{device_id}")
