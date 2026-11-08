@@ -5977,13 +5977,10 @@ async function checkPendingExchanges() {
 }
 
 function setPendingExchangeDot(show) {
-  const dot = document.getElementById('my-items-dot');
-  if (!dot) return;
-  // Reuse the My Items dot; either unread interest OR a pending exchange lights it.
-  if (show) {
-    dot.classList.add('show');
-  }
-  // Note: we don't force-hide here, since unread interest may also want it on.
+  // The My Items dot now means "a new person is interested in one of your items"
+  // ONLY. A pending exchange no longer lights it — that was re-lighting the dot
+  // on every poll/relaunch and never clearing, which read as a stuck red dot.
+  // The handoff nudge still goes out as the 30-minute reminder email. No-op.
 }
 
 // Boot the app. The MAP runs for everyone (guests included); the account-only
