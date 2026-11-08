@@ -1666,6 +1666,15 @@
       <label class="form-label" data-i18n="settings_email">אימייל</label>
       <input type="email" class="form-input" id="settings-email" style="direction:ltr;"/>
     </div>
+    <div class="form-group">
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
+        <input type="checkbox" id="settings-nearby" checked style="margin-top:3px;width:18px;height:18px;flex:0 0 auto;"/>
+        <span style="display:flex;flex-direction:column;gap:2px;">
+          <span class="form-label" data-i18n="settings_nearby" style="margin:0;">התראות על בקשות בקרבת מקום</span>
+          <span data-i18n="settings_nearby_hint" style="font-size:12px;color:var(--gray);">קבל/י התראה כששכן/ה בקרבת מקום מחפש/ת משהו שאולי יש לך</span>
+        </span>
+      </label>
+    </div>
     <button class="btn-primary" data-i18n="settings_save" onclick="saveSettings()">שמור הגדרות</button>
   </div>
 </div>
@@ -1801,6 +1810,8 @@ const I18N = {
     settings_phone: 'מספר טלפון *',
     settings_email: 'אימייל',
     settings_save: 'שמור הגדרות',
+    settings_nearby: 'התראות על בקשות בקרבת מקום',
+    settings_nearby_hint: 'קבל/י התראה כששכן/ה בקרבת מקום מחפש/ת משהו שאולי יש לך לתת',
     km_unit: 'ק"מ',
     privacy_title: 'מדיניות פרטיות',
     privacy_updated: 'עודכן לאחרונה: יולי 2026',
@@ -2078,6 +2089,8 @@ const I18N = {
     settings_phone: 'Phone number *',
     settings_email: 'Email',
     settings_save: 'Save settings',
+    settings_nearby: 'Nearby request alerts',
+    settings_nearby_hint: 'Get notified when a neighbor nearby is looking for something you might have',
     km_unit: 'km',
     privacy_title: 'Privacy policy',
     privacy_updated: 'Last updated: July 2026',
@@ -2355,6 +2368,8 @@ const I18N = {
     settings_phone: 'Telefonní číslo *',
     settings_email: 'E-mail',
     settings_save: 'Uložit nastavení',
+    settings_nearby: 'Upozornění na blízké žádosti',
+    settings_nearby_hint: 'Dostanete upozornění, když někdo poblíž hledá něco, co možná máte',
     km_unit: 'km',
     privacy_title: 'Zásady ochrany osobních údajů',
     privacy_updated: 'Naposledy aktualizováno: červenec 2026',
@@ -2632,6 +2647,8 @@ const I18N = {
     settings_phone: 'Номер телефона *',
     settings_email: 'Эл. почта',
     settings_save: 'Сохранить настройки',
+    settings_nearby: 'Уведомления о запросах рядом',
+    settings_nearby_hint: 'Получайте уведомление, когда сосед рядом ищет то, что у вас может быть',
     km_unit: 'км',
     privacy_title: 'Политика конфиденциальности',
     privacy_updated: 'Последнее обновление: июль 2026',
@@ -3011,6 +3028,8 @@ async function initDeviceId() {
 // ── User state ─────────────────────────────────────────
 let currentUser = null;
 let userLat = null, userLon = null;
+// Throttled persistence of the user's coarse location (for nearby-request pushes).
+let _lastLocSentAt = 0, _lastLocSentLat = null, _lastLocSentLon = null;
 // Guest/browse-first state.
 let pendingGuestAction = null;   // action to resume right after a guest signs in
 let appStarted = false;          // map/boot done once
@@ -4743,6 +4762,7 @@ function openSettings() {
     document.getElementById('settings-radius-display').textContent = (currentUser.radius_km || 150) + ' ' + t('km_unit');
     document.getElementById('settings-email').value = currentUser.email || '';
     document.getElementById('settings-phone').value = currentUser.phone || '';
+    document.getElementById('settings-nearby').checked = !(currentUser.nearby_optout);
   }
   openPanel('settings-panel');
 }
@@ -4770,7 +4790,13 @@ async function saveSettings() {
     return;
   }
 
-  currentUser = { ...currentUser, nickname, radius_km: radius, email, phone };
+  const nearbyEnabled = document.getElementById('settings-nearby').checked;
+  fetch(`${API_BASE}/user/settings`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ device_id: deviceId, nearby_enabled: nearbyEnabled })
+  }).catch(() => {});
+
+  currentUser = { ...currentUser, nickname, radius_km: radius, email, phone, nearby_optout: !nearbyEnabled };
   localStorage.setItem('ineed_user', JSON.stringify(currentUser));
   showToast('הגדרות נשמרו');
   closePanel('settings-panel');
@@ -5076,6 +5102,7 @@ async function startLocation() {
     userLat = pos.coords.latitude;
     userLon = pos.coords.longitude;
     updateUserLocationDot();
+    sendUserLocation();
     if (!centeredOnUser) {
       centeredOnUser = true;
       map.setView([userLat, userLon], 14);
@@ -5093,11 +5120,28 @@ function centerOnUser() {
       userLat = pos.coords.latitude;
       userLon = pos.coords.longitude;
       updateUserLocationDot();
+      sendUserLocation();
       map.flyTo([userLat, userLon], 15);
     });
   } else {
     showToast('לא ניתן לאתר מיקום');
   }
+}
+
+// Persist the user's COARSE location so the server can push nearby requests to
+// them. Throttled: at most once / 5 min, skipped for tiny moves. Signed-in only
+// (guests aren't in the users table and receive no broadcasts).
+function sendUserLocation() {
+  if (!currentUser || userLat === null || userLon === null || !deviceId) return;
+  const now = Date.now();
+  const movedFar = _lastLocSentLat === null ||
+    distanceKm(_lastLocSentLat, _lastLocSentLon, userLat, userLon) >= 0.15;
+  if (!movedFar && (now - _lastLocSentAt) < 5 * 60 * 1000) return;
+  _lastLocSentAt = now; _lastLocSentLat = userLat; _lastLocSentLon = userLon;
+  fetch(`${API_BASE}/user-location`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ device_id: deviceId, lat: userLat, lon: userLon })
+  }).catch(() => {});
 }
 
 // ── Panels ─────────────────────────────────────────────
@@ -5508,6 +5552,8 @@ async function handlePushTap(data) {
   if (data.type === 'interest' && data.item_id) {
     await openMyItems();
     viewRequesters(parseInt(data.item_id, 10));   // open "who wants it?" for that item
+  } else if (data.type === 'nearby' && data.item_id) {
+    openItemOnMap(parseInt(data.item_id, 10));    // fly to the request's pin
   } else if (data.type === 'match') {
     openMatches();
   } else if (data.type === 'approved' || data.type === 'rejected') {
@@ -5515,6 +5561,15 @@ async function handlePushTap(data) {
   } else {
     openMyItems();
   }
+}
+
+// Open a specific item on the map by id (used by the nearby-request push tap).
+async function openItemOnMap(itemId) {
+  try {
+    const res = await fetch(`${API_BASE}/item/${itemId}`);
+    if (!res.ok) return;
+    goToItemPin(await res.json());
+  } catch(e) {}
 }
 
 function setUnreadDot(show) {
@@ -5617,11 +5672,16 @@ function goToItemPin(item) {
   map.flyTo([item.lat, item.lon], 16);
 }
 
+// First poll after launch/resume = catch-up on events that happened while away;
+// those were already delivered as a push, so only update badges, don't re-alert.
+let _firstPollInterest = true, _firstPollMatches = true, _firstPollApprovals = true;
+
 async function checkForNewInterest() {
   try {
     const res = await fetch(`${API_BASE}/my-item-requests/${deviceId}`);
     if (!res.ok) return;
     const rows = await res.json();
+    const catchUp = _firstPollInterest; _firstPollInterest = false;
 
     const storedRaw = localStorage.getItem('ineed_notified_request_ids');
     const isFirstRun = storedRaw === null;
@@ -5647,6 +5707,9 @@ async function checkForNewInterest() {
     newRows.forEach(r => unreadItems.add(r.item_id));
     saveUnreadItemIds(unreadItems);
 
+    // Already surfaced by the push while the app was closed — badge only.
+    if (catchUp) return;
+
     const single = newRows[0];
     const singleIsTake = isTakePost(single);
     const message = newRows.length === 1
@@ -5655,25 +5718,9 @@ async function checkForNewInterest() {
           : t('notif_interested_in').replace('{name}', single.requester_name).replace('{item}', single.item_title))
       : t('notif_multi_updates').replace('{n}', newRows.length);
     // Prominent popup (vibration + sound + swipe-to-dismiss) so the giver
-    // actually answers — that's how the requester finally hears back.
+    // actually answers. The FCM push covers the closed-app case; no
+    // LocalNotification here (it would double the closed-app tray notice).
     showActionPopup(message, () => openMyItems());
-
-    const notifTitle = newRows.length === 1 && singleIsTake
-      ? t('notif_found_title')
-      : t('notif_interested_title');
-
-    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
-      try {
-        await window.Capacitor.Plugins.LocalNotifications.schedule({
-          notifications: [{
-            id: Math.floor(Date.now() % 2147483647),
-            title: notifTitle,
-            body: message,
-            schedule: { at: new Date(Date.now() + 1000) }
-          }]
-        });
-      } catch(e) {}
-    }
   } catch(e) {
     console.log('Interest check failed:', e);
   }
@@ -5802,6 +5849,7 @@ async function checkForMatches() {
     const res = await fetch(`${API_BASE}/my-matches/${deviceId}`);
     if (!res.ok) return;
     const rows = await res.json();
+    const catchUp = _firstPollMatches; _firstPollMatches = false;
 
     // Passive red dot on the Matches button for any not-yet-viewed match.
     try {
@@ -5844,25 +5892,8 @@ async function checkForMatches() {
       ? t('notif_match_single').replace('{item}', single.my_item_title)   // always the viewer's OWN item
       : t('notif_match_multi').replace('{n}', newRows.length);
 
+    if (catchUp) return;   // push already surfaced these while the app was closed
     showInterestBanner(message, 'map-pin', null, newRows.length === 1 ? otherItem : null);
-
-    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
-      try {
-        await window.Capacitor.Plugins.LocalNotifications.schedule({
-          notifications: [{
-            id: Math.floor((Date.now() + 3) % 2147483647),
-            title: t('notif_match_title'),
-            body: message,
-            schedule: { at: new Date(Date.now() + 1000) },
-            // Tapping the notification deep-links: a single match flies to the
-            // item's pin; multiple opens the Matches panel.
-            extra: newRows.length === 1
-              ? { action: 'match-item', item: otherItem }
-              : { action: 'open-matches' }
-          }]
-        });
-      } catch(e) {}
-    }
   } catch(e) {
     console.log('Match check failed:', e);
   }
@@ -5874,6 +5905,7 @@ async function checkForApprovals() {
     const res = await fetch(`${API_BASE}/my-outgoing-requests/${deviceId}`);
     if (!res.ok) return;
     const rows = await res.json();
+    const catchUp = _firstPollApprovals; _firstPollApprovals = false;
 
     // Only approved requests are interesting here.
     const approved = rows.filter(r => r.status === 'approved');
@@ -5904,20 +5936,8 @@ async function checkForApprovals() {
     const message = newlyApproved.length === 1
       ? t('notif_approved_single').replace('{name}', single.giver_name).replace('{item}', single.item_title)
       : t('notif_approved_multi').replace('{n}', newlyApproved.length);
+    if (catchUp) return;   // push already surfaced these while the app was closed
     showInterestBanner(message, 'my-requests', newlyApproved.length === 1 ? single.item_id : null);
-
-    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
-      try {
-        await window.Capacitor.Plugins.LocalNotifications.schedule({
-          notifications: [{
-            id: Math.floor((Date.now() + 1) % 2147483647),
-            title: t('notif_approved_title'),
-            body: message,
-            schedule: { at: new Date(Date.now() + 1000) }
-          }]
-        });
-      } catch(e) {}
-    }
   } catch(e) {
     console.log('Approval check failed:', e);
   }
@@ -5935,19 +5955,9 @@ async function checkForRejections() {
     rows.forEach(r => {
       let message = t('notif_declined').replace('{item}', r.item_title);
       if (r.reason) message += ' · ' + t('reject_reason_' + r.reason);
+      // One-time notice: the banner is the only in-app trace, so keep it even on
+      // first poll. The FCM push covers the closed-app case (no LocalNotification).
       showInterestBanner(message, 'my-requests');
-      if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
-        try {
-          window.Capacitor.Plugins.LocalNotifications.schedule({
-            notifications: [{
-              id: Math.floor((Date.now() + Math.random() * 1000) % 2147483647),
-              title: t('notif_declined_title'),
-              body: message,
-              schedule: { at: new Date(Date.now() + 1000) }
-            }]
-          });
-        } catch(e) {}
-      }
     });
   } catch(e) {
     console.log('Rejection check failed:', e);
@@ -6040,6 +6050,16 @@ function maybeShowGetAppBar() {
 function startUserServices() {
   if (userServicesStarted || !currentUser) return;
   userServicesStarted = true;
+  sendUserLocation();   // persist location now if a GPS fix is already in hand
+  // On resume (app brought back to foreground), treat each stream's next poll as
+  // catch-up so a closed-app push isn't echoed by an in-app popup, and refresh
+  // the stored location.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      _firstPollInterest = true; _firstPollMatches = true; _firstPollApprovals = true;
+      sendUserLocation();
+    }
+  });
   setUnreadDot(localStorage.getItem('ineed_has_unread_interest') === '1');
   checkForNewInterest();
   setInterval(checkForNewInterest, 20000);

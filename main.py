@@ -249,6 +249,29 @@ def init_db():
         )
     """)
 
+    # ── Nearby-request broadcast (v1) ───────────────────────────
+    # Each user's last-known COARSE location (rounded to ~110 m) so a new request
+    # can ping people within 1 km who might have the item. Latest point only —
+    # overwritten every app open, no history kept.
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION")
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS lon DOUBLE PRECISION")
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS loc_updated_at DOUBLE PRECISION")
+    # Opt-out of nearby-request alerts (FALSE = alerts ON, the default).
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS nearby_optout BOOLEAN NOT NULL DEFAULT FALSE")
+    # One row per nearby-request push actually sent, used to rate-limit both the
+    # recipient (cooldown + daily cap) and the sender (daily cap).
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS nearby_push_log (
+            id SERIAL PRIMARY KEY,
+            recipient_device_id TEXT NOT NULL,
+            sender_device_id TEXT NOT NULL,
+            item_id INTEGER NOT NULL,
+            sent_at DOUBLE PRECISION NOT NULL
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_nearby_recipient ON nearby_push_log (recipient_device_id, sent_at)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_nearby_sender ON nearby_push_log (sender_device_id, sent_at)")
+
     conn.commit()
     cur.close()
     conn.close()
@@ -268,6 +291,12 @@ class UserSettings(BaseModel):
     device_id: str
     radius_km: Optional[int] = None
     email: Optional[str] = None
+    nearby_enabled: Optional[bool] = None   # nearby-request alerts on/off
+
+class UserLocation(BaseModel):
+    device_id: str
+    lat: float
+    lon: float
 
 class ItemRequest(BaseModel):
     item_id: int
@@ -386,14 +415,39 @@ def _email_both_sides(cur, item_a, item_b):
         item_b.get("title"), item_a.get("title"),
         recipient_is_taker=(item_b.get("post_type") == "take"),
     )
-    # Push both sides — each names their own item; tapping opens Matches.
-    try:
-        ta, ba = push_text("match", ua.get("language"), item=item_a.get("title") or "")
-        push_async(item_a["device_id"], ta, ba, {"type": "match"})
-        tb, bb = push_text("match", ub.get("language"), item=item_b.get("title") or "")
-        push_async(item_b["device_id"], tb, bb, {"type": "match"})
-    except Exception as e:
-        print("Match push dispatch failed:", e)
+    # NOTE: match pushes are sent by check_and_create_matches (batched one-per-
+    # recipient), not here — so a need matching six gives never fires six pushes.
+
+def _push_match_batch(cur, item, matched_candidates):
+    """At most one match push per recipient device. `item` is the poster's item;
+    `matched_candidates` are the opposite-type items that just matched it. Each
+    recipient's push names their OWN item, or a count when they got several."""
+    lang_cache = {}
+    def _lang(device_id):
+        if device_id not in lang_cache:
+            cur.execute("SELECT language FROM users WHERE device_id = %s", (device_id,))
+            r = cur.fetchone()
+            lang_cache[device_id] = (dict(r).get("language") if r else None)
+        return lang_cache[device_id]
+
+    poster = item["device_id"]
+    agg = {poster: {"count": len(matched_candidates), "title": item.get("title") or ""}}
+    for c in matched_candidates:
+        d = c["device_id"]
+        if d == poster:
+            continue
+        agg.setdefault(d, {"count": 0, "title": c.get("title") or ""})
+        agg[d]["count"] += 1
+
+    for device_id, info in agg.items():
+        try:
+            if info["count"] == 1:
+                title, body = push_text("match", _lang(device_id), item=info["title"])
+            else:
+                title, body = push_text("match_multi", _lang(device_id), count=info["count"])
+            push_async(device_id, title, body, {"type": "match"}, collapse="match")
+        except Exception as e:
+            print("Match push dispatch failed:", e)
 
 def check_and_create_matches(item_id):
     """Given an item that just changed, find opposite-type items nearby that
@@ -444,6 +498,7 @@ def check_and_create_matches(item_id):
     matched_ids = _llm_pick_matches(dict(item), candidates)
 
     new_matches = []
+    matched_candidates = []  # only brand-new matches formed this run
     for c in candidates:
         if c["id"] not in matched_ids:
             continue
@@ -456,14 +511,22 @@ def check_and_create_matches(item_id):
             """, (give_id, take_id, time.time()))
             conn.commit()
             new_matches.append({"give_item_id": give_id, "take_item_id": take_id})
+            c["post_type"] = other_type  # candidate query doesn't select it
+            matched_candidates.append(c)
             # Brand-new pair → email both sides (no contact details revealed).
             try:
-                c["post_type"] = other_type  # candidate query doesn't select it
                 _email_both_sides(cur, item, c)
             except Exception as e:
                 print("Match email dispatch failed:", e)
         except psycopg2.errors.UniqueViolation:
             conn.rollback()  # already matched before — skip silently
+
+    # One push per recipient (never one per match).
+    if matched_candidates:
+        try:
+            _push_match_batch(cur, item, matched_candidates)
+        except Exception as e:
+            print("Match push batch failed:", e)
 
     cur.close()
     conn.close()
@@ -652,11 +715,30 @@ def update_settings(settings: UserSettings):
     if settings.email:
         cur.execute("UPDATE users SET email = %s, last_seen = %s WHERE device_id = %s",
                     (settings.email, now, settings.device_id))
+    if settings.nearby_enabled is not None:
+        cur.execute("UPDATE users SET nearby_optout = %s, last_seen = %s WHERE device_id = %s",
+                    (not settings.nearby_enabled, now, settings.device_id))
     conn.commit()
     cur.close()
     conn.close()
     if radius_changed:
         threading.Thread(target=recheck_matches_for_user, args=(settings.device_id,), daemon=True).start()
+    return {"ok": True}
+
+@app.post("/user-location")
+def update_user_location(loc: UserLocation):
+    """Store the user's latest COARSE location (rounded to ~110 m) so nearby-
+    request broadcasts can find who's within 1 km. Latest point only, no history."""
+    now = time.time()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE users SET lat = %s, lon = %s, loc_updated_at = %s, last_seen = %s WHERE device_id = %s",
+        (round(loc.lat, 3), round(loc.lon, 3), now, now, loc.device_id),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
     return {"ok": True}
 
 # ── Items ────────────────────────────────────────────────
@@ -878,6 +960,9 @@ async def post_item(
     # Run matching in the background so the user isn't kept waiting on the LLM
     # call. It's server-side, so it finishes even if they close the app.
     threading.Thread(target=check_and_create_matches, args=(item_id,), daemon=True).start()
+    # A new request (take post) also pings nearby people who might have the item.
+    if post_type == "take":
+        threading.Thread(target=broadcast_nearby_request, args=(item_id,), daemon=True).start()
     return {"ok": True, "item_id": item_id}
 
 @app.get("/items")
@@ -1268,30 +1353,42 @@ def _fcm_tokens_for(device_id):
     cur.close(); conn.close()
     return toks
 
-def send_push(device_id, title, body, data=None):
+def send_push(device_id, title, body, data=None, collapse=None):
     """Send an FCM push to every token registered for this device. Prunes dead
-    tokens. Best-effort; silent if FCM isn't configured."""
+    tokens. Best-effort; silent if FCM isn't configured. `collapse` tags the
+    notification so repeats of the same kind replace rather than stack."""
+    kind = (data or {}).get("type", "?")
     if not _init_fcm():
+        print(f"[PUSH] kind={kind} device={device_id} -> FCM NOT CONFIGURED")
         return
     toks = _fcm_tokens_for(device_id)
+    print(f"[PUSH] kind={kind} device={device_id} tokens_found={len(toks)}")
     if not toks:
         return
     try:
         from firebase_admin import messaging
         payload = {k: str(v) for k, v in (data or {}).items()}
+        android = messaging.AndroidConfig(
+            priority="high",
+            collapse_key=collapse,
+            notification=(messaging.AndroidNotification(tag=collapse) if collapse else None),
+        )
         dead = []
+        sent = 0
         for tk in toks:
             try:
                 messaging.send(messaging.Message(
                     token=tk,
                     notification=messaging.Notification(title=title, body=body),
                     data=payload,
-                    android=messaging.AndroidConfig(priority="high"),
+                    android=android,
                 ))
+                sent += 1
             except messaging.UnregisteredError:
                 dead.append(tk)
             except Exception as e:
-                print("FCM send error:", e)
+                print(f"[PUSH] kind={kind} FCM send error:", e)
+        print(f"[PUSH] kind={kind} device={device_id} sent_ok={sent} dead={len(dead)}")
         if dead:
             conn = get_db(); cur = conn.cursor()
             cur.executemany("DELETE FROM fcm_tokens WHERE token = %s", [(t,) for t in dead])
@@ -1299,9 +1396,9 @@ def send_push(device_id, title, body, data=None):
     except Exception as e:
         print("send_push failed:", e)
 
-def push_async(device_id, title, body, data=None):
+def push_async(device_id, title, body, data=None, collapse=None):
     """Fire-and-forget push so it never delays the HTTP response."""
-    threading.Thread(target=send_push, args=(device_id, title, body, data), daemon=True).start()
+    threading.Thread(target=send_push, args=(device_id, title, body, data, collapse), daemon=True).start()
 
 # Localized push copy. Recipient sees their own language. {name}/{item} filled in.
 PUSH_TEXT = {
@@ -1317,6 +1414,14 @@ PUSH_TEXT = {
                       "en": {"t": "Match found!", "b": "A match was found for your “{item}”"},
                       "cs": {"t": "Nalezena shoda!", "b": "Byla nalezena shoda pro vaši položku „{item}“"},
                       "ru": {"t": "Найдено совпадение!", "b": "Найдено совпадение для вашей вещи «{item}»"}},
+    "match_multi":   {"il": {"t": "נמצאו התאמות חדשות!", "b": "נמצאו {count} התאמות חדשות עבורך"},
+                      "en": {"t": "New matches found!", "b": "{count} new matches found for you"},
+                      "cs": {"t": "Nové shody!", "b": "Nalezeno {count} nových shod pro vás"},
+                      "ru": {"t": "Новые совпадения!", "b": "Найдено {count} новых совпадений для вас"}},
+    "nearby":        {"il": {"t": "מישהו לידך מחפש", "b": "שכן/ה בקרבת מקום מחפש/ת „{item}“ — אולי יש לך כזה לתת?"},
+                      "en": {"t": "A neighbor nearby needs something", "b": "Someone near you is looking for “{item}” — have one to give?"},
+                      "cs": {"t": "Soused poblíž něco hledá", "b": "Někdo blízko vás hledá „{item}“ — máte ho k dispozici?"},
+                      "ru": {"t": "Сосед рядом кое-что ищет", "b": "Кто-то рядом ищет «{item}» — у вас есть такое?"}},
     "approved":      {"il": {"t": "הבקשה שלך אושרה!", "b": "הבקשה שלך עבור „{item}“ אושרה"},
                       "en": {"t": "Your request was approved!", "b": "Your request for “{item}” was approved"},
                       "cs": {"t": "Vaše žádost byla schválena!", "b": "Vaše žádost o „{item}“ byla schválena"},
@@ -1331,6 +1436,91 @@ def push_text(kind, language, **fmt):
     block = PUSH_TEXT.get(kind, {})
     copy = block.get(lang, block.get("il", {"t": "iNeed", "b": ""}))
     return copy["t"], copy["b"].format(**fmt)
+
+# ── Nearby-request broadcast ────────────────────────────────
+# A new request (take post) pings people within 1 km who might have the item —
+# even if they never listed one. Push only (no email). Heavily rate-limited so
+# it never becomes spam: quiet hours, per-recipient cooldown + daily cap,
+# per-sender daily cap, and a staleness guard on each user's last-known location.
+NEARBY_RADIUS_KM = 1.0
+NEARBY_LOC_MAX_AGE = 7 * 24 * 3600      # ignore users whose location is older than this
+NEARBY_RECIPIENT_COOLDOWN = 2 * 3600    # min gap between pushes to one recipient
+NEARBY_RECIPIENT_DAILY_CAP = 3          # max nearby pushes a recipient gets per day
+NEARBY_SENDER_DAILY_CAP = 3             # max requests from one sender that broadcast per day
+NEARBY_QUIET_START = 22                 # no broadcasts from 22:00 ...
+NEARBY_QUIET_END = 8                    # ... until 08:00 (local)
+# Fixed UTC+2 for the quiet-hours gate. Israel DST (UTC+3) shifts this by an hour
+# at the edges, which is harmless for a night-time mute window.
+ISRAEL_TZ = timezone(timedelta(hours=2))
+
+def _in_quiet_hours(ts=None):
+    h = datetime.fromtimestamp(ts or time.time(), ISRAEL_TZ).hour
+    return h >= NEARBY_QUIET_START or h < NEARBY_QUIET_END
+
+def broadcast_nearby_request(item_id):
+    """Send one 'someone near you needs X' push to each eligible user within 1 km."""
+    now = time.time()
+    if _in_quiet_hours(now):
+        return
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT id, title, lat, lon, device_id, post_type, status
+            FROM items WHERE id = %s
+        """, (item_id,))
+        item = cur.fetchone()
+        if not item or item["post_type"] != "take" or item["status"] != "available":
+            return
+        sender = item["device_id"]
+
+        # Sender daily cap: how many of THIS sender's requests have broadcast today.
+        cur.execute("""
+            SELECT COUNT(DISTINCT item_id) AS c FROM nearby_push_log
+            WHERE sender_device_id = %s AND sent_at > %s
+        """, (sender, now - 24 * 3600))
+        if cur.fetchone()["c"] >= NEARBY_SENDER_DAILY_CAP:
+            return
+
+        # Candidate recipients: fresh location, opted in, not the sender.
+        cur.execute("""
+            SELECT device_id, lat, lon, language FROM users
+            WHERE lat IS NOT NULL AND lon IS NOT NULL
+              AND loc_updated_at > %s
+              AND nearby_optout = FALSE
+              AND device_id != %s
+        """, (now - NEARBY_LOC_MAX_AGE, sender))
+        recipients = cur.fetchall()
+
+        for u in recipients:
+            if haversine_km(item["lat"], item["lon"], u["lat"], u["lon"]) > NEARBY_RADIUS_KM:
+                continue
+            rid = u["device_id"]
+            # Recipient cooldown + daily cap.
+            cur.execute("""
+                SELECT MAX(sent_at) AS last, COUNT(*) AS c FROM nearby_push_log
+                WHERE recipient_device_id = %s AND sent_at > %s
+            """, (rid, now - 24 * 3600))
+            rl = cur.fetchone()
+            if rl["c"] >= NEARBY_RECIPIENT_DAILY_CAP:
+                continue
+            if rl["last"] and (now - rl["last"]) < NEARBY_RECIPIENT_COOLDOWN:
+                continue
+            # No token → skip without logging a no-op.
+            if not _fcm_tokens_for(rid):
+                continue
+            title, body = push_text("nearby", u.get("language"), item=item["title"] or "")
+            push_async(rid, title, body, {"type": "nearby", "item_id": item_id}, collapse="nearby")
+            cur.execute("""
+                INSERT INTO nearby_push_log (recipient_device_id, sender_device_id, item_id, sent_at)
+                VALUES (%s, %s, %s, %s)
+            """, (rid, sender, item_id, now))
+            conn.commit()
+    except Exception as e:
+        print("Nearby broadcast failed:", e)
+    finally:
+        cur.close()
+        conn.close()
 
 class FcmToken(BaseModel):
     device_id: str
